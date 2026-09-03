@@ -1,0 +1,19 @@
+aws_region  = "ap-south-1"
+key_name    = "your-existing-ec2-keypair"
+ssh_cidr    = "YOUR_PUBLIC_IP/32"
+repo_url    = "https://github.com/YOUR_ORG/YOUR_REPO.git"
+repo_branch = "main"
+
+# Use the same VPC/subnet as the existing backend. Leave blank only if the backend is in the default VPC.
+vpc_id    = ""
+subnet_id = ""
+
+# Existing backend EC2 private IP. The admin Nginx proxy sends /api and /uploads here.
+backend_private_ip = "10.0.0.10"
+
+# Recommended when the existing backend security group only allows HTTP from the old frontend SG.
+# Example: "sg-0123456789abcdef0"
+backend_security_group_id = ""
+
+# Existing customer website URL used by admin product preview links.
+store_base_url = "https://your-store-domain.com"

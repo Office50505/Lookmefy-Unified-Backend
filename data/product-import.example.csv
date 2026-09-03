@@ -1,0 +1,5 @@
+sourceUrl,expectedGender,expectedCategory,tags,colors,garmentPlacement
+https://www.amazon.in/dp/B0EXAMPLE01,men,T-Shirts,"cotton, casual","black, white",top
+https://www.amazon.in/gp/product/B0EXAMPLE02,women,Kurtis,"ethnic, daily wear","blue",top
+https://www.amazon.in/dp/B0EXAMPLE03,women,Jeans,"denim, casual","indigo",bottom
+https://www.amazon.in/dp/B0EXAMPLE04,men,Boxers,"innerwear, cotton","grey",bottom

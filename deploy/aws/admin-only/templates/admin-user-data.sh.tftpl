@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+set -euxo pipefail
+
+export DEBIAN_FRONTEND=noninteractive
+
+apt-get update
+apt-get install -y ca-certificates curl git gnupg nginx
+
+if [ ! -f /swapfile ]; then
+  fallocate -l 1G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=1024
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+  echo '/swapfile none swap sw 0 0' >> /etc/fstab
+fi
+
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+apt-get install -y nodejs
+
+cat >/usr/local/bin/deploy-fitlook-admin <<'SCRIPT'
+#!/usr/bin/env bash
+set -euxo pipefail
+
+REPO_URL='${repo_url}'
+REPO_BRANCH='${repo_branch}'
+STORE_BASE_URL='${store_base_url}'
+APP_DIR=/opt/fitlook
+WEB_ROOT=/var/www/fitlook-admin
+
+if [ ! -d "$APP_DIR/.git" ]; then
+  git clone --branch "$REPO_BRANCH" "$REPO_URL" "$APP_DIR"
+else
+  git -C "$APP_DIR" fetch origin "$REPO_BRANCH"
+  git -C "$APP_DIR" checkout "$REPO_BRANCH"
+  git -C "$APP_DIR" pull --ff-only origin "$REPO_BRANCH"
+fi
+
+cd "$APP_DIR"
+npm ci
+
+cat >admin/.env.production <<ENV
+VITE_API_BASE_URL=
+VITE_STORE_BASE_URL=$STORE_BASE_URL
+ENV
+
+npm run admin:build
+
+rm -rf "$WEB_ROOT"
+mkdir -p "$WEB_ROOT"
+cp -R admin/dist/. "$WEB_ROOT"/
+chown -R www-data:www-data "$WEB_ROOT"
+SCRIPT
+
+chmod +x /usr/local/bin/deploy-fitlook-admin
+
+cat >/etc/nginx/sites-available/fitlook-admin <<'NGINX'
+upstream fitlook_backend {
+  server ${backend_private_ip}:80;
+}
+
+server {
+  listen 80 default_server;
+  server_name _;
+
+  root /var/www/fitlook-admin;
+  index index.html;
+
+  client_max_body_size 25m;
+
+  gzip on;
+  gzip_vary on;
+  gzip_min_length 1024;
+  gzip_types text/plain text/css application/javascript application/json image/svg+xml;
+
+  location = /index.html {
+    add_header Cache-Control "no-cache, must-revalidate" always;
+    try_files /index.html =404;
+  }
+
+  location /api/ {
+    proxy_pass http://fitlook_backend;
+    proxy_http_version 1.1;
+    proxy_connect_timeout 60s;
+    proxy_send_timeout 300s;
+    proxy_read_timeout 300s;
+    send_timeout 300s;
+    proxy_set_header Host $host;
+    proxy_set_header Origin "";
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+
+  location ^~ /uploads/ {
+    proxy_pass http://fitlook_backend;
+    proxy_http_version 1.1;
+    proxy_connect_timeout 60s;
+    proxy_send_timeout 300s;
+    proxy_read_timeout 300s;
+    send_timeout 300s;
+    proxy_set_header Host $host;
+    proxy_set_header Origin "";
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+
+  location ~* \.(?:js|css)$ {
+    add_header Cache-Control "no-cache, must-revalidate" always;
+    try_files $uri =404;
+  }
+
+  location ~* \.(?:png|jpg|jpeg|gif|svg|webp|avif|woff2?)$ {
+    add_header Cache-Control "public, max-age=31536000, immutable" always;
+    try_files $uri =404;
+  }
+
+  location / {
+    add_header Cache-Control "no-cache, must-revalidate" always;
+    try_files $uri $uri/ /index.html;
+  }
+}
+NGINX
+
+/usr/local/bin/deploy-fitlook-admin
+
+rm -f /etc/nginx/sites-enabled/default
+ln -sf /etc/nginx/sites-available/fitlook-admin /etc/nginx/sites-enabled/fitlook-admin
+nginx -t
+systemctl enable nginx
+systemctl restart nginx

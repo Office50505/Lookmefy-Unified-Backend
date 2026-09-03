@@ -1,0 +1,1043 @@
+{
+  "options": {
+    "summaryTrendStats": [
+      "avg",
+      "min",
+      "med",
+      "p(90)",
+      "p(95)",
+      "p(99)",
+      "max"
+    ],
+    "summaryTimeUnit": "",
+    "noColor": true
+  },
+  "state": {
+    "isStdOutTTY": false,
+    "isStdErrTTY": false,
+    "testRunDurationMs": 300098.913
+  },
+  "metrics": {
+    "http_req_duration{scenario:stage_10000}": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 3706.860276591345,
+        "min": 0,
+        "med": 65.017,
+        "p(90)": 30000.268,
+        "p(95)": 30000.425,
+        "p(99)": 30002.12342,
+        "max": 30018.23
+      },
+      "thresholds": {
+        "p(95)<10000": {
+          "ok": false
+        }
+      }
+    },
+    "http_reqs{scenario:stage_10}": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 300,
+        "rate": 0.9996703986728537
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_blocked": {
+      "contains": "time",
+      "values": {
+        "med": 0.002,
+        "p(90)": 34.984,
+        "p(95)": 346.486,
+        "p(99)": 443.8662,
+        "max": 5921.98,
+        "avg": 41.799739472676606,
+        "min": 0
+      },
+      "type": "trend"
+    },
+    "http_req_receiving": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(95)": 0.085,
+        "p(99)": 0.445,
+        "max": 143.071,
+        "avg": 0.09918347875331647,
+        "min": 0,
+        "med": 0.012,
+        "p(90)": 0.051
+      }
+    },
+    "http_req_failed{scenario:stage_1000}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0.2670910452551621,
+        "passes": 4993,
+        "fails": 13701
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_waiting": {
+      "contains": "time",
+      "values": {
+        "med": 31.816,
+        "p(90)": 15082.207,
+        "p(95)": 30000.325,
+        "p(99)": 30001.475199999997,
+        "max": 30017.576,
+        "avg": 3034.1546640078373,
+        "min": 0
+      },
+      "type": "trend"
+    },
+    "http_req_duration": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(99)": 30001.541400000002,
+        "max": 30018.23,
+        "avg": 3035.1564400994466,
+        "min": 0,
+        "med": 31.912,
+        "p(90)": 15082.248,
+        "p(95)": 30000.363
+      }
+    },
+    "checks{scenario:stage_10000}": {
+      "values": {
+        "rate": 0.8084778865518353,
+        "passes": 132879,
+        "fails": 31478
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      },
+      "type": "rate",
+      "contains": "default"
+    },
+    "http_reqs{scenario:stage_100}": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 2982,
+        "rate": 9.936723762808166
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_reqs": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 104181,
+        "rate": 347.1555393471219
+      }
+    },
+    "http_req_sending": {
+      "contains": "time",
+      "values": {
+        "max": 231.919,
+        "avg": 0.9025926128560454,
+        "min": 0,
+        "med": 0.006,
+        "p(90)": 1.054,
+        "p(95)": 4.373,
+        "p(99)": 25.0504
+      },
+      "type": "trend"
+    },
+    "http_req_connecting": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(99)": 443.7462,
+        "max": 5880.47,
+        "avg": 41.62924633090501,
+        "min": 0,
+        "med": 0,
+        "p(90)": 34.645,
+        "p(95)": 344.008
+      }
+    },
+    "vus": {
+      "type": "gauge",
+      "contains": "default",
+      "values": {
+        "value": 0,
+        "min": 0,
+        "max": 10000
+      }
+    },
+    "http_reqs{scenario:stage_1000}": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 18694,
+        "rate": 62.29279477596775
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      }
+    },
+    "checks{scenario:stage_1000}": {
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      },
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0.866454477372419,
+        "passes": 32395,
+        "fails": 4993
+      }
+    },
+    "data_sent": {
+      "type": "counter",
+      "contains": "data",
+      "values": {
+        "count": 13133035,
+        "rate": 43762.354447448466
+      }
+    },
+    "checks{scenario:stage_100}": {
+      "values": {
+        "rate": 0.8630114017437961,
+        "passes": 5147,
+        "fails": 817
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      },
+      "type": "rate",
+      "contains": "default"
+    },
+    "http_req_failed": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "fails": 66805,
+        "rate": 0.3587602345917202,
+        "passes": 37376
+      },
+      "thresholds": {
+        "rate<0.10": {
+          "ok": false
+        }
+      }
+    },
+    "http_req_failed{scenario:stage_10}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0.25333333333333335,
+        "passes": 76,
+        "fails": 224
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_reqs{scenario:stage_10000}": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 82179,
+        "rate": 273.8397123084548
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_tls_handshaking": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 0,
+        "min": 0,
+        "med": 0,
+        "p(90)": 0,
+        "p(95)": 0,
+        "p(99)": 0,
+        "max": 0
+      }
+    },
+    "http_req_failed{scenario:stage_10000}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0.3830418963482155,
+        "passes": 31478,
+        "fails": 50701
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "checks{scenario:stage_10}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0.8733333333333333,
+        "passes": 524,
+        "fails": 76
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "iterations": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 104075,
+        "rate": 346.8023224729241
+      }
+    },
+    "http_req_duration{scenario:stage_100}": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(90)": 4.276800000000001,
+        "p(95)": 8.922299999999979,
+        "p(99)": 388.3599099999996,
+        "max": 1524.344,
+        "avg": 13.849064721663357,
+        "min": 0.113,
+        "med": 1.4545
+      },
+      "thresholds": {
+        "p(95)<2500": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_duration{scenario:stage_10}": {
+      "thresholds": {
+        "p(95)<1500": {
+          "ok": true
+        }
+      },
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 5.96634,
+        "min": 0.319,
+        "med": 1.796,
+        "p(90)": 3.1599,
+        "p(95)": 3.8007499999999985,
+        "p(99)": 138.07930999999996,
+        "max": 336.816
+      }
+    },
+    "checks": {
+      "thresholds": {
+        "rate>0.95": {
+          "ok": false
+        }
+      },
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "fails": 37376,
+        "rate": 0.8206172999486463,
+        "passes": 170983
+      }
+    },
+    "group_duration": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 119.72039871428572,
+        "min": 2.016041,
+        "med": 80.622375,
+        "p(90)": 289.20335860000006,
+        "p(95)": 340.7745958,
+        "p(99)": 382.03158556,
+        "max": 392.345833
+      }
+    },
+    "http_req_duration{scenario:stage_1000}": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(95)": 86.14639999999929,
+        "p(99)": 17199.67469,
+        "max": 19181.146,
+        "avg": 615.4723647694423,
+        "min": 0.035,
+        "med": 2.099,
+        "p(90)": 30.23450000000003
+      },
+      "thresholds": {
+        "p(95)<5000": {
+          "ok": true
+        }
+      }
+    },
+    "vus_max": {
+      "type": "gauge",
+      "contains": "default",
+      "values": {
+        "value": 11000,
+        "min": 10052,
+        "max": 11000
+      }
+    },
+    "http_req_failed{scenario:stage_100}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0.27397719651240776,
+        "passes": 817,
+        "fails": 2165
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "iteration_duration": {
+      "values": {
+        "p(90)": 14151.334733400012,
+        "p(95)": 31000.6437042,
+        "p(99)": 31003.81888516,
+        "max": 31108.760584,
+        "avg": 4068.1022947537763,
+        "min": 748.938875,
+        "med": 1034.631375
+      },
+      "type": "trend",
+      "contains": "time"
+    },
+    "data_received": {
+      "values": {
+        "count": 857613712,
+        "rate": 2857770.137941153
+      },
+      "type": "counter",
+      "contains": "data"
+    },
+    "http_req_duration{expected_response:true}": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 580.7265381932524,
+        "min": 0.035,
+        "med": 31.96,
+        "p(90)": 806.9982,
+        "p(95)": 983.0247999999993,
+        "p(99)": 17182.5686,
+        "max": 25921.45
+      }
+    }
+  },
+  "setup_data": {
+    "runId": "1785923331727-499409",
+    "userId": "",
+    "userToken": "",
+    "productId": "6a730703660f17bb33cb475d"
+  },
+  "root_group": {
+    "checks": [
+      {
+        "name": "GET /api/recommendations/for-you returned 200",
+        "path": "::GET /api/recommendations/for-you returned 200",
+        "id": "5c7503baf4d558d323d64dc67b86be20",
+        "passes": 0,
+        "fails": 7318
+      },
+      {
+        "name": "GET /api/recommendations/for-you body bounded",
+        "path": "::GET /api/recommendations/for-you body bounded",
+        "id": "9e76d86f6819db74a701cdd21b95185e",
+        "passes": 7318,
+        "fails": 0
+      },
+      {
+        "id": "ff23cf01ccab27814fe1b4dc3ba52471",
+        "passes": 12630,
+        "fails": 1,
+        "name": "GET /api/health returned 200",
+        "path": "::GET /api/health returned 200"
+      },
+      {
+        "name": "GET /api/health body bounded",
+        "path": "::GET /api/health body bounded",
+        "id": "c4fc966f16001dd5e164649adecb4ade",
+        "passes": 12631,
+        "fails": 0
+      },
+      {
+        "passes": 11089,
+        "fails": 2307,
+        "name": "GET /api/products?q= returned 200",
+        "path": "::GET /api/products?q= returned 200",
+        "id": "311fb0528a0a8b40587559e4c92b5eff"
+      },
+      {
+        "name": "GET /api/products?q= body bounded",
+        "path": "::GET /api/products?q= body bounded",
+        "id": "ab511c561bb7f7290e6da5e956c12ab3",
+        "passes": 13396,
+        "fails": 0
+      },
+      {
+        "fails": 3061,
+        "name": "GET /api/products?featured= returned 200",
+        "path": "::GET /api/products?featured= returned 200",
+        "id": "ee5f830458bd6fc46b8078033c764eea",
+        "passes": 8246
+      },
+      {
+        "name": "GET /api/products?featured= body bounded",
+        "path": "::GET /api/products?featured= body bounded",
+        "id": "3e4c3db4932c096b5cf1c88517a739cf",
+        "passes": 11307,
+        "fails": 0
+      },
+      {
+        "name": "GET /api/products returned 200",
+        "path": "::GET /api/products returned 200",
+        "id": "c8967ee92890dd483bce96dd51b428fe",
+        "passes": 16149,
+        "fails": 2614
+      },
+      {
+        "path": "::GET /api/products body bounded",
+        "id": "d356c45f1564959b9cc11d46e9916ba3",
+        "passes": 18763,
+        "fails": 0,
+        "name": "GET /api/products body bounded"
+      },
+      {
+        "id": "59a1f0b68335db3959e8871333e83fa9",
+        "passes": 10457,
+        "fails": 0,
+        "name": "GET /api/products/:id returned 200",
+        "path": "::GET /api/products/:id returned 200"
+      },
+      {
+        "passes": 10457,
+        "fails": 0,
+        "name": "GET /api/products/:id body bounded",
+        "path": "::GET /api/products/:id body bounded",
+        "id": "0a969918f587063e035b820d4891d08c"
+      },
+      {
+        "name": "GET /api/auth/me returned 200",
+        "path": "::GET /api/auth/me returned 200",
+        "id": "39538773f154dab22fccce379af83bd8",
+        "passes": 0,
+        "fails": 9325
+      },
+      {
+        "passes": 9325,
+        "fails": 0,
+        "name": "GET /api/auth/me body bounded",
+        "path": "::GET /api/auth/me body bounded",
+        "id": "51884a02331aafce6a04d544beb74c02"
+      },
+      {
+        "passes": 0,
+        "fails": 5337,
+        "name": "POST /api/recommendations/events returned 201",
+        "path": "::POST /api/recommendations/events returned 201",
+        "id": "c59f94b2206c2ce997b8a1ae78b4afd6"
+      },
+      {
+        "id": "f63ca97ee1aa97c1a2f0d552d2ad78ab",
+        "passes": 5337,
+        "fails": 0,
+        "name": "POST /api/recommendations/events body bounded",
+        "path": "::POST /api/recommendations/events body bounded"
+      },
+      {
+        "path": "::GET /api/recommendations/similar/:productId returned 200",
+        "id": "984916d6ea4feb03faec6d9cb07ff655",
+        "passes": 8220,
+        "fails": 1199,
+        "name": "GET /api/recommendations/similar/:productId returned 200"
+      },
+      {
+        "id": "4add55962bc265c4d3b644732876487a",
+        "passes": 9418,
+        "fails": 0,
+        "name": "GET /api/recommendations/similar/:productId body bounded",
+        "path": "::GET /api/recommendations/similar/:productId body bounded"
+      },
+      {
+        "fails": 6202,
+        "name": "GET /api/tryons returned 200",
+        "path": "::GET /api/tryons returned 200",
+        "id": "31e80e50476df772bccead75c6ed408a",
+        "passes": 0
+      },
+      {
+        "fails": 0,
+        "name": "GET /api/tryons body bounded",
+        "path": "::GET /api/tryons body bounded",
+        "id": "eee3b8a8f200cc9f7b02ec881707b0f8",
+        "passes": 6202
+      }
+    ],
+    "name": "",
+    "path": "",
+    "id": "d41d8cd98f00b204e9800998ecf8427e",
+    "groups": [
+      {
+        "groups": [
+          {
+            "checks": [
+              {
+                "passes": 0,
+                "fails": 1,
+                "name": "setup signup created user",
+                "path": "::setup::setup: create reusable user::setup signup created user",
+                "id": "939968347c61bee0522046e52ab0f41d"
+              }
+            ],
+            "name": "setup: create reusable user",
+            "path": "::setup::setup: create reusable user",
+            "id": "12a63a35b561049abc1f9ed09098eaa7",
+            "groups": []
+          },
+          {
+            "name": "setup: create disposable product",
+            "path": "::setup::setup: create disposable product",
+            "id": "3e67aef8ce2a1a1d36fc773f92977ac8",
+            "groups": [],
+            "checks": [
+                {
+                  "path": "::setup::setup: create disposable product::setup product created",
+                  "id": "28de207486e5c46c3ae9e4ddd3bfd6bf",
+                  "passes": 1,
+                  "fails": 0,
+                  "name": "setup product created"
+                }
+              ]
+          }
+        ],
+        "checks": [],
+        "name": "setup",
+        "path": "::setup",
+        "id": "5c0f8025f7e0b6654089e5b00e950f1a"
+      },
+      {
+        "path": "::public endpoints",
+        "id": "27d0d78932efe4d904c9f2666b9fc44d",
+        "groups": [],
+        "checks": [
+            {
+              "name": "GET /api/health returned 200",
+              "path": "::public endpoints::GET /api/health returned 200",
+              "id": "efdc8996aa24f8d981c1b3e960d47334",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "fails": 0,
+              "name": "GET /api/health body bounded",
+              "path": "::public endpoints::GET /api/health body bounded",
+              "id": "0f5deac9739a04f1069f96ced290cf83",
+              "passes": 1
+            },
+            {
+              "passes": 1,
+              "fails": 0,
+              "name": "GET /api/auth/username-suggestions returned 200",
+              "path": "::public endpoints::GET /api/auth/username-suggestions returned 200",
+              "id": "04f37d0e543072a684e4210b42427801"
+            },
+            {
+              "name": "GET /api/auth/username-suggestions body bounded",
+              "path": "::public endpoints::GET /api/auth/username-suggestions body bounded",
+              "id": "c3ba93388ea72fe5d57691735562cf4b",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "id": "4ee495275b20fa2c416daa58b5f27879",
+              "passes": 1,
+              "fails": 0,
+              "name": "GET /api/products returned 200",
+              "path": "::public endpoints::GET /api/products returned 200"
+            },
+            {
+              "name": "GET /api/products body bounded",
+              "path": "::public endpoints::GET /api/products body bounded",
+              "id": "1375879fca1841d411542bd7954e13cd",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "name": "GET /api/products?q= returned 200",
+              "path": "::public endpoints::GET /api/products?q= returned 200",
+              "id": "daddaa6b200c7ef4c3f15c0ca940567f",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "name": "GET /api/products?q= body bounded",
+              "path": "::public endpoints::GET /api/products?q= body bounded",
+              "id": "4fa37cd3f7059abe8070459916afb523",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "path": "::public endpoints::GET /api/products?category= returned 200",
+              "id": "c78ce6c56d51766989a0a9c76287a115",
+              "passes": 1,
+              "fails": 0,
+              "name": "GET /api/products?category= returned 200"
+            },
+            {
+              "path": "::public endpoints::GET /api/products?category= body bounded",
+              "id": "4d5d8e6bf5cc103a5f648e4c790ce85b",
+              "passes": 1,
+              "fails": 0,
+              "name": "GET /api/products?category= body bounded"
+            },
+            {
+              "name": "GET /api/products/:id returned 200",
+              "path": "::public endpoints::GET /api/products/:id returned 200",
+              "id": "c986cca9818c9201ae23b3e2ccf6a84e",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "name": "GET /api/products/:id body bounded",
+              "path": "::public endpoints::GET /api/products/:id body bounded",
+              "id": "1a51a47e2820d3d96253a047e59fcebc",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "passes": 1,
+              "fails": 0,
+              "name": "GET /api/products/:id missing returned 404",
+              "path": "::public endpoints::GET /api/products/:id missing returned 404",
+              "id": "9d3fcba474a2a2c646e4664383c0129c"
+            },
+            {
+              "fails": 0,
+              "name": "GET /api/products/:id missing body bounded",
+              "path": "::public endpoints::GET /api/products/:id missing body bounded",
+              "id": "3f13e2c9abe1b61f2e1eeb9719c6c1ee",
+              "passes": 1
+            },
+            {
+              "fails": 0,
+              "name": "GET /api/recommendations/similar/:productId returned 200",
+              "path": "::public endpoints::GET /api/recommendations/similar/:productId returned 200",
+              "id": "20ac7079770729ddd421855ed0382e04",
+              "passes": 1
+            },
+            {
+              "fails": 0,
+              "name": "GET /api/recommendations/similar/:productId body bounded",
+              "path": "::public endpoints::GET /api/recommendations/similar/:productId body bounded",
+              "id": "3fa1464485667791ca938d71ff0be8fa",
+              "passes": 1
+            },
+            {
+              "path": "::public endpoints::GET /api/recommendations/similar/:productId missing returned 404",
+              "id": "fc1c364d85822dbbd19c4d1f2a8455a5",
+              "passes": 1,
+              "fails": 0,
+              "name": "GET /api/recommendations/similar/:productId missing returned 404"
+            },
+            {
+              "id": "cf55002c4880e444b570ade949d09d03",
+              "passes": 1,
+              "fails": 0,
+              "name": "GET /api/recommendations/similar/:productId missing body bounded",
+              "path": "::public endpoints::GET /api/recommendations/similar/:productId missing body bounded"
+            }
+          ],
+        "name": "public endpoints"
+      },
+      {
+        "path": "::auth endpoints",
+        "id": "81403d93b54ca0047edc1d07dbe2fb6a",
+        "groups": [],
+        "checks": [
+            {
+              "name": "POST /api/auth/login returned 200",
+              "path": "::auth endpoints::POST /api/auth/login returned 200",
+              "id": "a334acb740da68d4b8ebfbdea778c819",
+              "passes": 0,
+              "fails": 1
+            },
+            {
+              "name": "POST /api/auth/login body bounded",
+              "path": "::auth endpoints::POST /api/auth/login body bounded",
+              "id": "81ba12c1811d22adf81396186d41c7ef",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "fails": 1,
+              "name": "GET /api/auth/me returned 200",
+              "path": "::auth endpoints::GET /api/auth/me returned 200",
+              "id": "4a8a4432b9454da9bcd59c01c4235c94",
+              "passes": 0
+            },
+            {
+              "id": "692068a3ea8a4ad373c7d709a37157ed",
+              "passes": 1,
+              "fails": 0,
+              "name": "GET /api/auth/me body bounded",
+              "path": "::auth endpoints::GET /api/auth/me body bounded"
+            },
+            {
+              "fails": 1,
+              "name": "POST /api/auth/body-photo returned 200",
+              "path": "::auth endpoints::POST /api/auth/body-photo returned 200",
+              "id": "0af68526ccf0914d5415ea6a60ca3058",
+              "passes": 0
+            },
+            {
+              "name": "POST /api/auth/body-photo body bounded",
+              "path": "::auth endpoints::POST /api/auth/body-photo body bounded",
+              "id": "20e612e4167b4d5f09fef14dcef5dbf3",
+              "passes": 1,
+              "fails": 0
+            }
+          ],
+        "name": "auth endpoints"
+      },
+      {
+        "path": "::recommendation endpoints",
+        "id": "48aa07fb32a6065eedc22691d82a7f94",
+        "groups": [],
+        "checks": [
+            {
+              "name": "GET /api/recommendations/for-you returned 200",
+              "path": "::recommendation endpoints::GET /api/recommendations/for-you returned 200",
+              "id": "49fea8e0028af1d62f86e9ccd90c5a71",
+              "passes": 0,
+              "fails": 1
+            },
+            {
+              "name": "GET /api/recommendations/for-you body bounded",
+              "path": "::recommendation endpoints::GET /api/recommendations/for-you body bounded",
+              "id": "10d27919dd9741c4538f78a263770362",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "fails": 1,
+              "name": "POST /api/recommendations/events returned 201",
+              "path": "::recommendation endpoints::POST /api/recommendations/events returned 201",
+              "id": "fd4231e95421fdc1109a69fa2f531917",
+              "passes": 0
+            },
+            {
+              "name": "POST /api/recommendations/events body bounded",
+              "path": "::recommendation endpoints::POST /api/recommendations/events body bounded",
+              "id": "c922be27a62d11c1541b2926681acf7d",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "name": "POST /api/recommendations/events invalid returned 400",
+              "path": "::recommendation endpoints::POST /api/recommendations/events invalid returned 400",
+              "id": "2f70248808536f217ae2c8c4583d0370",
+              "passes": 0,
+              "fails": 1
+            },
+            {
+              "id": "95690d168f287d7353e9570c4362ddac",
+              "passes": 1,
+              "fails": 0,
+              "name": "POST /api/recommendations/events invalid body bounded",
+              "path": "::recommendation endpoints::POST /api/recommendations/events invalid body bounded"
+            },
+            {
+              "path": "::recommendation endpoints::GET /api/recommendations/admin/stats returned 200",
+              "id": "19994c79b35284e27c72145ca4711a08",
+              "passes": 1,
+              "fails": 0,
+              "name": "GET /api/recommendations/admin/stats returned 200"
+            },
+            {
+              "path": "::recommendation endpoints::GET /api/recommendations/admin/stats body bounded",
+              "id": "3651119cd9fa2bd6210a3582013e7dbb",
+              "passes": 1,
+              "fails": 0,
+              "name": "GET /api/recommendations/admin/stats body bounded"
+            }
+          ],
+        "name": "recommendation endpoints"
+      },
+      {
+        "groups": [],
+        "checks": [
+            {
+              "id": "0e8f66da6f33964ad73b858e1cfa86be",
+              "passes": 0,
+              "fails": 1,
+              "name": "GET /api/tryons returned 200",
+              "path": "::try-on endpoints::GET /api/tryons returned 200"
+            },
+            {
+              "fails": 0,
+              "name": "GET /api/tryons body bounded",
+              "path": "::try-on endpoints::GET /api/tryons body bounded",
+              "id": "915f095fbbd3877aa2e683bf3b19de3f",
+              "passes": 1
+            },
+            {
+              "name": "POST /api/tryons/:productId missing returned 404",
+              "path": "::try-on endpoints::POST /api/tryons/:productId missing returned 404",
+              "id": "e7c1cebf0b344c7baa9a2aa23b9e7542",
+              "passes": 0,
+              "fails": 1
+            },
+            {
+              "id": "38c38f23335551a98237915d2a647f33",
+              "passes": 1,
+              "fails": 0,
+              "name": "POST /api/tryons/:productId missing body bounded",
+              "path": "::try-on endpoints::POST /api/tryons/:productId missing body bounded"
+            },
+            {
+              "id": "d44d169b8b7f55ac93099ce3c1567420",
+              "passes": 0,
+              "fails": 1,
+              "name": "POST /api/tryons/custom validation returned 400",
+              "path": "::try-on endpoints::POST /api/tryons/custom validation returned 400"
+            },
+            {
+              "name": "POST /api/tryons/custom validation body bounded",
+              "path": "::try-on endpoints::POST /api/tryons/custom validation body bounded",
+              "id": "b0063c5a5ebe8ae5aef526d14345419a",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "id": "c8286da47be555069b1ccd8520b29391",
+              "passes": 0,
+              "fails": 1,
+              "name": "POST /api/tryons/external validation returned 400",
+              "path": "::try-on endpoints::POST /api/tryons/external validation returned 400"
+            },
+            {
+              "name": "POST /api/tryons/external validation body bounded",
+              "path": "::try-on endpoints::POST /api/tryons/external validation body bounded",
+              "id": "58cd8c0df8dabcc20f26a0d601998232",
+              "passes": 1,
+              "fails": 0
+            }
+          ],
+        "name": "try-on endpoints",
+        "path": "::try-on endpoints",
+        "id": "b8dda021342a79910c79ff39721d0ac2"
+      },
+      {
+        "path": "::admin product endpoints",
+        "id": "7da8d49c7155b2d1d87876d2852a09ab",
+        "groups": [],
+        "checks": [
+            {
+              "name": "POST /api/products/preview-link validation returned 400",
+              "path": "::admin product endpoints::POST /api/products/preview-link validation returned 400",
+              "id": "a9b01e73f0fa031f150e69be9ed70254",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "name": "POST /api/products/preview-link validation body bounded",
+              "path": "::admin product endpoints::POST /api/products/preview-link validation body bounded",
+              "id": "33b2dd9de4c76d57136c55a9e75595fe",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "fails": 0,
+              "name": "POST /api/products/recategorize returned 200",
+              "path": "::admin product endpoints::POST /api/products/recategorize returned 200",
+              "id": "757992d598eded1c79228457f3bccd90",
+              "passes": 1
+            },
+            {
+              "fails": 0,
+              "name": "POST /api/products/recategorize body bounded",
+              "path": "::admin product endpoints::POST /api/products/recategorize body bounded",
+              "id": "6478f25f48344308b28fece33c1a2ca9",
+              "passes": 1
+            },
+            {
+              "name": "PATCH /api/products/:id/tryon-model returned 200",
+              "path": "::admin product endpoints::PATCH /api/products/:id/tryon-model returned 200",
+              "id": "ecb3252874d98830fd638beb08b5bc6e",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "path": "::admin product endpoints::PATCH /api/products/:id/tryon-model body bounded",
+              "id": "bbfe172f81addd942f3571fe4609d0e0",
+              "passes": 1,
+              "fails": 0,
+              "name": "PATCH /api/products/:id/tryon-model body bounded"
+            }
+          ],
+        "name": "admin product endpoints"
+      },
+      {
+        "path": "::teardown",
+        "id": "a8a9942382e8ffe2e56ef29e664b8229",
+        "groups": [],
+        "checks": [
+            {
+              "passes": 0,
+              "fails": 1,
+              "name": "DELETE /api/products/:id cleanup returned 200/404",
+              "path": "::teardown::DELETE /api/products/:id cleanup returned 200/404",
+              "id": "74e1cd7f41b1f03b951de092e9af4d27"
+            },
+            {
+              "name": "DELETE /api/products/:id cleanup body bounded",
+              "path": "::teardown::DELETE /api/products/:id cleanup body bounded",
+              "id": "8099bd371a1e2ff45e519f1b7061255d",
+              "passes": 1,
+              "fails": 0
+            }
+          ],
+        "name": "teardown"
+      }
+    ]
+  }
+}

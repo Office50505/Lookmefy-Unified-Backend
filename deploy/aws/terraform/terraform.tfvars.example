@@ -1,0 +1,46 @@
+aws_region  = "ap-south-1"
+key_name    = "replace-with-your-ec2-keypair-name"
+ssh_cidr    = "replace-with-your-public-ip/32"
+repo_url    = "https://github.com/your-org/fitlook.git"
+repo_branch = "main"
+
+enable_aws_cost_explorer      = true
+backend_iam_role_name         = "FitlookBackendEc2Role"
+backend_instance_profile_name = "FitlookBackendInstanceProfile"
+
+backend_env = {
+  MONGODB_URI = "mongodb+srv://user:password@example.mongodb.net/fitlook"
+  MONGODB_DB  = "fitlook"
+  JWT_SECRET  = "replace-with-a-long-random-secret"
+
+  FAL_KEY             = "replace-with-your-fal-key"
+  FAL_TRYON_MODEL     = "openai/gpt-image-2/edit"
+  FAL_VTO_TRIAL_MODEL = "fal-ai/image-apps-v2/virtual-try-on"
+
+  PHONEPE_ENV                  = "production"
+  PHONEPE_CLIENT_ID            = "replace-with-phonepe-client-id"
+  PHONEPE_CLIENT_SECRET        = "replace-with-phonepe-client-secret"
+  PHONEPE_CLIENT_VERSION       = "1"
+  PHONEPE_MERCHANT_ID          = "replace-with-phonepe-merchant-id"
+  PHONEPE_SALT_KEY             = "replace-with-phonepe-salt-key"
+  PHONEPE_SALT_INDEX           = "1"
+  PHONEPE_BASE_URL             = "https://api.phonepe.com/apis/pg"
+  PHONEPE_AUTH_URL             = "https://api.phonepe.com/apis/identity-manager/v1/oauth/token"
+  PHONEPE_ORDER_EXPIRE_SECONDS = "1200"
+
+  SIGNUP_FREE_TOKENS                = "20"
+  SIGNUP_DEV_MODE_DEFAULT           = "false"
+  TRYON_TOKEN_COST                  = "1"
+  FAL_VTO_ASPECT_RATIO              = "4:5"
+  FAL_VTO_POLL_ATTEMPTS             = "240"
+  FAL_VTO_POLL_MS                   = "1500"
+  FAL_IMAGE_QUALITY                 = "low"
+  FAL_IMAGE_WIDTH                   = "1024"
+  FAL_IMAGE_HEIGHT                  = "768"
+  PRODUCT_READ_CACHE_TTL_MS         = "30000"
+  RECOMMENDATION_READ_CACHE_TTL_MS  = "30000"
+  TRYON_IMAGE_CACHE_TTL_MS          = "900000"
+  TRYON_IMAGE_CACHE_MAX_ITEMS       = "80"
+  REDIS_TIMEOUT_MS                  = "250"
+  AMAZON_ASSOCIATE_TAG              = "optional-amazon-associate-tag"
+}

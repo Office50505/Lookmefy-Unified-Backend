@@ -1,0 +1,2904 @@
+{
+  "root_group": {
+    "groups": [
+      {
+        "groups": [
+          {
+            "id": "12a63a35b561049abc1f9ed09098eaa7",
+            "groups": [],
+            "checks": [
+                {
+                  "path": "::setup::setup: create reusable user::POST /api/auth/signup/request-otp returned 200",
+                  "id": "fda61b0f96cc375dbc4ced3062da1583",
+                  "passes": 1,
+                  "fails": 0,
+                  "name": "POST /api/auth/signup/request-otp returned 200"
+                },
+                {
+                  "name": "POST /api/auth/signup/request-otp body bounded",
+                  "path": "::setup::setup: create reusable user::POST /api/auth/signup/request-otp body bounded",
+                  "id": "453997fc5570e4466be6bd109a6ca541",
+                  "passes": 1,
+                  "fails": 0
+                },
+                {
+                  "fails": 0,
+                  "name": "POST /api/auth/signup/verify-otp returned 200",
+                  "path": "::setup::setup: create reusable user::POST /api/auth/signup/verify-otp returned 200",
+                  "id": "7f59d2137cda0a43ef252a0f21fa4658",
+                  "passes": 1
+                },
+                {
+                  "name": "POST /api/auth/signup/verify-otp body bounded",
+                  "path": "::setup::setup: create reusable user::POST /api/auth/signup/verify-otp body bounded",
+                  "id": "3db1dda6f2de9fd8b0bd9a007314a693",
+                  "passes": 1,
+                  "fails": 0
+                },
+                {
+                  "id": "939968347c61bee0522046e52ab0f41d",
+                  "passes": 1,
+                  "fails": 0,
+                  "name": "setup signup created user",
+                  "path": "::setup::setup: create reusable user::setup signup created user"
+                }
+              ],
+            "name": "setup: create reusable user",
+            "path": "::setup::setup: create reusable user"
+          },
+          {
+            "groups": [],
+            "checks": [
+                {
+                  "name": "setup product created",
+                  "path": "::setup::setup: create disposable product::setup product created",
+                  "id": "28de207486e5c46c3ae9e4ddd3bfd6bf",
+                  "passes": 1,
+                  "fails": 0
+                }
+              ],
+            "name": "setup: create disposable product",
+            "path": "::setup::setup: create disposable product",
+            "id": "3e67aef8ce2a1a1d36fc773f92977ac8"
+          }
+        ],
+        "checks": [],
+        "name": "setup",
+        "path": "::setup",
+        "id": "5c0f8025f7e0b6654089e5b00e950f1a"
+      },
+      {
+        "name": "public endpoints",
+        "path": "::public endpoints",
+        "id": "27d0d78932efe4d904c9f2666b9fc44d",
+        "groups": [],
+        "checks": [
+            {
+              "name": "GET /api/health returned 200",
+              "path": "::public endpoints::GET /api/health returned 200",
+              "id": "efdc8996aa24f8d981c1b3e960d47334",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "path": "::public endpoints::GET /api/health body bounded",
+              "id": "0f5deac9739a04f1069f96ced290cf83",
+              "passes": 1,
+              "fails": 0,
+              "name": "GET /api/health body bounded"
+            },
+            {
+              "name": "GET /api/auth/username-suggestions returned 200",
+              "path": "::public endpoints::GET /api/auth/username-suggestions returned 200",
+              "id": "04f37d0e543072a684e4210b42427801",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "path": "::public endpoints::GET /api/auth/username-suggestions body bounded",
+              "id": "c3ba93388ea72fe5d57691735562cf4b",
+              "passes": 1,
+              "fails": 0,
+              "name": "GET /api/auth/username-suggestions body bounded"
+            },
+            {
+              "path": "::public endpoints::GET /api/products returned 200",
+              "id": "4ee495275b20fa2c416daa58b5f27879",
+              "passes": 1,
+              "fails": 0,
+              "name": "GET /api/products returned 200"
+            },
+            {
+              "passes": 1,
+              "fails": 0,
+              "name": "GET /api/products body bounded",
+              "path": "::public endpoints::GET /api/products body bounded",
+              "id": "1375879fca1841d411542bd7954e13cd"
+            },
+            {
+              "name": "GET /api/products?q= returned 200",
+              "path": "::public endpoints::GET /api/products?q= returned 200",
+              "id": "daddaa6b200c7ef4c3f15c0ca940567f",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "path": "::public endpoints::GET /api/products?q= body bounded",
+              "id": "4fa37cd3f7059abe8070459916afb523",
+              "passes": 1,
+              "fails": 0,
+              "name": "GET /api/products?q= body bounded"
+            },
+            {
+              "name": "GET /api/products?category= returned 200",
+              "path": "::public endpoints::GET /api/products?category= returned 200",
+              "id": "c78ce6c56d51766989a0a9c76287a115",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "fails": 0,
+              "name": "GET /api/products?category= body bounded",
+              "path": "::public endpoints::GET /api/products?category= body bounded",
+              "id": "4d5d8e6bf5cc103a5f648e4c790ce85b",
+              "passes": 1
+            },
+            {
+              "id": "c986cca9818c9201ae23b3e2ccf6a84e",
+              "passes": 1,
+              "fails": 0,
+              "name": "GET /api/products/:id returned 200",
+              "path": "::public endpoints::GET /api/products/:id returned 200"
+            },
+            {
+              "id": "1a51a47e2820d3d96253a047e59fcebc",
+              "passes": 1,
+              "fails": 0,
+              "name": "GET /api/products/:id body bounded",
+              "path": "::public endpoints::GET /api/products/:id body bounded"
+            },
+            {
+              "name": "GET /api/products/:id missing returned 404",
+              "path": "::public endpoints::GET /api/products/:id missing returned 404",
+              "id": "9d3fcba474a2a2c646e4664383c0129c",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "name": "GET /api/products/:id missing body bounded",
+              "path": "::public endpoints::GET /api/products/:id missing body bounded",
+              "id": "3f13e2c9abe1b61f2e1eeb9719c6c1ee",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "path": "::public endpoints::GET /api/recommendations/similar/:productId returned 200",
+              "id": "20ac7079770729ddd421855ed0382e04",
+              "passes": 1,
+              "fails": 0,
+              "name": "GET /api/recommendations/similar/:productId returned 200"
+            },
+            {
+              "name": "GET /api/recommendations/similar/:productId body bounded",
+              "path": "::public endpoints::GET /api/recommendations/similar/:productId body bounded",
+              "id": "3fa1464485667791ca938d71ff0be8fa",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "name": "GET /api/recommendations/similar/:productId missing returned 404",
+              "path": "::public endpoints::GET /api/recommendations/similar/:productId missing returned 404",
+              "id": "fc1c364d85822dbbd19c4d1f2a8455a5",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "id": "cf55002c4880e444b570ade949d09d03",
+              "passes": 1,
+              "fails": 0,
+              "name": "GET /api/recommendations/similar/:productId missing body bounded",
+              "path": "::public endpoints::GET /api/recommendations/similar/:productId missing body bounded"
+            }
+          ]
+      },
+      {
+        "path": "::auth endpoints",
+        "id": "81403d93b54ca0047edc1d07dbe2fb6a",
+        "groups": [],
+        "checks": [
+            {
+              "passes": 1,
+              "fails": 0,
+              "name": "POST /api/auth/login returned 200",
+              "path": "::auth endpoints::POST /api/auth/login returned 200",
+              "id": "a334acb740da68d4b8ebfbdea778c819"
+            },
+            {
+              "name": "POST /api/auth/login body bounded",
+              "path": "::auth endpoints::POST /api/auth/login body bounded",
+              "id": "81ba12c1811d22adf81396186d41c7ef",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "name": "GET /api/auth/me returned 200",
+              "path": "::auth endpoints::GET /api/auth/me returned 200",
+              "id": "4a8a4432b9454da9bcd59c01c4235c94",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "name": "GET /api/auth/me body bounded",
+              "path": "::auth endpoints::GET /api/auth/me body bounded",
+              "id": "692068a3ea8a4ad373c7d709a37157ed",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "name": "POST /api/auth/body-photo returned 200",
+              "path": "::auth endpoints::POST /api/auth/body-photo returned 200",
+              "id": "0af68526ccf0914d5415ea6a60ca3058",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "name": "POST /api/auth/body-photo body bounded",
+              "path": "::auth endpoints::POST /api/auth/body-photo body bounded",
+              "id": "20e612e4167b4d5f09fef14dcef5dbf3",
+              "passes": 1,
+              "fails": 0
+            }
+          ],
+        "name": "auth endpoints"
+      },
+      {
+        "checks": [
+          {
+            "name": "GET /api/recommendations/for-you returned 200",
+            "path": "::recommendation endpoints::GET /api/recommendations/for-you returned 200",
+            "id": "49fea8e0028af1d62f86e9ccd90c5a71",
+            "passes": 1,
+            "fails": 0
+          },
+          {
+            "path": "::recommendation endpoints::GET /api/recommendations/for-you body bounded",
+            "id": "10d27919dd9741c4538f78a263770362",
+            "passes": 1,
+            "fails": 0,
+            "name": "GET /api/recommendations/for-you body bounded"
+          },
+          {
+            "id": "fd4231e95421fdc1109a69fa2f531917",
+            "passes": 1,
+            "fails": 0,
+            "name": "POST /api/recommendations/events returned 201",
+            "path": "::recommendation endpoints::POST /api/recommendations/events returned 201"
+          },
+          {
+            "name": "POST /api/recommendations/events body bounded",
+            "path": "::recommendation endpoints::POST /api/recommendations/events body bounded",
+            "id": "c922be27a62d11c1541b2926681acf7d",
+            "passes": 1,
+            "fails": 0
+          },
+          {
+            "passes": 1,
+            "fails": 0,
+            "name": "POST /api/recommendations/events invalid returned 400",
+            "path": "::recommendation endpoints::POST /api/recommendations/events invalid returned 400",
+            "id": "2f70248808536f217ae2c8c4583d0370"
+          },
+          {
+            "name": "POST /api/recommendations/events invalid body bounded",
+            "path": "::recommendation endpoints::POST /api/recommendations/events invalid body bounded",
+            "id": "95690d168f287d7353e9570c4362ddac",
+            "passes": 1,
+            "fails": 0
+          },
+          {
+            "passes": 1,
+            "fails": 0,
+            "name": "GET /api/recommendations/admin/stats returned 200",
+            "path": "::recommendation endpoints::GET /api/recommendations/admin/stats returned 200",
+            "id": "19994c79b35284e27c72145ca4711a08"
+          },
+          {
+            "name": "GET /api/recommendations/admin/stats body bounded",
+            "path": "::recommendation endpoints::GET /api/recommendations/admin/stats body bounded",
+            "id": "3651119cd9fa2bd6210a3582013e7dbb",
+            "passes": 1,
+            "fails": 0
+          }
+        ],
+        "name": "recommendation endpoints",
+        "path": "::recommendation endpoints",
+        "id": "48aa07fb32a6065eedc22691d82a7f94",
+        "groups": []
+      },
+      {
+        "name": "try-on endpoints",
+        "path": "::try-on endpoints",
+        "id": "b8dda021342a79910c79ff39721d0ac2",
+        "groups": [],
+        "checks": [
+            {
+              "path": "::try-on endpoints::GET /api/tryons returned 200",
+              "id": "0e8f66da6f33964ad73b858e1cfa86be",
+              "passes": 1,
+              "fails": 0,
+              "name": "GET /api/tryons returned 200"
+            },
+            {
+              "name": "GET /api/tryons body bounded",
+              "path": "::try-on endpoints::GET /api/tryons body bounded",
+              "id": "915f095fbbd3877aa2e683bf3b19de3f",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "name": "POST /api/tryons/:productId missing returned 404",
+              "path": "::try-on endpoints::POST /api/tryons/:productId missing returned 404",
+              "id": "e7c1cebf0b344c7baa9a2aa23b9e7542",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "name": "POST /api/tryons/:productId missing body bounded",
+              "path": "::try-on endpoints::POST /api/tryons/:productId missing body bounded",
+              "id": "38c38f23335551a98237915d2a647f33",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "name": "POST /api/tryons/custom validation returned 400",
+              "path": "::try-on endpoints::POST /api/tryons/custom validation returned 400",
+              "id": "d44d169b8b7f55ac93099ce3c1567420",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "name": "POST /api/tryons/custom validation body bounded",
+              "path": "::try-on endpoints::POST /api/tryons/custom validation body bounded",
+              "id": "b0063c5a5ebe8ae5aef526d14345419a",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "path": "::try-on endpoints::POST /api/tryons/external validation returned 400",
+              "id": "c8286da47be555069b1ccd8520b29391",
+              "passes": 1,
+              "fails": 0,
+              "name": "POST /api/tryons/external validation returned 400"
+            },
+            {
+              "fails": 0,
+              "name": "POST /api/tryons/external validation body bounded",
+              "path": "::try-on endpoints::POST /api/tryons/external validation body bounded",
+              "id": "58cd8c0df8dabcc20f26a0d601998232",
+              "passes": 1
+            }
+          ]
+      },
+      {
+        "name": "admin product endpoints",
+        "path": "::admin product endpoints",
+        "id": "7da8d49c7155b2d1d87876d2852a09ab",
+        "groups": [],
+        "checks": [
+            {
+              "name": "POST /api/products/preview-link validation returned 400",
+              "path": "::admin product endpoints::POST /api/products/preview-link validation returned 400",
+              "id": "a9b01e73f0fa031f150e69be9ed70254",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "path": "::admin product endpoints::POST /api/products/preview-link validation body bounded",
+              "id": "33b2dd9de4c76d57136c55a9e75595fe",
+              "passes": 1,
+              "fails": 0,
+              "name": "POST /api/products/preview-link validation body bounded"
+            },
+            {
+              "name": "POST /api/products/recategorize returned 200",
+              "path": "::admin product endpoints::POST /api/products/recategorize returned 200",
+              "id": "757992d598eded1c79228457f3bccd90",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "name": "POST /api/products/recategorize body bounded",
+              "path": "::admin product endpoints::POST /api/products/recategorize body bounded",
+              "id": "6478f25f48344308b28fece33c1a2ca9",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "name": "PATCH /api/products/:id/tryon-model returned 200",
+              "path": "::admin product endpoints::PATCH /api/products/:id/tryon-model returned 200",
+              "id": "ecb3252874d98830fd638beb08b5bc6e",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "passes": 1,
+              "fails": 0,
+              "name": "PATCH /api/products/:id/tryon-model body bounded",
+              "path": "::admin product endpoints::PATCH /api/products/:id/tryon-model body bounded",
+              "id": "bbfe172f81addd942f3571fe4609d0e0"
+            }
+          ]
+      },
+      {
+        "name": "teardown",
+        "path": "::teardown",
+        "id": "a8a9942382e8ffe2e56ef29e664b8229",
+        "groups": [],
+        "checks": [
+            {
+              "name": "DELETE /api/products/:id cleanup returned 200/404",
+              "path": "::teardown::DELETE /api/products/:id cleanup returned 200/404",
+              "id": "74e1cd7f41b1f03b951de092e9af4d27",
+              "passes": 1,
+              "fails": 0
+            },
+            {
+              "name": "DELETE /api/products/:id cleanup body bounded",
+              "path": "::teardown::DELETE /api/products/:id cleanup body bounded",
+              "id": "8099bd371a1e2ff45e519f1b7061255d",
+              "passes": 1,
+              "fails": 0
+            }
+          ]
+      }
+    ],
+    "checks": [
+      {
+        "fails": 0,
+        "name": "GET /api/products?q= returned 200",
+        "path": "::GET /api/products?q= returned 200",
+        "id": "311fb0528a0a8b40587559e4c92b5eff",
+        "passes": 4
+      },
+      {
+        "id": "ab511c561bb7f7290e6da5e956c12ab3",
+        "passes": 4,
+        "fails": 0,
+        "name": "GET /api/products?q= body bounded",
+        "path": "::GET /api/products?q= body bounded"
+      },
+      {
+        "name": "GET /api/products?featured= returned 200",
+        "path": "::GET /api/products?featured= returned 200",
+        "id": "ee5f830458bd6fc46b8078033c764eea",
+        "passes": 2,
+        "fails": 0
+      },
+      {
+        "fails": 0,
+        "name": "GET /api/products?featured= body bounded",
+        "path": "::GET /api/products?featured= body bounded",
+        "id": "3e4c3db4932c096b5cf1c88517a739cf",
+        "passes": 2
+      },
+      {
+        "fails": 0,
+        "name": "GET /api/health returned 200",
+        "path": "::GET /api/health returned 200",
+        "id": "ff23cf01ccab27814fe1b4dc3ba52471",
+        "passes": 4
+      },
+      {
+        "id": "c4fc966f16001dd5e164649adecb4ade",
+        "passes": 4,
+        "fails": 0,
+        "name": "GET /api/health body bounded",
+        "path": "::GET /api/health body bounded"
+      },
+      {
+        "fails": 0,
+        "name": "GET /api/products returned 200",
+        "path": "::GET /api/products returned 200",
+        "id": "c8967ee92890dd483bce96dd51b428fe",
+        "passes": 5
+      },
+      {
+        "name": "GET /api/products body bounded",
+        "path": "::GET /api/products body bounded",
+        "id": "d356c45f1564959b9cc11d46e9916ba3",
+        "passes": 5,
+        "fails": 0
+      },
+      {
+        "name": "GET /api/products/:id returned 200",
+        "path": "::GET /api/products/:id returned 200",
+        "id": "59a1f0b68335db3959e8871333e83fa9",
+        "passes": 1,
+        "fails": 0
+      },
+      {
+        "id": "0a969918f587063e035b820d4891d08c",
+        "passes": 1,
+        "fails": 0,
+        "name": "GET /api/products/:id body bounded",
+        "path": "::GET /api/products/:id body bounded"
+      },
+      {
+        "fails": 0,
+        "name": "GET /api/recommendations/similar/:productId returned 200",
+        "path": "::GET /api/recommendations/similar/:productId returned 200",
+        "id": "984916d6ea4feb03faec6d9cb07ff655",
+        "passes": 1
+      },
+      {
+        "path": "::GET /api/recommendations/similar/:productId body bounded",
+        "id": "4add55962bc265c4d3b644732876487a",
+        "passes": 1,
+        "fails": 0,
+        "name": "GET /api/recommendations/similar/:productId body bounded"
+      }
+    ],
+    "name": "",
+    "path": "",
+    "id": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "options": {
+    "summaryTimeUnit": "",
+    "noColor": true,
+    "summaryTrendStats": [
+      "avg",
+      "min",
+      "med",
+      "p(90)",
+      "p(95)",
+      "p(99)",
+      "max"
+    ]
+  },
+  "state": {
+    "isStdOutTTY": false,
+    "isStdErrTTY": false,
+    "testRunDurationMs": 22498.276
+  },
+  "metrics": {
+    "http_reqs{endpoint_key:delete_api_products_all_active}": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 0,
+        "rate": 0
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_reqs{endpoint_key:get_api_products_category}": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 1,
+        "rate": 0.04444785013749498
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      }
+    },
+    "checks{endpoint_key:post_api_auth_signup_request_otp}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "passes": 2,
+        "fails": 0,
+        "rate": 1
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_duration{endpoint_key:get_api_recommendations_admin_stats}": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(95)": 241.46,
+        "p(99)": 241.46,
+        "max": 241.46,
+        "avg": 241.46,
+        "min": 241.46,
+        "med": 241.46,
+        "p(90)": 241.46
+      },
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_reqs{scenario:stage_1}": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "rate": 0.7556134523374146,
+        "count": 17
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      }
+    },
+    "checks{endpoint_key:get_api_tryons}": {
+      "values": {
+        "rate": 1,
+        "passes": 2,
+        "fails": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      },
+      "type": "rate",
+      "contains": "default"
+    },
+    "http_req_failed{endpoint_key:post_api_tryons_external_validation}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 1
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_reqs{endpoint_key:post_api_auth_body_photo}": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 1,
+        "rate": 0.04444785013749498
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_duration{endpoint_key:get_api_products_setup_lookup}": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(90)": 0,
+        "p(95)": 0,
+        "p(99)": 0,
+        "max": 0,
+        "avg": 0,
+        "min": 0,
+        "med": 0
+      },
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_duration{endpoint_key:get_api_auth_username_suggestions}": {
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      },
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "min": 94.908,
+        "med": 94.908,
+        "p(90)": 94.908,
+        "p(95)": 94.908,
+        "p(99)": 94.908,
+        "max": 94.908,
+        "avg": 94.908
+      }
+    },
+    "http_req_failed{endpoint_key:get_api_auth_me}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 1
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_duration{endpoint_key:delete_api_products_id_cleanup}": {
+      "values": {
+        "p(90)": 61.198,
+        "p(95)": 61.198,
+        "p(99)": 61.198,
+        "max": 61.198,
+        "avg": 61.198,
+        "min": 61.198,
+        "med": 61.198
+      },
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      },
+      "type": "trend",
+      "contains": "time"
+    },
+    "http_req_failed{endpoint_key:get_api_auth_username_suggestions}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "passes": 0,
+        "fails": 1,
+        "rate": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_failed{endpoint_key:get_api_products}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 6
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "checks{endpoint_key:post_api_recommendations_events}": {
+      "contains": "default",
+      "values": {
+        "fails": 0,
+        "rate": 1,
+        "passes": 2
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      },
+      "type": "rate"
+    },
+    "http_req_failed{endpoint_key:delete_api_products_id_cleanup}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "passes": 0,
+        "fails": 1,
+        "rate": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_duration{endpoint_key:post_api_recommendations_events}": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(90)": 81.935,
+        "p(95)": 81.935,
+        "p(99)": 81.935,
+        "max": 81.935,
+        "avg": 81.935,
+        "min": 81.935,
+        "med": 81.935
+      },
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      }
+    },
+    "checks{endpoint_key:patch_api_products_id_tryon_model}": {
+      "values": {
+        "rate": 1,
+        "passes": 2,
+        "fails": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      },
+      "type": "rate",
+      "contains": "default"
+    },
+    "checks{endpoint_key:get_api_auth_username_suggestions}": {
+      "values": {
+        "rate": 1,
+        "passes": 2,
+        "fails": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      },
+      "type": "rate",
+      "contains": "default"
+    },
+    "http_reqs{endpoint_key:get_api_recommendations_similar_productid}": {
+      "values": {
+        "count": 2,
+        "rate": 0.08889570027498996
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      },
+      "type": "counter",
+      "contains": "default"
+    },
+    "http_req_duration{endpoint_key:patch_api_products_id_tryon_model}": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "min": 49.263,
+        "med": 49.263,
+        "p(90)": 49.263,
+        "p(95)": 49.263,
+        "p(99)": 49.263,
+        "max": 49.263,
+        "avg": 49.263
+      },
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_duration{endpoint_key:post_api_auth_login}": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(99)": 237.615,
+        "max": 237.615,
+        "avg": 237.615,
+        "min": 237.615,
+        "med": 237.615,
+        "p(90)": 237.615,
+        "p(95)": 237.615
+      },
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_reqs{endpoint_key:get_api_recommendations_for_you}": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 1,
+        "rate": 0.04444785013749498
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_duration{endpoint_key:get_api_products_id_missing}": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(95)": 24.714,
+        "p(99)": 24.714,
+        "max": 24.714,
+        "avg": 24.714,
+        "min": 24.714,
+        "med": 24.714,
+        "p(90)": 24.714
+      },
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_duration": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "min": 0.275,
+        "med": 25.769,
+        "p(90)": 172.94500000000008,
+        "p(95)": 240.691,
+        "p(99)": 265.8624,
+        "max": 281.489,
+        "avg": 54.37646666666665
+      }
+    },
+    "http_req_duration{endpoint_key:get_api_auth_me}": {
+      "contains": "time",
+      "values": {
+        "avg": 24.723,
+        "min": 24.723,
+        "med": 24.723,
+        "p(90)": 24.723,
+        "p(95)": 24.723,
+        "p(99)": 24.723,
+        "max": 24.723
+      },
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      },
+      "type": "trend"
+    },
+    "http_req_failed{endpoint_key:post_api_tryons_productid_generation}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_reqs{endpoint_key:post_api_products_preview_link_validation}": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 1,
+        "rate": 0.04444785013749498
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_failed{endpoint_key:post_api_tryons_custom_generation}": {
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      },
+      "type": "rate"
+    },
+    "http_req_failed{endpoint_key:patch_api_products_id_tryon_model}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 1
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_failed{endpoint_key:get_api_recommendations_similar_productid_missing}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 1
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "checks{endpoint_key:get_api_health}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 1,
+        "passes": 10,
+        "fails": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_reqs{endpoint_key:post_api_auth_signup}": {
+      "values": {
+        "rate": 0.04444785013749498,
+        "count": 1
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      },
+      "type": "counter",
+      "contains": "default"
+    },
+    "http_req_failed{endpoint_key:post_api_auth_signup}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 1
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "checks{endpoint_key:post_api_auth_signup}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 1,
+        "passes": 1,
+        "fails": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_duration{endpoint_key:get_api_tryons}": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(95)": 47.797,
+        "p(99)": 47.797,
+        "max": 47.797,
+        "avg": 47.797,
+        "min": 47.797,
+        "med": 47.797,
+        "p(90)": 47.797
+      },
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_failed{endpoint_key:get_api_products_id_missing}": {
+      "values": {
+        "fails": 1,
+        "rate": 0,
+        "passes": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      },
+      "type": "rate",
+      "contains": "default"
+    },
+    "http_reqs{endpoint_key:post_api_recommendations_events_invalid}": {
+      "values": {
+        "count": 1,
+        "rate": 0.04444785013749498
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      },
+      "type": "counter",
+      "contains": "default"
+    },
+    "http_reqs{endpoint_key:post_api_products}": {
+      "contains": "default",
+      "values": {
+        "count": 1,
+        "rate": 0.04444785013749498
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      },
+      "type": "counter"
+    },
+    "http_reqs{endpoint_key:get_api_tryons}": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "rate": 0.04444785013749498,
+        "count": 1
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_duration{expected_response:true}": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "min": 0.275,
+        "med": 25.769,
+        "p(90)": 172.94500000000008,
+        "p(95)": 240.691,
+        "p(99)": 265.8624,
+        "max": 281.489,
+        "avg": 54.37646666666665
+      }
+    },
+    "http_req_receiving": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "med": 0.092,
+        "p(90)": 0.1698,
+        "p(95)": 0.25699999999999984,
+        "p(99)": 0.31012,
+        "max": 0.322,
+        "avg": 0.10126666666666666,
+        "min": 0.016
+      }
+    },
+    "http_req_failed{endpoint_key:get_api_recommendations_admin_stats}": {
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      },
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 1
+      }
+    },
+    "http_req_connecting": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "max": 0.412,
+        "avg": 0.02606666666666666,
+        "min": 0,
+        "med": 0,
+        "p(90)": 0,
+        "p(95)": 0.1788,
+        "p(99)": 0.4098
+      }
+    },
+    "http_req_failed{endpoint_key:delete_api_products_all_active}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "checks{endpoint_key:post_api_tryons_external_validation}": {
+      "values": {
+        "fails": 0,
+        "rate": 1,
+        "passes": 2
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      },
+      "type": "rate",
+      "contains": "default"
+    },
+    "http_req_failed{endpoint_key:get_api_recommendations_for_you}": {
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 1
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      },
+      "type": "rate"
+    },
+    "http_req_duration{endpoint_key:get_api_products_featured}": {
+      "contains": "time",
+      "values": {
+        "min": 3.111,
+        "med": 17.787499999999998,
+        "p(90)": 29.5287,
+        "p(95)": 30.996349999999996,
+        "p(99)": 32.170469999999995,
+        "max": 32.464,
+        "avg": 17.787499999999998
+      },
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      },
+      "type": "trend"
+    },
+    "checks": {
+      "values": {
+        "fails": 0,
+        "rate": 1,
+        "passes": 88
+      },
+      "thresholds": {
+        "rate>0.95": {
+          "ok": true
+        }
+      },
+      "type": "rate",
+      "contains": "default"
+    },
+    "http_req_failed{endpoint_key:post_api_auth_body_photo}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "fails": 1,
+        "rate": 0,
+        "passes": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "checks{endpoint_key:get_api_products_setup_lookup}": {
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      },
+      "type": "rate"
+    },
+    "checks{endpoint_key:get_api_recommendations_for_you}": {
+      "contains": "default",
+      "values": {
+        "rate": 1,
+        "passes": 2,
+        "fails": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      },
+      "type": "rate"
+    },
+    "checks{endpoint_key:get_api_recommendations_similar_productid_missing}": {
+      "contains": "default",
+      "values": {
+        "fails": 0,
+        "rate": 1,
+        "passes": 2
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      },
+      "type": "rate"
+    },
+    "http_req_failed{endpoint_key:get_api_products_q}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 5
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_failed{endpoint_key:post_api_recommendations_events}": {
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 1
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      },
+      "type": "rate",
+      "contains": "default"
+    },
+    "vus_max": {
+      "type": "gauge",
+      "contains": "default",
+      "values": {
+        "value": 2,
+        "min": 2,
+        "max": 2
+      }
+    },
+    "checks{endpoint_key:post_api_tryons_custom_validation}": {
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      },
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 1,
+        "passes": 2,
+        "fails": 0
+      }
+    },
+    "http_req_failed{endpoint_key:post_api_recommendations_events_invalid}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 1
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_failed{endpoint_key:post_api_auth_login}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 1
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_duration{endpoint_key:post_api_tryons_external_generation}": {
+      "contains": "time",
+      "values": {
+        "med": 0,
+        "p(90)": 0,
+        "p(95)": 0,
+        "p(99)": 0,
+        "max": 0,
+        "avg": 0,
+        "min": 0
+      },
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      },
+      "type": "trend"
+    },
+    "checks{endpoint_key:post_api_tryons_productid_generation}": {
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      },
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 0
+      }
+    },
+    "http_reqs{endpoint_key:get_api_products_setup_lookup}": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "count": 0
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      }
+    },
+    "checks{endpoint_key:post_api_tryons_external_generation}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "checks{endpoint_key:post_api_auth_login}": {
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      },
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 1,
+        "passes": 2,
+        "fails": 0
+      }
+    },
+    "http_reqs{endpoint_key:post_api_tryons_external_validation}": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 1,
+        "rate": 0.04444785013749498
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_duration{endpoint_key:post_api_auth_body_photo}": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(90)": 58.479,
+        "p(95)": 58.479,
+        "p(99)": 58.479,
+        "max": 58.479,
+        "avg": 58.479,
+        "min": 58.479,
+        "med": 58.479
+      },
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_duration{endpoint_key:post_api_auth_signup_request_otp}": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(95)": 25.769,
+        "p(99)": 25.769,
+        "max": 25.769,
+        "avg": 25.769,
+        "min": 25.769,
+        "med": 25.769,
+        "p(90)": 25.769
+      },
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      }
+    },
+    "checks{endpoint_key:post_api_auth_body_photo}": {
+      "values": {
+        "rate": 1,
+        "passes": 2,
+        "fails": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      },
+      "type": "rate",
+      "contains": "default"
+    },
+    "http_req_duration{endpoint_key:post_api_products}": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "max": 50.898,
+        "avg": 50.898,
+        "min": 50.898,
+        "med": 50.898,
+        "p(90)": 50.898,
+        "p(95)": 50.898,
+        "p(99)": 50.898
+      },
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      }
+    },
+    "checks{endpoint_key:get_api_auth_me}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 1,
+        "passes": 2,
+        "fails": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_failed{endpoint_key:get_api_recommendations_similar_productid}": {
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 2
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      },
+      "type": "rate"
+    },
+    "http_reqs{endpoint_key:post_api_tryons_productid_generation}": {
+      "contains": "default",
+      "values": {
+        "count": 0,
+        "rate": 0
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      },
+      "type": "counter"
+    },
+    "http_reqs{endpoint_key:get_api_recommendations_for_you_setup_lookup}": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "count": 0
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_reqs{endpoint_key:post_api_recommendations_events}": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 1,
+        "rate": 0.04444785013749498
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_reqs{endpoint_key:get_api_products_q}": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "rate": 0.22223925068747488,
+        "count": 5
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_duration{endpoint_key:post_api_recommendations_events_invalid}": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(95)": 23.087,
+        "p(99)": 23.087,
+        "max": 23.087,
+        "avg": 23.087,
+        "min": 23.087,
+        "med": 23.087,
+        "p(90)": 23.087
+      },
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      }
+    },
+    "checks{endpoint_key:get_api_products_featured}": {
+      "contains": "default",
+      "values": {
+        "rate": 1,
+        "passes": 4,
+        "fails": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      },
+      "type": "rate"
+    },
+    "http_reqs{endpoint_key:get_api_auth_me}": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 1,
+        "rate": 0.04444785013749498
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_duration{endpoint_key:get_api_products}": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "min": 2.394,
+        "med": 3.3019999999999996,
+        "p(90)": 41.154,
+        "p(95)": 46.558499999999995,
+        "p(99)": 50.8821,
+        "max": 51.963,
+        "avg": 15.649333333333333
+      },
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_duration{endpoint_key:get_api_recommendations_for_you_setup_lookup}": {
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      },
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(90)": 0,
+        "p(95)": 0,
+        "p(99)": 0,
+        "max": 0,
+        "avg": 0,
+        "min": 0,
+        "med": 0
+      }
+    },
+    "http_req_sending": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "med": 0.023,
+        "p(90)": 0.040600000000000004,
+        "p(95)": 0.045399999999999996,
+        "p(99)": 0.07704,
+        "max": 0.081,
+        "avg": 0.02557777777777779,
+        "min": 0.007
+      }
+    },
+    "http_reqs{endpoint_key:get_api_products_id_missing}": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 1,
+        "rate": 0.04444785013749498
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      }
+    },
+    "group_duration": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 293.1348392857143,
+        "min": 51.0635,
+        "med": 309.606,
+        "p(90)": 464.3997168,
+        "p(95)": 466.1687544,
+        "p(99)": 467.58398448,
+        "max": 467.937792
+      }
+    },
+    "checks{endpoint_key:delete_api_products_all_active}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_duration{endpoint_key:post_api_tryons_productid_generation}": {
+      "values": {
+        "p(99)": 0,
+        "max": 0,
+        "avg": 0,
+        "min": 0,
+        "med": 0,
+        "p(90)": 0,
+        "p(95)": 0
+      },
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      },
+      "type": "trend",
+      "contains": "time"
+    },
+    "http_req_duration{endpoint_key:post_api_auth_signup_verify_otp}": {
+      "values": {
+        "avg": 0.443,
+        "min": 0.443,
+        "med": 0.443,
+        "p(90)": 0.443,
+        "p(95)": 0.443,
+        "p(99)": 0.443,
+        "max": 0.443
+      },
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      },
+      "type": "trend",
+      "contains": "time"
+    },
+    "http_req_duration{endpoint_key:get_api_recommendations_for_you}": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(95)": 120.773,
+        "p(99)": 120.773,
+        "max": 120.773,
+        "avg": 120.773,
+        "min": 120.773,
+        "med": 120.773,
+        "p(90)": 120.773
+      },
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_reqs": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "rate": 2.000153256187274,
+        "count": 45
+      }
+    },
+    "http_req_failed{endpoint_key:get_api_recommendations_for_you_setup_lookup}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "checks{endpoint_key:post_api_auth_signup_verify_otp}": {
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      },
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "passes": 2,
+        "fails": 0,
+        "rate": 1
+      }
+    },
+    "iterations": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 18,
+        "rate": 0.8000613024749096
+      }
+    },
+    "http_reqs{endpoint_key:get_api_recommendations_similar_productid_missing}": {
+      "contains": "default",
+      "values": {
+        "count": 1,
+        "rate": 0.04444785013749498
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      },
+      "type": "counter"
+    },
+    "http_reqs{endpoint_key:get_api_products_featured}": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 2,
+        "rate": 0.08889570027498996
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_waiting": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "min": 0.226,
+        "med": 25.683,
+        "p(90)": 172.83440000000004,
+        "p(95)": 240.6266,
+        "p(99)": 265.80124,
+        "max": 281.423,
+        "avg": 54.24962222222221
+      }
+    },
+    "checks{endpoint_key:post_api_tryons_custom_generation}": {
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      },
+      "type": "rate"
+    },
+    "http_req_duration{endpoint_key:get_api_products_id}": {
+      "values": {
+        "p(99)": 38.988130000000005,
+        "max": 39.127,
+        "avg": 32.1835,
+        "min": 25.24,
+        "med": 32.1835,
+        "p(90)": 37.7383,
+        "p(95)": 38.43265
+      },
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      },
+      "type": "trend",
+      "contains": "time"
+    },
+    "http_reqs{endpoint_key:get_api_products_id}": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 2,
+        "rate": 0.08889570027498996
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      }
+    },
+    "checks{endpoint_key:delete_api_products_id_cleanup}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "fails": 0,
+        "rate": 1,
+        "passes": 2
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_duration{endpoint_key:get_api_recommendations_similar_productid}": {
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      },
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 165.86,
+        "min": 130.435,
+        "med": 165.86,
+        "p(90)": 194.2,
+        "p(95)": 197.7425,
+        "p(99)": 200.5765,
+        "max": 201.285
+      }
+    },
+    "http_reqs{endpoint_key:get_api_auth_username_suggestions}": {
+      "values": {
+        "count": 1,
+        "rate": 0.04444785013749498
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      },
+      "type": "counter",
+      "contains": "default"
+    },
+    "http_reqs{endpoint_key:get_api_products}": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "rate": 0.2666871008249699,
+        "count": 6
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_failed{endpoint_key:get_api_products_category}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "passes": 0,
+        "fails": 1,
+        "rate": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_reqs{endpoint_key:delete_api_products_id_cleanup}": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 1,
+        "rate": 0.04444785013749498
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      }
+    },
+    "checks{endpoint_key:get_api_recommendations_for_you_setup_lookup}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_duration{endpoint_key:post_api_tryons_external_validation}": {
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      },
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(90)": 23.123,
+        "p(95)": 23.123,
+        "p(99)": 23.123,
+        "max": 23.123,
+        "avg": 23.123,
+        "min": 23.123,
+        "med": 23.123
+      }
+    },
+    "http_req_failed{endpoint_key:post_api_products_recategorize}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 1
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_duration{endpoint_key:post_api_products_preview_link_validation}": {
+      "values": {
+        "med": 0.394,
+        "p(90)": 0.394,
+        "p(95)": 0.394,
+        "p(99)": 0.394,
+        "max": 0.394,
+        "avg": 0.394,
+        "min": 0.394
+      },
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      },
+      "type": "trend",
+      "contains": "time"
+    },
+    "http_req_failed{endpoint_key:get_api_tryons}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 1
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_failed": {
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 45
+      },
+      "thresholds": {
+        "rate<0.10": {
+          "ok": true
+        }
+      },
+      "type": "rate",
+      "contains": "default"
+    },
+    "http_req_duration{endpoint_key:get_api_products_q}": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(99)": 57.80928,
+        "max": 58.988,
+        "avg": 19.5022,
+        "min": 2.777,
+        "med": 3.407,
+        "p(90)": 47.2008,
+        "p(95)": 53.09439999999999
+      },
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      }
+    },
+    "checks{endpoint_key:post_api_products_preview_link_validation}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 1,
+        "passes": 2,
+        "fails": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "data_sent": {
+      "type": "counter",
+      "contains": "data",
+      "values": {
+        "count": 37107,
+        "rate": 1649.3263750520262
+      }
+    },
+    "http_req_duration{endpoint_key:get_api_products_category}": {
+      "contains": "time",
+      "values": {
+        "min": 30.214,
+        "med": 30.214,
+        "p(90)": 30.214,
+        "p(95)": 30.214,
+        "p(99)": 30.214,
+        "max": 30.214,
+        "avg": 30.214
+      },
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      },
+      "type": "trend"
+    },
+    "checks{endpoint_key:post_api_tryons_productid_missing}": {
+      "values": {
+        "passes": 2,
+        "fails": 0,
+        "rate": 1
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      },
+      "type": "rate",
+      "contains": "default"
+    },
+    "http_req_failed{endpoint_key:post_api_tryons_external_generation}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_failed{endpoint_key:get_api_health}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 5
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_reqs{endpoint_key:post_api_auth_login}": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "rate": 0.04444785013749498,
+        "count": 1
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      }
+    },
+    "checks{endpoint_key:get_api_products_id_missing}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 1,
+        "passes": 2,
+        "fails": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "checks{endpoint_key:get_api_recommendations_admin_stats}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 1,
+        "passes": 2,
+        "fails": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "checks{scenario:stage_1}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 1,
+        "passes": 34,
+        "fails": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_reqs{endpoint_key:get_api_health}": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 5,
+        "rate": 0.22223925068747488
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_duration{endpoint_key:get_api_recommendations_similar_productid_missing}": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(99)": 22.578,
+        "max": 22.578,
+        "avg": 22.578,
+        "min": 22.578,
+        "med": 22.578,
+        "p(90)": 22.578,
+        "p(95)": 22.578
+      },
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_failed{endpoint_key:get_api_products_featured}": {
+      "contains": "default",
+      "values": {
+        "fails": 2,
+        "rate": 0,
+        "passes": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      },
+      "type": "rate"
+    },
+    "checks{endpoint_key:post_api_products}": {
+      "contains": "default",
+      "values": {
+        "rate": 1,
+        "passes": 1,
+        "fails": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      },
+      "type": "rate"
+    },
+    "checks{endpoint_key:get_api_products_category}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 1,
+        "passes": 2,
+        "fails": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_reqs{endpoint_key:post_api_auth_signup_request_otp}": {
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      },
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "rate": 0.04444785013749498,
+        "count": 1
+      }
+    },
+    "http_req_duration{endpoint_key:post_api_auth_signup}": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "min": 281.489,
+        "med": 281.489,
+        "p(90)": 281.489,
+        "p(95)": 281.489,
+        "p(99)": 281.489,
+        "max": 281.489,
+        "avg": 281.489
+      },
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_failed{endpoint_key:get_api_products_id}": {
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 2
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      },
+      "type": "rate"
+    },
+    "http_req_failed{endpoint_key:post_api_auth_signup_request_otp}": {
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      },
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 1
+      }
+    },
+    "http_reqs{endpoint_key:post_api_tryons_external_generation}": {
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      },
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 0,
+        "rate": 0
+      }
+    },
+    "http_req_failed{endpoint_key:post_api_tryons_productid_missing}": {
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 1
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      },
+      "type": "rate",
+      "contains": "default"
+    },
+    "checks{endpoint_key:get_api_products_id}": {
+      "contains": "default",
+      "values": {
+        "fails": 0,
+        "rate": 1,
+        "passes": 4
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      },
+      "type": "rate"
+    },
+    "http_reqs{endpoint_key:patch_api_products_id_tryon_model}": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 1,
+        "rate": 0.04444785013749498
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_duration{endpoint_key:delete_api_products_all_active}": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "med": 0,
+        "p(90)": 0,
+        "p(95)": 0,
+        "p(99)": 0,
+        "max": 0,
+        "avg": 0,
+        "min": 0
+      },
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_failed{scenario:stage_1}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "passes": 0,
+        "fails": 17,
+        "rate": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_failed{endpoint_key:post_api_tryons_custom_validation}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "fails": 1,
+        "rate": 0,
+        "passes": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_duration{endpoint_key:get_api_health}": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 0.9640000000000001,
+        "min": 0.275,
+        "med": 1.168,
+        "p(90)": 1.2896,
+        "p(95)": 1.3118,
+        "p(99)": 1.32956,
+        "max": 1.334
+      },
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      }
+    },
+    "checks{endpoint_key:post_api_recommendations_events_invalid}": {
+      "values": {
+        "passes": 2,
+        "fails": 0,
+        "rate": 1
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      },
+      "type": "rate",
+      "contains": "default"
+    },
+    "data_received": {
+      "type": "counter",
+      "contains": "data",
+      "values": {
+        "count": 348570,
+        "rate": 15493.187122426625
+      }
+    },
+    "http_req_duration{endpoint_key:post_api_tryons_custom_generation}": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(90)": 0,
+        "p(95)": 0,
+        "p(99)": 0,
+        "max": 0,
+        "avg": 0,
+        "min": 0,
+        "med": 0
+      },
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_duration{endpoint_key:post_api_tryons_custom_validation}": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "med": 22.234,
+        "p(90)": 22.234,
+        "p(95)": 22.234,
+        "p(99)": 22.234,
+        "max": 22.234,
+        "avg": 22.234,
+        "min": 22.234
+      },
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_failed{endpoint_key:post_api_products}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 1
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_reqs{endpoint_key:post_api_auth_signup_verify_otp}": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 1,
+        "rate": 0.04444785013749498
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_duration{scenario:stage_1}": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(95)": 73.27739999999994,
+        "p(99)": 119.00348,
+        "max": 130.435,
+        "avg": 20.072000000000003,
+        "min": 0.82,
+        "med": 3.111,
+        "p(90)": 54.773
+      },
+      "thresholds": {
+        "p(95)<1500": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_duration{endpoint_key:post_api_products_recategorize}": {
+      "contains": "time",
+      "values": {
+        "min": 245.974,
+        "med": 245.974,
+        "p(90)": 245.974,
+        "p(95)": 245.974,
+        "p(99)": 245.974,
+        "max": 245.974,
+        "avg": 245.974
+      },
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      },
+      "type": "trend"
+    },
+    "http_reqs{endpoint_key:post_api_products_recategorize}": {
+      "values": {
+        "count": 1,
+        "rate": 0.04444785013749498
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      },
+      "type": "counter",
+      "contains": "default"
+    },
+    "checks{endpoint_key:post_api_products_recategorize}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 1,
+        "passes": 2,
+        "fails": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "vus": {
+      "type": "gauge",
+      "contains": "default",
+      "values": {
+        "value": 1,
+        "min": 0,
+        "max": 1
+      }
+    },
+    "http_req_failed{endpoint_key:post_api_products_preview_link_validation}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "fails": 1,
+        "rate": 0,
+        "passes": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_reqs{endpoint_key:get_api_recommendations_admin_stats}": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 1,
+        "rate": 0.04444785013749498
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_tls_handshaking": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(90)": 0,
+        "p(95)": 0,
+        "p(99)": 0,
+        "max": 0,
+        "avg": 0,
+        "min": 0,
+        "med": 0
+      }
+    },
+    "checks{endpoint_key:get_api_products_q}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 1,
+        "passes": 10,
+        "fails": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_reqs{endpoint_key:post_api_tryons_custom_generation}": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 0,
+        "rate": 0
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_blocked": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "med": 0.007,
+        "p(90)": 0.01960000000000001,
+        "p(95)": 0.44359999999999944,
+        "p(99)": 0.9962399999999997,
+        "max": 1.383,
+        "avg": 0.0635333333333333,
+        "min": 0.001
+      }
+    },
+    "http_req_failed{endpoint_key:get_api_products_setup_lookup}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "checks{endpoint_key:get_api_products}": {
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      },
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "fails": 0,
+        "rate": 1,
+        "passes": 12
+      }
+    },
+    "http_reqs{endpoint_key:post_api_tryons_custom_validation}": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 1,
+        "rate": 0.04444785013749498
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      }
+    },
+    "iteration_duration": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(99)": 1443.2903824999999,
+        "max": 1691.351875,
+        "avg": 208.82749072222222,
+        "min": 102.185875,
+        "med": 104.7154795,
+        "p(90)": 182.06990000000002,
+        "p(95)": 451.0444124999989
+      }
+    },
+    "http_reqs{endpoint_key:post_api_tryons_productid_missing}": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 1,
+        "rate": 0.04444785013749498
+      },
+      "thresholds": {
+        "count>=0": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_duration{endpoint_key:post_api_tryons_productid_missing}": {
+      "contains": "time",
+      "values": {
+        "p(90)": 49.984,
+        "p(95)": 49.984,
+        "p(99)": 49.984,
+        "max": 49.984,
+        "avg": 49.984,
+        "min": 49.984,
+        "med": 49.984
+      },
+      "thresholds": {
+        "p(95)>=0": {
+          "ok": true
+        }
+      },
+      "type": "trend"
+    },
+    "http_req_failed{endpoint_key:post_api_auth_signup_verify_otp}": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "fails": 1,
+        "rate": 0,
+        "passes": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      }
+    },
+    "checks{endpoint_key:get_api_recommendations_similar_productid}": {
+      "values": {
+        "rate": 1,
+        "passes": 4,
+        "fails": 0
+      },
+      "thresholds": {
+        "rate>=0": {
+          "ok": true
+        }
+      },
+      "type": "rate",
+      "contains": "default"
+    }
+  },
+  "setup_data": {
+    "runId": "1785925742353-217498",
+    "userId": "6a73106e5d800101e5095848",
+    "userToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2YTczMTA2ZTVkODAwMTAxZTUwOTU4NDgiLCJpYXQiOjE3ODU5MjU3NDIsImV4cCI6MTc4NzEzNTM0Mn0.DvwIaNSg_GLH3tuoyuL2VtVdA18WHUQKpxNmCHkpNVs",
+    "phone": "+15925742353",
+    "productId": "6a73106e5d800101e509584a"
+  }
+}

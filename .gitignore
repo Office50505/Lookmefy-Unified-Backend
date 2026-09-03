@@ -1,0 +1,82 @@
+# Dependencies
+node_modules/
+
+# Production/build output
+dist/
+build/
+.vite/
+fit-look-APP/
+web/
+pruna-test-node/
+*.pkg
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.local
+*.secret
+*.secrets
+*.credentials
+*.credential
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cert
+FINAL_SECURITY_REMEDIATION_REPORT.pdf
+id_rsa*
+id_ed25519*
+
+# Runtime uploads and generated user media
+uploads/**
+!uploads/
+!uploads/.gitkeep
+
+# Logs and diagnostics
+logs/
+reports/catalog-import-*.json
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local databases, dumps, and caches
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+dump.rdb
+*.bak
+*.backup
+.cache/
+.model-cache/
+.venv/
+.venv-rembg/
+.tmp-cutout-*/
+.tmp/
+tmp/
+temp/
+coverage/
+playwright-report/
+test-results/
+tests/browser/screenshots/
+
+# Platform and editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.claude/
+
+# Deploy/provider local state
+.vercel/
+.netlify/
+*.tfvars
+*.tfvars.json
+*.tfvars.save
+**/.terraform/
+terraform.tfstate
+terraform.tfstate.*

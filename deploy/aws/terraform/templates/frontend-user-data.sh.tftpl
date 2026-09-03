@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+set -euxo pipefail
+
+export DEBIAN_FRONTEND=noninteractive
+
+apt-get update
+apt-get install -y ca-certificates curl git gnupg nginx
+
+if [ ! -f /swapfile ]; then
+  fallocate -l 1G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=1024
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+  echo '/swapfile none swap sw 0 0' >> /etc/fstab
+fi
+
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+apt-get install -y nodejs
+
+if [ ! -d /opt/fitlook/.git ]; then
+  git clone --branch '${repo_branch}' '${repo_url}' /opt/fitlook
+else
+  git -C /opt/fitlook fetch origin '${repo_branch}'
+  git -C /opt/fitlook checkout '${repo_branch}'
+  git -C /opt/fitlook pull --ff-only origin '${repo_branch}'
+fi
+
+cd /opt/fitlook
+npm ci
+npm run build
+
+rm -rf /var/www/fitlook
+mkdir -p /var/www/fitlook
+cp -R dist/. /var/www/fitlook/
+chown -R www-data:www-data /var/www/fitlook
+
+cat >/etc/nginx/sites-available/fitlook-frontend <<'NGINX'
+upstream fitlook_api {
+  server ${backend_private_ip}:80;
+}
+
+server {
+  listen 80 default_server;
+  server_name _;
+
+  root /var/www/fitlook;
+  index index.html;
+
+  client_max_body_size 25m;
+
+  gzip on;
+  gzip_vary on;
+  gzip_min_length 1024;
+  gzip_types text/plain text/css application/javascript application/json image/svg+xml;
+
+  location = /closet {
+    add_header Cache-Control "no-cache, must-revalidate" always;
+    try_files /index.html =404;
+  }
+
+  location = /index.html {
+    add_header Cache-Control "no-cache, must-revalidate" always;
+    try_files /index.html =404;
+  }
+
+  location /api/ {
+    proxy_pass http://fitlook_api;
+    proxy_http_version 1.1;
+    proxy_connect_timeout 60s;
+    proxy_send_timeout 300s;
+    proxy_read_timeout 300s;
+    send_timeout 300s;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+
+  location = /nginx_status {
+    stub_status;
+    allow 127.0.0.1;
+    deny all;
+  }
+
+  location ^~ /uploads/ {
+    proxy_pass http://fitlook_api;
+    proxy_http_version 1.1;
+    proxy_connect_timeout 60s;
+    proxy_send_timeout 300s;
+    proxy_read_timeout 300s;
+    send_timeout 300s;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+
+  location ~* \.(?:js|css)$ {
+    add_header Cache-Control "no-cache, must-revalidate" always;
+    try_files $uri =404;
+  }
+
+  location ~* \.(?:png|jpg|jpeg|gif|svg|webp|avif|woff2?)$ {
+    add_header Cache-Control "public, max-age=31536000, immutable" always;
+    try_files $uri =404;
+  }
+
+  location / {
+    add_header Cache-Control "no-cache, must-revalidate" always;
+    try_files $uri $uri/ /index.html;
+  }
+}
+NGINX
+
+rm -f /etc/nginx/sites-enabled/default
+ln -sf /etc/nginx/sites-available/fitlook-frontend /etc/nginx/sites-enabled/fitlook-frontend
+nginx -t
+systemctl enable nginx
+systemctl restart nginx

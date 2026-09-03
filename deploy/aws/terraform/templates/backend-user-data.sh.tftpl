@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+set -euxo pipefail
+
+export DEBIAN_FRONTEND=noninteractive
+
+apt-get update
+apt-get install -y ca-certificates curl git gnupg nginx redis-server
+
+if [ ! -f /swapfile ]; then
+  fallocate -l 1G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=1024
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+  echo '/swapfile none swap sw 0 0' >> /etc/fstab
+fi
+
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+apt-get install -y nodejs
+
+systemctl enable redis-server
+systemctl restart redis-server
+
+id -u fitlook >/dev/null 2>&1 || useradd --system --create-home --shell /usr/sbin/nologin fitlook
+
+if [ ! -d /opt/fitlook/.git ]; then
+  git clone --branch '${repo_branch}' '${repo_url}' /opt/fitlook
+else
+  git -C /opt/fitlook fetch origin '${repo_branch}'
+  git -C /opt/fitlook checkout '${repo_branch}'
+  git -C /opt/fitlook pull --ff-only origin '${repo_branch}'
+fi
+
+chown -R fitlook:fitlook /opt/fitlook
+
+cd /opt/fitlook
+npm ci --omit=dev
+mkdir -p uploads
+chown -R fitlook:fitlook uploads
+
+mkdir -p /etc/fitlook
+cat >/etc/fitlook/backend.env <<'ENV'
+${backend_env_file}
+ENV
+chmod 600 /etc/fitlook/backend.env
+chown root:root /etc/fitlook/backend.env
+
+cat >/etc/systemd/system/fitlook-backend.service <<'SERVICE'
+[Unit]
+Description=FitLook backend API
+After=network.target redis-server.service
+Wants=redis-server.service
+
+[Service]
+Type=simple
+User=fitlook
+Group=fitlook
+WorkingDirectory=/opt/fitlook
+EnvironmentFile=/etc/fitlook/backend.env
+Environment=APP_ROLE=api
+ExecStart=/usr/bin/npm run server
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+SERVICE
+
+cat >/etc/systemd/system/fitlook-worker.service <<'SERVICE'
+[Unit]
+Description=FitLook background worker
+After=network.target redis-server.service
+Wants=redis-server.service
+
+[Service]
+Type=simple
+User=fitlook
+Group=fitlook
+WorkingDirectory=/opt/fitlook
+EnvironmentFile=/etc/fitlook/backend.env
+Environment=APP_ROLE=worker
+ExecStart=/usr/bin/npm run worker
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+SERVICE
+
+cat >/etc/nginx/sites-available/fitlook-backend <<'NGINX'
+server {
+  listen 80 default_server;
+  server_name _;
+
+  client_max_body_size 25m;
+
+  location / {
+    proxy_pass http://127.0.0.1:5050;
+    proxy_http_version 1.1;
+    proxy_connect_timeout 60s;
+    proxy_send_timeout 300s;
+    proxy_read_timeout 300s;
+    send_timeout 300s;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+
+  location = /nginx_status {
+    stub_status;
+    allow 127.0.0.1;
+    deny all;
+  }
+}
+NGINX
+
+rm -f /etc/nginx/sites-enabled/default
+ln -sf /etc/nginx/sites-available/fitlook-backend /etc/nginx/sites-enabled/fitlook-backend
+nginx -t
+
+systemctl daemon-reload
+systemctl enable fitlook-backend
+systemctl restart fitlook-backend
+if grep -Eq '^RUN_WORKER_ON_API=(1|true|yes|on)$' /etc/fitlook/backend.env; then
+  systemctl enable fitlook-worker
+  systemctl restart fitlook-worker
+else
+  systemctl disable fitlook-worker || true
+  systemctl stop fitlook-worker || true
+fi
+systemctl enable nginx
+systemctl restart nginx
