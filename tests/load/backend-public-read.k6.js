@@ -1,3 +1,4 @@
+import exec from 'k6/execution';
 import http from 'k6/http';
 import { check, group, sleep } from 'k6';
 
@@ -5,6 +6,14 @@ const baseUrl = env('BASE_URL', 'https://fitlook.in').replace(/\/$/, '');
 const stageDuration = env('STAGE_DURATION', '30s');
 const thinkTimeSeconds = Number(env('THINK_TIME_SECONDS', '1'));
 const maxResponseBody = Number(env('MAX_RESPONSE_BODY', '1048576'));
+const splitClientIps = envBool('SPLIT_CLIENT_IPS', false);
+const reportPrefix = env('REPORT_PREFIX', 'reports/load/aws-public-read');
+const reportTitle = env(
+  'REPORT_TITLE',
+  baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1')
+    ? 'FitLook Local Public-Read Load Test Report'
+    : 'FitLook AWS Public-Read Load Test Report'
+);
 const stageTargets = parseTargets(env('TARGETS', '10,50,100'));
 const stageNames = stageTargets.map((target) => `stage_${target}`);
 const endpointLabels = [
@@ -66,15 +75,15 @@ export function publicReadJourney(data) {
 }
 
 export function handleSummary(summary) {
-  return {
-    stdout: textSummary(summary),
-    'reports/load/aws-public-read-summary.json': JSON.stringify(summary, null, 2),
-    'reports/load/aws-public-read-report.md': markdownSummary(summary)
-  };
+  const output = { stdout: textSummary(summary) };
+  output[`${reportPrefix}-summary.json`] = JSON.stringify(summary, null, 2);
+  output[`${reportPrefix}-report.md`] = markdownSummary(summary);
+  return output;
 }
 
 function get(path, endpoint, statuses) {
   const res = http.get(`${baseUrl}${path}`, {
+    headers: requestHeaders(),
     tags: endpointTags(endpoint),
     responseType: 'text',
     timeout: '30s',
@@ -127,7 +136,7 @@ function scenariosFor(targets) {
 }
 
 function textSummary(summary) {
-  const lines = ['FitLook AWS public-read load test summary', `Base URL: ${baseUrl}`, ''];
+  const lines = ['FitLook public-read load test summary', `Base URL: ${baseUrl}`, ''];
   stageNames.forEach((stage) => {
     lines.push(`${stage.replace('stage_', '')} VUs: p95=${fmt(subMetric(summary, 'http_req_duration', stage, 'p(95)'), 'ms')} failed=${fmt(subMetric(summary, 'http_req_failed', stage, 'rate'))}`);
   });
@@ -159,12 +168,13 @@ function markdownSummary(summary) {
   });
   const endpointData = endpointRows(summary);
   return [
-    '# FitLook AWS Public-Read Load Test Report',
+    `# ${reportTitle}`,
     '',
     `Generated: ${now}`,
     `Base URL: ${baseUrl}`,
     `Stage duration: ${stageDuration}`,
     `Targets: ${stageTargets.join(', ')} VUs`,
+    `Split client IPs: ${splitClientIps ? 'yes' : 'no'}`,
     'Traffic profile: public GET routes only',
     '',
     '## Stage Results',
@@ -192,12 +202,13 @@ function markdownSummary(summary) {
     '',
     '- This is a safe production-facing read test. It does not sign up users, create products, call admin routes, or write recommendation events.',
     '- Results include public internet, TLS, nginx, backend, Redis, and MongoDB/Atlas latency.',
+    '- `SPLIT_CLIENT_IPS=true` is intended for local/staging tests where one k6 process should model multiple client IPs behind a trusted proxy.',
     '- Use the broader `backend-load.k6.js` script only against staging or when write/auth/admin traffic is explicitly intended.',
     '',
     '## Artifacts',
     '',
-    '- Raw k6 summary: `reports/load/aws-public-read-summary.json`',
-    '- This report: `reports/load/aws-public-read-report.md`',
+    `- Raw k6 summary: \`${reportPrefix}-summary.json\``,
+    `- This report: \`${reportPrefix}-report.md\``,
     ''
   ].join('\n');
 }
@@ -240,6 +251,18 @@ function taggedMetric(summary, base, tag, value, field) {
 
 function endpointTags(endpoint) {
   return { endpoint, endpoint_key: endpointKey(endpoint), load_profile: 'public-read' };
+}
+
+function requestHeaders() {
+  if (!splitClientIps) return {};
+  return { 'X-Forwarded-For': clientIpForVu() };
+}
+
+function clientIpForVu() {
+  const vu = exec.vu && exec.vu.idInTest ? exec.vu.idInTest : 1;
+  const host = ((vu - 1) % 250) + 1;
+  const subnet = Math.floor((vu - 1) / 250) % 250;
+  return `10.66.${subnet}.${host}`;
 }
 
 function endpointKey(endpoint) {
@@ -292,6 +315,11 @@ function addDurations() {
 
 function env(name, fallback) {
   return __ENV[name] !== undefined && __ENV[name] !== '' ? __ENV[name] : fallback;
+}
+
+function envBool(name, fallback) {
+  const value = env(name, fallback ? 'true' : 'false');
+  return ['1', 'true', 'yes', 'on'].indexOf(String(value).toLowerCase()) !== -1;
 }
 
 function fmt(value, suffix = '') {

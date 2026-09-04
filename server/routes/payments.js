@@ -1687,7 +1687,7 @@ router.get('/orders/:merchantOrderId/status', requireUser, paymentStatusLimiter,
   }
 });
 
-router.get('/subscriptions/current/status', requireUser, async (_req, res) => {
+router.get('/subscriptions/current/status', requireUser, async (req, res) => {
   res.json({ subscription: req.user.toClient().subscription });
 });
 

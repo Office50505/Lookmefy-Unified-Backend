@@ -54,10 +54,10 @@ function trustProxySetting() {
 const globalApiLimiter = createRateLimiter({
   name: 'api:global',
   windowMs: Number(process.env.RATE_LIMIT_GLOBAL_WINDOW_MS || 5 * 60 * 1000),
-  max: Number(process.env.RATE_LIMIT_GLOBAL_MAX || 300),
+  max: Number(process.env.RATE_LIMIT_GLOBAL_MAX || 3000),
   keyGenerator: rateLimitKeys.clientIp,
   message: 'Too many requests from this network. Please pause for a few minutes and try again.',
-  skip: (req) => req.path.startsWith('/health')
+  skip: (req) => req.path.startsWith('/health') || req.path.startsWith('/jobs')
 });
 const adminMetricsLimiter = createRateLimiter({
   name: 'admin:metrics',

@@ -15,6 +15,11 @@ test('AI Studio compatibility extracts useful fashion query terms', () => {
   assert.deepEqual(aiStudioQueryTerms('find oversized white shirts'), ['oversized', 'white', 'shirts']);
 });
 
+test('AI Studio compatibility treats casual greetings as chat control', () => {
+  assert.equal(aiStudioIntent('hii'), 'greeting');
+  assert.equal(aiStudioFallbackReply('hii', [{ category: 'Tops' }]), 'Hey. What are we dressing for today?');
+});
+
 test('AI Studio compatibility returns helpful empty-result reply', () => {
   const reply = aiStudioFallbackReply('office blazer', []);
   assert.match(reply, /could not find/i);

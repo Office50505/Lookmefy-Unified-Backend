@@ -1,39 +1,38 @@
 # FitLook AWS Public-Read Load Test Report
 
-Generated: 2026-08-06T10:23:47.167Z
-Base URL: https://fitlook.in
-Stage duration: 30s
-Targets: 10, 50, 100 VUs
+Generated: 2026-09-04T05:30:01.847Z
+Base URL: http://localhost:5050
+Stage duration: 10s
+Targets: 5, 20 VUs
 Traffic profile: public GET routes only
 
 ## Stage Results
 
 | Simultaneous users | Requests | Avg latency | p90 latency | p95 latency | p99 latency | Failure rate | Check pass rate |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 10 | 238 | 39.12 ms | 51.1 ms | 54.92 ms | 71.34 ms | 0 | 1 |
-| 50 | 599 | 50.78 ms | 50.83 ms | 56.84 ms | 120.84 ms | 0.04 | 0.98 |
-| 100 | 1135 | 38.5 ms | 51.23 ms | 59 ms | 95.11 ms | 0.05 | 0.98 |
+| 5 | 245 | 3.72 ms | 2.77 ms | 3.26 ms | 73.82 ms | 0 | 1 |
+| 20 | 903 | 24 ms | 5.01 ms | 7.36 ms | 1009.04 ms | 0.33 | 0.84 |
 
 ## Overall
 
-- Requests: 1973
-- Request rate: 21.6 req/s
-- HTTP failure rate: 0.04
-- Check pass rate: 0.98
-- p95 latency: 58.24 ms
-- p99 latency: 96.29 ms
+- Requests: 1149
+- Request rate: 54.31 req/s
+- HTTP failure rate: 0.26
+- Check pass rate: 0.87
+- p95 latency: 6.43 ms
+- p99 latency: 1008.69 ms
 
 ## Slowest Endpoints
 
 | Endpoint | Requests | Avg latency | p90 latency | p95 latency | p99 latency | Failure rate | Check pass rate |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| GET /api/products?category= | 236 | 77.32 ms | 58.7 ms | 71.41 ms | 122.51 ms | 0.04 | 0.98 |
-| GET /api/products | 430 | 50 ms | 55.65 ms | 70.89 ms | 110.92 ms | 0.04 | 0.98 |
-| GET /api/products?q= | 407 | 48.92 ms | 53.69 ms | 69.29 ms | 76.2 ms | 0.04 | 0.98 |
-| GET /api/recommendations/similar/:productId | 155 | 26.15 ms | 28.71 ms | 35.16 ms | 54.83 ms | 0.05 | 0.98 |
-| GET /api/products?featured= | 303 | 26.49 ms | 28.75 ms | 33.83 ms | 46.5 ms | 0.03 | 0.99 |
-| GET /api/products/:id | 203 | 28.03 ms | 28.55 ms | 29.81 ms | 34.19 ms | 0.06 | 0.97 |
-| GET /api/health | 239 | 25.25 ms | 25.65 ms | 26.49 ms | 34.62 ms | 0.04 | 0.98 |
+| GET /api/recommendations/similar/:productId | 93 | 25.5 ms | 5.37 ms | 8.49 ms | 1007.71 ms | 0 | 1 |
+| GET /api/products?featured= | 156 | 27.14 ms | 5.04 ms | 7.67 ms | 1009.66 ms | 0.38 | 0.81 |
+| GET /api/products?q= | 212 | 29.28 ms | 4.67 ms | 6.91 ms | 1007.59 ms | 0.31 | 0.84 |
+| GET /api/products?category= | 149 | 23.37 ms | 4.58 ms | 6.86 ms | 1010 ms | 0.27 | 0.87 |
+| GET /api/products | 263 | 18 ms | 4.61 ms | 5.91 ms | 1005.42 ms | 0.32 | 0.84 |
+| GET /api/health | 149 | 1.75 ms | 3.74 ms | 5.08 ms | 9.38 ms | 0 | 1 |
+| GET /api/products/:id | 127 | 18.11 ms | 3.87 ms | 4.66 ms | 758.95 ms | 0.35 | 0.83 |
 
 ## Notes
 

@@ -14,7 +14,7 @@
     "server:watch": "nodemon server/index.js",
     "catalog:import": "node scripts/import-products.mjs",
     "catalog:import:dry": "node scripts/import-products.mjs --dry-run",
-    "test": "node --test",
+    "test": "node --test tests/*.test.js",
     "test:browser": "node node_modules/@playwright/test/cli.js test",
     "build": "vite build",
     "preview": "vite preview",
@@ -31,6 +31,7 @@
     "load:backend:read": "LOAD_PROFILE=read k6 run tests/load/backend-load.k6.js",
     "load:backend:auth": "LOAD_PROFILE=auth k6 run tests/load/backend-load.k6.js",
     "load:backend:write": "LOAD_PROFILE=write k6 run tests/load/backend-load.k6.js",
+    "load:endpoints": "k6 run tests/load/backend-endpoint-smoke.k6.js",
     "load:aws:read": "BASE_URL=https://fitlook.in k6 run tests/load/backend-public-read.k6.js"
   },
   "dependencies": {

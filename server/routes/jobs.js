@@ -5,10 +5,16 @@ import { createRateLimiter, rateLimitKeys } from '../utils/rateLimit.js';
 
 const router = express.Router();
 const allowedQueues = new Set(['tryon', 'profile']);
+
+function positiveIntegerFromEnv(name, fallback) {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
+
 const jobStatusLimiter = createRateLimiter({
   name: 'jobs:status',
-  windowMs: 5 * 60 * 1000,
-  max: 120,
+  windowMs: positiveIntegerFromEnv('JOB_STATUS_RATE_LIMIT_WINDOW_MS', 5 * 60 * 1000),
+  max: positiveIntegerFromEnv('JOB_STATUS_RATE_LIMIT_MAX', 1200),
   keyGenerator: rateLimitKeys.user,
   message: 'Job status checks are temporarily limited. Please wait a moment before checking again.'
 });

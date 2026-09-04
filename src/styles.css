@@ -22466,6 +22466,24 @@ body.onboarding-scroll-locked {
 .concierge-product-card > p { overflow: hidden; margin: 7px 0 2px; color: #8d837d; font-family: var(--font-interface); font-size: 7px; font-weight: 700; letter-spacing: .04em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
 .concierge-product-card h2 { display: -webkit-box; min-height: 23px; overflow: hidden; margin: 0; color: #2e2926; font-family: var(--font-interface); font-size: 8px; font-weight: 600; line-height: 1.35; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .concierge-product-card > strong { display: block; margin-top: 4px; color: #211e1c; font-family: var(--font-interface); font-size: 8px; font-weight: 700; }
+.concierge-source-badge { display: inline-flex; width: fit-content; min-height: 20px; align-items: center; margin: 8px 2px 0; border: 1px solid #eadfdb; border-radius: 999px; padding: 0 7px; background: #fffaf8; color: #8d4c50; font-family: var(--font-interface); font-size: 7px; font-weight: 800; letter-spacing: 0; }
+.concierge-outfit-list { display: grid; gap: 10px; margin-top: 14px; }
+.concierge-outfit-card { border: 1px solid #eee6e3; border-radius: 6px; padding: 12px; background: #fffaf8; }
+.concierge-outfit-head { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+.concierge-outfit-head strong { color: #2e2926; font-family: var(--font-interface); font-size: 10px; line-height: 1.35; }
+.concierge-outfit-head span { flex: 0 0 auto; border: 1px solid #eadfdb; border-radius: 999px; padding: 3px 7px; color: #8d4c50; font-family: var(--font-interface); font-size: 7px; font-weight: 800; letter-spacing: 0; }
+.concierge-outfit-card > p { margin: 8px 0 0; color: #6d635e; font-family: var(--font-interface); font-size: 9px; line-height: 1.5; }
+.concierge-outfit-items { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin-top: 10px; }
+.concierge-outfit-item { display: grid; grid-template-columns: 36px minmax(0, 1fr); column-gap: 8px; row-gap: 2px; align-items: center; min-width: 0; border: 1px solid #eadfdb; border-radius: 5px; padding: 6px; background: #fff; }
+.concierge-outfit-item img,
+.concierge-outfit-item > span { grid-row: span 2; width: 36px; height: 44px; border-radius: 4px; object-fit: cover; background: #f1ebe8; }
+.concierge-outfit-item > span { display: grid; place-items: center; color: #8d4c50; font-family: var(--font-interface); font-size: 8px; font-weight: 800; }
+.concierge-outfit-item strong { overflow: hidden; color: #2e2926; font-family: var(--font-interface); font-size: 8px; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
+.concierge-outfit-item small { overflow: hidden; color: #8d837d; font-family: var(--font-interface); font-size: 7px; text-overflow: ellipsis; white-space: nowrap; }
+.concierge-action-row { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 14px; }
+.concierge-action-row button { min-height: 28px; border: 1px solid #e1d6d1; border-radius: 999px; padding: 0 10px; background: #fff; color: #3c3531; font-family: var(--font-interface); font-size: 8px; font-weight: 800; letter-spacing: 0; cursor: pointer; }
+.concierge-action-row button:hover { border-color: #9b514d; color: #9b514d; }
+.concierge-action-row button:disabled { cursor: not-allowed; opacity: .52; }
 .concierge-shop-action,
 .concierge-preview-action { display: flex; min-height: 23px; align-items: center; justify-content: center; margin-top: 7px; border: 0; border-radius: 3px; background: #211e1c; color: #fff; font-family: var(--font-interface); font-size: 7px; font-weight: 700; letter-spacing: .01em; text-decoration: none; cursor: pointer; }
 .concierge-preview-action { width: 100%; margin-top: 6px; background: #9b514d; }
@@ -37049,15 +37067,67 @@ label,
 }
 
 /* AI Stylist: account for the shared navbar while keeping the chat workspace visible. */
-#main-content .style-bot-page.concierge-page {
+#main-content.app-concierge-shell {
+  animation: none !important;
   height: calc(100dvh - 83px) !important;
-  min-height: calc(100dvh - 83px) !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  transform: none !important;
+}
+
+#main-content .style-bot-page.concierge-page {
+  height: 100% !important;
+  min-height: 0 !important;
+  grid-template-rows: minmax(0, 1fr) !important;
+  align-items: stretch !important;
+  overflow: hidden !important;
+}
+
+#main-content .style-bot-page.concierge-page .concierge-session-rail,
+#main-content .style-bot-page.concierge-page .concierge-workspace {
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+}
+
+#main-content .style-bot-page.concierge-page .concierge-session-list,
+#main-content .style-bot-page.concierge-page .concierge-scroll {
+  min-height: 0 !important;
+}
+
+#main-content .style-bot-page.concierge-page .concierge-composer {
+  border-top: 0 !important;
+}
+
+#main-content .style-bot-page.concierge-page .concierge-composer > div:focus-within {
+  border-color: rgba(41, 36, 33, .24) !important;
+  box-shadow: 0 0 0 3px rgba(41, 36, 33, .06), 0 18px 44px rgba(42, 34, 30, .09) !important;
+}
+
+#main-content .style-bot-page.concierge-page .concierge-composer input:focus,
+#main-content .style-bot-page.concierge-page .concierge-composer input:focus-visible {
+  outline: 0 !important;
 }
 
 @media (max-width: 980px) {
+  #main-content.app-concierge-shell {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
   #main-content .style-bot-page.concierge-page {
     height: auto !important;
     min-height: calc(100dvh - 67px) !important;
+    grid-template-rows: auto minmax(0, 1fr) !important;
+    overflow: visible !important;
+  }
+
+  #main-content .style-bot-page.concierge-page .concierge-session-rail,
+  #main-content .style-bot-page.concierge-page .concierge-workspace {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
   }
 }
 

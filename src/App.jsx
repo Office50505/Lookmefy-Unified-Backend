@@ -22,7 +22,9 @@ const API_TIMEOUT_MS = 25000;
 const AI_IMAGE_TIMEOUT_MS = 180000;
 const AI_VIDEO_TIMEOUT_MS = 300000;
 const PRODUCT_CACHE_TTL_MS = 30_000;
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+const configuredApiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+const devApiBaseUrl = (import.meta.env.VITE_DEV_API_BASE_URL || '').replace(/\/$/, '');
+const API_BASE_URL = import.meta.env.DEV ? devApiBaseUrl : configuredApiBaseUrl;
 const AUTH_TOKEN_KEY = 'fitlook_token';
 const MEDIA_TOKEN_KEY = 'fitlook_media_token';
 const ENABLE_TEST_OTP_HELPER = import.meta.env.DEV && import.meta.env.VITE_ENABLE_TEST_OTP_HELPER !== 'false';
@@ -6264,13 +6266,71 @@ function CustomTryOnConfidence({ user }) {
   );
 }
 
+function styleBotProductKey(product = {}) {
+  return String(product?.id || product?.sourceUrl || product?.affiliateLink || product?.name || 'product');
+}
+
+function normalizeAiStudioAction(action) {
+  if (!action) return null;
+  if (typeof action === 'string') return { type: 'message', label: action, prompt: action };
+  const label = cleanDisplayText(action.label || action.type, 'Action');
+  return {
+    type: String(action.type || 'message'),
+    label,
+    prompt: String(action.prompt || label),
+    disabled: Boolean(action.disabled),
+    disabledReason: String(action.disabledReason || '')
+  };
+}
+
+function normalizeAiStudioActions(data = {}) {
+  const actions = Array.isArray(data.actions) ? data.actions : [];
+  if (actions.length) return actions.map(normalizeAiStudioAction).filter(Boolean).slice(0, 4);
+  return (Array.isArray(data.suggestions) ? data.suggestions : []).map(normalizeAiStudioAction).filter(Boolean).slice(0, 4);
+}
+
+function normalizeAiStudioOutfits(outfits = []) {
+  return (Array.isArray(outfits) ? outfits : []).map((outfit, index) => ({
+    ...outfit,
+    id: String(outfit.id || outfit.title || `outfit-${index}`),
+    title: outfit.title || 'Recommended outfit',
+    reason: outfit.reason || '',
+    sourceLabel: outfit.sourceLabel || (outfit.source === 'hybrid' ? 'Mixed look' : 'Wardrobe item'),
+    items: Array.isArray(outfit.items) ? outfit.items : [],
+    products: Array.isArray(outfit.products) ? outfit.products : []
+  })).filter((outfit) => outfit.id);
+}
+
+function normalizeAiStudioProducts(products = [], outfits = []) {
+  const outfitProducts = outfits.flatMap((outfit) => outfit.products || []);
+  const seen = new Set();
+  return [...(Array.isArray(products) ? products : []), ...outfitProducts]
+    .map((product) => ({
+      ...product,
+      id: styleBotProductKey(product),
+      name: product.name || product.title || 'Product',
+      title: product.title || product.name || 'Product',
+      sourceLabel: product.sourceLabel || (product.source === 'amazon' ? 'Amazon result' : product.source === 'wardrobe' ? 'Wardrobe item' : product.source ? 'Lookmefy catalog' : '')
+    }))
+    .filter((product) => {
+      if (!product.id || seen.has(product.id)) return false;
+      seen.add(product.id);
+      return true;
+    });
+}
+
 function StyleBotPage({ user, setUser }) {
   const [query, setQuery] = useState('');
   const [runs, setRuns] = useState([]);
   const [busy, setBusy] = useState(false);
+  const [conversationId, setConversationId] = useState('');
+  const [chatTryOns, setChatTryOns] = useState({});
+  const [chatTryOnLoading, setChatTryOnLoading] = useState({});
+  const [chatTryOnErrors, setChatTryOnErrors] = useState({});
+  const [fullscreenImage, setFullscreenImage] = useState(null);
   const conciergeScrollRef = useRef(null);
   const conciergeEndRef = useRef(null);
-  const promptIdeas = ['linen shirts under 1500', 'black party dress', 'gold sunglasses', 'oversized denim jacket'];
+  const promptIdeas = ['office outfit from my wardrobe', 'black party dress under 1000', 'search online for sneakers', 'how do tokens work?'];
   const creditCount = Number(user?.tokens || 0);
 
   useEffect(() => {
@@ -6303,42 +6363,43 @@ function StyleBotPage({ user, setUser }) {
     setRuns((current) => current.map((run) => (run.id === id ? { ...run, ...updater(run) } : run)));
   };
 
-  const submit = async (event) => {
-    event.preventDefault();
-    const prompt = query.trim();
+  const submit = async (eventOrPrompt) => {
+    eventOrPrompt?.preventDefault?.();
+    const prompt = typeof eventOrPrompt === 'string' ? eventOrPrompt.trim() : query.trim();
     if (!prompt || busy) return;
     const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const promptCompatibility = styleBotCompatibility(prompt);
-    const genderPreference = genderPreferenceForStyleQuery(prompt, user.genderPreference || 'other');
-    const searchPrompt = genderedStyleBotQuery(prompt, genderPreference);
     setQuery('');
     setBusy(true);
     recordEvent('style_bot_query', { query: prompt });
     setRuns((current) => [
       ...current,
-      { id, query: prompt, products: [], tryOns: {}, loading: promptCompatibility.compatible, generating: {}, errors: {}, searchError: promptCompatibility.compatible ? '' : promptCompatibility.reason }
+      { id, query: prompt, reply: '', products: [], outfits: [], actions: [], loading: true, searchError: '' }
     ]);
-    if (!promptCompatibility.compatible) {
-      setBusy(false);
-      return;
-    }
 
     try {
-      const data = await api('/products/amazon-search', {
+      const history = runs.flatMap((run) => [
+        { role: 'user', text: run.query },
+        ...(run.reply ? [{ role: 'assistant', text: run.reply }] : [])
+      ]).slice(-8);
+      const data = await api('/recommendations/studio-chat', {
         method: 'POST',
-        body: JSON.stringify({ query: searchPrompt, limit: 2, genderPreference })
+        timeout: 70000,
+        body: JSON.stringify({ message: prompt, conversationId, history })
       });
-      const products = (data.products || []).filter((product) => (
-        styleBotProductCompatibility(product, prompt).compatible &&
-        styleBotGenderCompatibility(product, genderPreference).compatible
-      ));
-      if (products.length === 0) {
-        throw new Error('Amazon results were found, but none matched your try-on gender preference. Try a more specific clothing search.');
-      }
+      const outfits = normalizeAiStudioOutfits(data.outfits || []);
+      const products = normalizeAiStudioProducts(data.products || [], outfits);
+      const actions = normalizeAiStudioActions(data);
+      if (data.conversationId) setConversationId(data.conversationId);
       updateRun(id, () => ({
+        reply: data.reply || 'I found a few directions for you.',
         products,
+        outfits,
+        actions,
+        mode: data.mode || '',
+        intent: data.intent || '',
+        brain: data.brain || '',
         loading: false,
-        generating: {}
+        searchError: ''
       }));
     } catch (err) {
       updateRun(id, () => ({ loading: false, searchError: err.message }));
@@ -6350,6 +6411,37 @@ function StyleBotPage({ user, setUser }) {
   const startNewSession = () => {
     setRuns([]);
     setQuery('');
+    setConversationId('');
+    setChatTryOns({});
+    setChatTryOnLoading({});
+    setChatTryOnErrors({});
+  };
+
+  const generateChatTryOn = async (product) => {
+    const key = styleBotProductKey(product);
+    if (!product || product.searchLink || chatTryOnLoading[key]) return;
+    const profileMessage = tryOnProfileBlockMessage(user);
+    if (profileMessage) {
+      setChatTryOnErrors((current) => ({ ...current, [key]: profileMessage }));
+      return;
+    }
+    setChatTryOnLoading((current) => ({ ...current, [key]: true }));
+    setChatTryOnErrors((current) => ({ ...current, [key]: '' }));
+    try {
+      const isExternalProduct = Boolean(product.external || product.sourceUrl || product.affiliateLink);
+      const regenerate = Boolean(chatTryOns[key]?.imageUrl);
+      const data = await generateQueuedTryOn(isExternalProduct ? '/tryons/external' : `/tryons/${encodeURIComponent(product.id)}`, {
+        method: 'POST',
+        timeout: AI_IMAGE_TIMEOUT_MS,
+        body: JSON.stringify(isExternalProduct ? { product, force: regenerate } : { force: regenerate })
+      });
+      setChatTryOns((current) => ({ ...current, [key]: data.tryOn }));
+      if (data.user) setUser(data.user);
+    } catch (error) {
+      setChatTryOnErrors((current) => ({ ...current, [key]: readableError(error, 'Could not generate try-on.') }));
+    } finally {
+      setChatTryOnLoading((current) => ({ ...current, [key]: false }));
+    }
   };
 
   return (
@@ -6382,7 +6474,45 @@ function StyleBotPage({ user, setUser }) {
                 <div className="concierge-bubble concierge-response">
                   {run.loading && <span className="concierge-loading">Curating your edit...</span>}
                   {run.searchError && <p className="form-message error-message">{run.searchError}</p>}
-                  {!run.loading && !run.searchError && <div className="concierge-result-summary"><p className="concierge-result-copy">I found {run.products.length} matching piece{run.products.length === 1 ? '' : 's'} for this edit.</p><a href={`/categories?q=${encodeURIComponent(run.query)}`}>View matching products</a></div>}
+                  {!run.loading && !run.searchError && (
+                    <div className="concierge-result-summary">
+                      <p className="concierge-result-copy">{run.reply || 'I found a few directions for you.'}</p>
+                      {run.outfits?.length ? <div className="concierge-outfit-list">{run.outfits.map((outfit) => <StyleBotOutfit key={outfit.id} outfit={outfit} />)}</div> : null}
+                      {run.products?.length ? (
+                        <div className="concierge-product-grid">
+                          {run.products.map((product) => {
+                            const key = styleBotProductKey(product);
+                            return (
+                              <StyleBotProduct
+                                key={key}
+                                product={product}
+                                tryOn={chatTryOns[key]}
+                                loading={Boolean(chatTryOnLoading[key])}
+                                error={chatTryOnErrors[key]}
+                                onTryOn={() => generateChatTryOn(product)}
+                                onFullscreen={setFullscreenImage}
+                              />
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                      {run.actions?.length ? (
+                        <div className="concierge-action-row">
+                          {run.actions.map((action) => (
+                            <button
+                              type="button"
+                              key={`${run.id}-${action.type}-${action.label}`}
+                              disabled={action.disabled}
+                              title={action.disabledReason || action.label}
+                              onClick={() => submit(action.prompt || action.label)}
+                            >
+                              {action.label}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -6394,15 +6524,40 @@ function StyleBotPage({ user, setUser }) {
           <section aria-label="Prompt ideas">{promptIdeas.slice(0, 3).map((idea) => <button type="button" key={idea} onClick={() => setQuery(idea)}>{idea}</button>)}</section>
         </form>
       </section>
+      {fullscreenImage && <ImageLightbox image={fullscreenImage} onClose={() => setFullscreenImage(null)} />}
     </main>
   );
 }
 
-function StyleBotProduct({ product, tryOn, loading, error, onFullscreen }) {
+function StyleBotOutfit({ outfit }) {
+  return (
+    <article className="concierge-outfit-card">
+      <div className="concierge-outfit-head"><strong>{outfit.title || 'Recommended outfit'}</strong>{outfit.sourceLabel ? <span>{outfit.sourceLabel}</span> : null}</div>
+      {outfit.reason ? <p>{outfit.reason}</p> : null}
+      {outfit.items?.length ? (
+        <div className="concierge-outfit-items">
+          {outfit.items.map((item) => (
+            <div className="concierge-outfit-item" key={item.id || item.name}>
+              {item.imageUrl ? <OptimizedImage src={item.imageUrl} alt={item.name || 'Wardrobe item'} /> : <span aria-hidden="true">{(item.name || 'LM').slice(0, 2).toUpperCase()}</span>}
+              <strong>{item.name || 'Wardrobe item'}</strong>
+              <small>{[item.category, item.color].filter(Boolean).join(' · ') || 'Wardrobe'}</small>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+function StyleBotProduct({ product, tryOn, loading, error, onFullscreen, onTryOn }) {
   const [tryOnImageFailed, setTryOnImageFailed] = useState(false);
   const productImage = product.imageUrl || asset('hero2.png');
   const hasUsableTryOn = Boolean(tryOn?.imageUrl) && !tryOnImageFailed;
-  const detailHref = `/product/${encodeURIComponent(product.id)}`;
+  const externalShop = Boolean(product.affiliateLink || product.sourceUrl);
+  const localProduct = !product.searchLink && !externalShop;
+  const localDetailHref = `/product/${encodeURIComponent(product.id)}`;
+  const shopHref = product.affiliateLink || product.sourceUrl || localDetailHref;
+  const detailHref = localProduct ? localDetailHref : shopHref;
 
   useEffect(() => {
     setTryOnImageFailed(false);
@@ -6410,8 +6565,9 @@ function StyleBotProduct({ product, tryOn, loading, error, onFullscreen }) {
 
   return (
     <article className="concierge-product-card">
-      <a className="concierge-product-image" href={detailHref} onClick={() => recordEvent('product_click', { productId: product.id })}><OptimizedImage src={productImage} alt={product.name} /></a>
-      <WishlistHeartButton product={product} className="card-wishlist-heart" />
+      <a className="concierge-product-image" href={detailHref} target={externalShop ? '_blank' : undefined} rel={externalShop ? 'noreferrer' : undefined} onClick={() => recordEvent(externalShop ? 'shop_click' : 'product_click', { productId: product.id })}><OptimizedImage src={productImage} alt={product.name} /></a>
+      {localProduct ? <WishlistHeartButton product={product} className="card-wishlist-heart" /> : null}
+      {product.sourceLabel ? <span className="concierge-source-badge">{product.sourceLabel}</span> : null}
       <p>{displayBrand(product)}</p>
       <h2>{product.name}</h2>
       <strong>{formatMoney(product.price, product.currency)}</strong>
@@ -6419,7 +6575,8 @@ function StyleBotProduct({ product, tryOn, loading, error, onFullscreen }) {
       {hasUsableTryOn && <button className="concierge-preview-action" type="button" onClick={() => onFullscreen({ src: tryOn.imageUrl, alt: `AI try-on for ${product.name}`, title: product.name })}>View preview</button>}
       {tryOn?.imageUrl && !hasUsableTryOn && <span className="concierge-product-state">Preview unavailable</span>}
       {error && <span className="concierge-product-error">{error}</span>}
-      <a className="concierge-shop-action" href={product.affiliateLink || detailHref} target={product.affiliateLink ? '_blank' : undefined} rel={product.affiliateLink ? 'noreferrer' : undefined} onClick={() => recordEvent(product.affiliateLink ? 'shop_click' : 'product_click', { productId: product.id })}>Shop the suggestion</a>
+      {!product.searchLink && <button className="concierge-preview-action" type="button" disabled={loading} onClick={onTryOn}>{tryOn?.imageUrl ? 'Generate Again' : 'Generate Try-On'}</button>}
+      <a className="concierge-shop-action" href={shopHref} target={externalShop ? '_blank' : undefined} rel={externalShop ? 'noreferrer' : undefined} onClick={() => recordEvent(externalShop ? 'shop_click' : 'product_click', { productId: product.id })}>{product.searchLink ? 'Open search' : 'Shop the suggestion'}</a>
     </article>
   );
 }
@@ -10518,7 +10675,7 @@ function App() {
     <>
       {!isStandaloneAuth && !isOpeningPage && <a className="skip-link" href="#main-content">Skip to main content</a>}
       {!isStandaloneAuth && !isOpeningPage && <Header user={user} setUser={setUser} authChecked={authChecked} />}
-      <div id="main-content" className="app-page-transition" tabIndex="-1" key={routeKey}>{page}</div>
+      <div id="main-content" className={isConciergePage ? 'app-page-transition app-concierge-shell' : 'app-page-transition'} tabIndex="-1" key={routeKey}>{page}</div>
       {!isOnline && <div className="network-status" role="status" aria-live="polite">You are offline. Changes will resume when you reconnect.</div>}
       {toast && <Toast toast={toast} onDismiss={dismissToast} />}
       {!shouldHideMobileBottomNav && <MobileBottomNav user={user} />}

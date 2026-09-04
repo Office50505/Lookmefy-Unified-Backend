@@ -8,6 +8,7 @@ build/
 fit-look-APP/
 web/
 pruna-test-node/
+ai-studio-sandbox/
 *.pkg
 
 # Environment and secrets

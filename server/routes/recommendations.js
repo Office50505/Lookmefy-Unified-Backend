@@ -15,6 +15,16 @@ import { createRateLimiter, rateLimitKeys } from '../utils/rateLimit.js';
 import { requireAdmin, requireAdminSection } from '../utils/adminAccess.js';
 import { ADMIN_SECTIONS } from '../utils/adminPermissions.js';
 import { normalizeSessionPath, touchUserSession } from '../utils/userSessions.js';
+import {
+  aiStudioFallbackReply as serviceAiStudioFallbackReply,
+  aiStudioIntent as serviceAiStudioIntent,
+  aiStudioKnowledgeReply as serviceAiStudioKnowledgeReply,
+  aiStudioQueryTerms as serviceAiStudioQueryTerms,
+  aiStudioSuggestions as serviceAiStudioSuggestions,
+  orchestrateAiStudio,
+  retrieveAiStudioKnowledge as serviceRetrieveAiStudioKnowledge,
+  scoreAiStudioKnowledge as serviceScoreAiStudioKnowledge
+} from '../services/aiStudio.js';
 
 const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
@@ -691,19 +701,16 @@ router.get('/recent-searches', requireUser, recommendationReadLimiter, async (re
 router.post(['/studio-chat', '/stylist-chat'], requireUser, recommendationEventLimiter, async (req, res) => {
   const message = String(req.body?.message || '').trim().slice(0, 600);
   if (!message) return res.status(400).json({ message: 'Message AI Studio first' });
-  const limit = Math.min(Math.max(Number(req.body?.limit) || 6, 1), 8);
   const path = normalizeSessionPath('/ai-stylist');
 
   try {
-    const knowledge = await retrieveAiStudioKnowledge(message);
-    const intent = aiStudioIntent(message, knowledge);
-    const products = intent === 'fashion_search'
-      ? await Product.find(aiStudioCatalogFilter(message))
-        .sort({ isFeatured: -1, isNewArrival: -1, createdAt: -1 })
-        .limit(limit)
-        .lean()
-      : [];
-    const clientProducts = products.map(productToClient);
+    const payload = await orchestrateAiStudio({
+      user: req.user,
+      message,
+      conversationId: req.body?.conversationId,
+      history: req.body?.history
+    });
+    const clientProducts = payload.products || [];
     await Promise.all([
       UserEvent.create({
         user: req.user._id,
@@ -713,33 +720,20 @@ router.post(['/studio-chat', '/stylist-chat'], requireUser, recommendationEventL
         path,
         source: 'ai_studio',
         weight: eventWeight('style_bot_query'),
-        metadata: { resultCount: clientProducts.length, mode: intent === 'fashion_search' ? 'catalog_search' : 'platform_help' }
+        metadata: {
+          resultCount: clientProducts.length,
+          mode: payload.mode,
+          intent: payload.intent,
+          brain: payload.brain
+        }
       }),
       touchUserSession({ userId: req.user._id, sessionId: req.sessionId, path, eventType: 'style_bot_query' }),
       updatePreference({ userId: req.user._id, type: 'style_bot_query', query: message, metadata: { resultCount: clientProducts.length } })
     ]);
-
-    res.json({
-      brain: 'master_ai',
-      reply: aiStudioFallbackReply(message, clientProducts, knowledge),
-      products: clientProducts,
-      suggestions: aiStudioSuggestions(message, clientProducts),
-      actions: [
-        {
-          type: intent === 'fashion_search' ? 'search_products' : 'message',
-          label: intent === 'fashion_search' ? 'Search products' : 'Ask AI Studio',
-          endpoint: '/api/recommendations/studio-chat',
-          method: 'POST',
-          body: { message }
-        }
-      ],
-      rag: knowledge.map(({ id, title, matchedTerms, score }) => ({ id, title, matchedTerms, score })),
-      intent,
-      mode: intent === 'fashion_search' ? 'catalog_search' : 'platform_help'
-    });
+    res.json(payload);
   } catch (error) {
     console.error('[recommendations:studio-chat] failed', error.message);
-    res.status(500).json({ message: 'AI Studio request failed' });
+    res.status(error.statusCode || 500).json({ message: error.statusCode ? error.message : 'AI Studio request failed' });
   }
 });
 
@@ -842,15 +836,15 @@ router.get('/similar/:productId', recommendationReadLimiter, async (req, res) =>
 
 export default router;
 export {
-  aiStudioIntent,
-  aiStudioFallbackReply,
-  aiStudioKnowledgeReply,
-  aiStudioQueryTerms,
-  aiStudioSuggestions,
+  serviceAiStudioIntent as aiStudioIntent,
+  serviceAiStudioFallbackReply as aiStudioFallbackReply,
+  serviceAiStudioKnowledgeReply as aiStudioKnowledgeReply,
+  serviceAiStudioQueryTerms as aiStudioQueryTerms,
+  serviceAiStudioSuggestions as aiStudioSuggestions,
   buildRecentProfile,
   clearRecommendationCaches,
-  retrieveAiStudioKnowledge,
-  scoreAiStudioKnowledge,
+  serviceRetrieveAiStudioKnowledge as retrieveAiStudioKnowledge,
+  serviceScoreAiStudioKnowledge as scoreAiStudioKnowledge,
   normalizeGender,
   ratingQuality,
   rerankDiverse,

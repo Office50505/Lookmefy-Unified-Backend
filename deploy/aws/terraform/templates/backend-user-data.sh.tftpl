@@ -4,7 +4,7 @@ set -euxo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
 apt-get update
-apt-get install -y ca-certificates curl git gnupg nginx redis-server
+apt-get install -y ca-certificates curl git gnupg nginx python3-pip python3-venv redis-server
 
 if [ ! -f /swapfile ]; then
   fallocate -l 1G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=1024
@@ -34,8 +34,12 @@ chown -R fitlook:fitlook /opt/fitlook
 
 cd /opt/fitlook
 npm ci --omit=dev
+python3 -m venv .venv-rembg
+.venv-rembg/bin/python -m pip install --upgrade pip
+.venv-rembg/bin/python -m pip install -r requirements-background-removal.txt
 mkdir -p uploads
-chown -R fitlook:fitlook uploads
+mkdir -p .model-cache
+chown -R fitlook:fitlook uploads .venv-rembg .model-cache
 
 mkdir -p /etc/fitlook
 cat >/etc/fitlook/backend.env <<'ENV'
