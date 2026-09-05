@@ -27,6 +27,7 @@
     "analytics:retention:apply": "node scripts/backfill-analytics-retention.js",
     "storage:migrate:bunny": "node scripts/migrate-uploads-to-bunny.js",
     "storage:migrate:bunny:apply": "node scripts/migrate-uploads-to-bunny.js --apply",
+    "recommendations:debug": "node scripts/recommendation-debug.js",
     "load:backend": "k6 run tests/load/backend-load.k6.js",
     "load:backend:read": "LOAD_PROFILE=read k6 run tests/load/backend-load.k6.js",
     "load:backend:auth": "LOAD_PROFILE=auth k6 run tests/load/backend-load.k6.js",
