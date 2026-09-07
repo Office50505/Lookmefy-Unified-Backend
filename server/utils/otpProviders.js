@@ -62,6 +62,7 @@ class MockOtpProvider {
     }
     const storePath = mockOtpStorePath(this.env);
     if (!storePath) throw otpDeliveryFailure('Mock OTP delivery store is not configured');
+    await fs.mkdir(path.dirname(storePath), { recursive: true });
     await fs.appendFile(storePath, `${JSON.stringify({
       phone: message.phone,
       otp: message.otp,

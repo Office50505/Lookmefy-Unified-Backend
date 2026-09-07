@@ -16,6 +16,15 @@ import {
   webProductHasRequiredData
 } from '../server/services/aiStudio.js';
 
+async function readOptionalFixture(relativePath) {
+  try {
+    return await readFile(new URL(relativePath, import.meta.url), 'utf8');
+  } catch (error) {
+    if (error?.code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
 function queryResult(rows = []) {
   return {
     sort() { return this; },
@@ -421,8 +430,13 @@ test('AI Studio product cards never turn missing commerce data into a room image
   assert.match(card, /externalShop \? 'View on Amazon' : 'View product'/);
 });
 
-test('the iOS AI Studio card opens Amazon products without exposing try-on', async () => {
-  const source = await readFile('fit-look-APP/mobile/App.js', 'utf8');
+test('the iOS AI Studio card opens Amazon products without exposing try-on', async (t) => {
+  const source = await readOptionalFixture('../fit-look-APP/mobile/App.js');
+  if (!source) {
+    t.skip('fit-look-APP is not present in this checkout');
+    return;
+  }
+
   const screenStart = source.indexOf('function StyleBotScreen(');
   const screenEnd = source.indexOf('\nfunction ', screenStart + 30);
   const screen = source.slice(screenStart, screenEnd > screenStart ? screenEnd : undefined);
