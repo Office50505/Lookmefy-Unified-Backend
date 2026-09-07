@@ -40,7 +40,7 @@ import {
   videoPrunaCostUsd,
   waitForPrunaPrediction
 } from '../utils/prunaClient.js';
-import { isWatchProduct, promptForKey, promptForProduct, promptKeyForProduct } from '../utils/tryOnPrompts.js';
+import { isSareeProduct, isWatchProduct, promptForKey, promptForProduct, promptKeyForProduct } from '../utils/tryOnPrompts.js';
 import { falModelCostEstimate } from '../services/providerIntegrations.js';
 
 const router = express.Router();
@@ -359,6 +359,10 @@ function prunaVideoTrySync() {
 
 function tryOnModelForProduct() {
   return usePrunaProvider() ? prunaTryOnModel() : 'fitroom/tryon-v2';
+}
+
+function shouldUseFalImageEditForProduct(product = {}) {
+  return isSareeProduct(product);
 }
 
 function imageQuality() {
@@ -796,6 +800,8 @@ async function callFitRoomTryOn({ user, product, garmentFile, clothType, timer }
     bytes,
     mimetype,
     prompt: `FitRoom virtual try-on (${selectedClothType})`,
+    promptKey: selectedClothType === 'lower' ? 'lower' : selectedClothType === 'upper' ? 'upper' : 'full_outfit',
+    provider: 'fitroom',
     model: 'fitroom/tryon-v2',
     quality: fitRoomHdMode() ? 'hd' : 'standard'
   };
@@ -1454,7 +1460,10 @@ async function callFalImageEdit({ user, product, garmentDataUri, prompt, timer }
     personKb: Math.round(person.length / 1024),
     garmentKb: Math.round(garment.length / 1024)
   });
-  const finalPrompt = prompt || tryOnPrompt(product);
+  const promptInfo = prompt
+    ? { key: promptKeyForProduct(product, 'full_outfit'), prompt }
+    : promptForProduct(product, 'full_outfit');
+  const finalPrompt = promptInfo.prompt || tryOnPrompt(product);
   const endpoint = imageModel();
   const submission = await falJson(`https://queue.fal.run/${endpoint}`, {
     method: 'POST',
@@ -1486,6 +1495,8 @@ async function callFalImageEdit({ user, product, garmentDataUri, prompt, timer }
     bytes,
     mimetype,
     prompt: finalPrompt,
+    promptKey: promptInfo.key,
+    provider: 'fal',
     model: endpoint,
     quality: imageQuality()
   };
@@ -1786,6 +1797,10 @@ async function isolateGeneratedImage(user, image, timer) {
 async function generateProductTryOnImage({ user, product, tryOnModel, timer }) {
   const selectedModel = tryOnModel || tryOnModelForProduct(product);
   timer?.mark('image generator selected', { tryOnModel: selectedModel });
+  if (!tryOnModel && shouldUseFalImageEditForProduct(product)) {
+    timer?.mark('fal image edit forced for garment', { promptKey: promptKeyForProduct(product, 'full_outfit') });
+    return callFalImageEdit({ user, product, timer });
+  }
   if (usePrunaProvider()) {
     return callPrunaTryOn({ user, product, timer });
   }
@@ -1899,6 +1914,10 @@ function externalProductFromBody(value = {}) {
 }
 
 async function generateExternalTryOnImage({ user, product, timer }) {
+  if (shouldUseFalImageEditForProduct(product)) {
+    timer?.mark('external fal image edit forced for garment', { promptKey: promptKeyForProduct(product, 'full_outfit') });
+    return callFalImageEdit({ user, product, timer });
+  }
   if (usePrunaProvider()) {
     return callPrunaTryOn({ user, product, timer });
   }
@@ -2125,7 +2144,8 @@ async function runProductTryOnJob({ userId, productId, requestedModel = '', forc
       existingModel: existing?.model || ''
     });
 
-    if (existing && !forceGenerate) {
+    const staleSareeTryOn = isSareeProduct(product) && (existing?.promptKey !== 'saree' || existing?.provider !== 'fal');
+    if (existing && !forceGenerate && !staleSareeTryOn) {
       timer.end({ reused: true });
       await recordGenerationMetric({ user: user._id, product: product._id, type: 'product_image', status: 'reused', provider: existing.provider, model: existing.model, durationMs: Date.now() - analyticsStartedAt });
       return { status: 200, body: { tryOn: existing.toClient(), user: user.toClient(), reused: true } };
@@ -2728,5 +2748,6 @@ export {
   fitRoomClothTypeForPromptKey,
   productHistoryItem,
   runProductTryOnJob,
+  shouldUseFalImageEditForProduct,
   tryOnMediaTokenKind
 };

@@ -31,6 +31,7 @@ import { appRole, mongoConnectOptions, serviceMetadata } from './utils/runtime.j
 import { configurationReadiness, validateServerEnv } from './utils/envValidation.js';
 import { securityHeaders, serveUploadedMedia } from './utils/security.js';
 import { recordSystemIncident } from './utils/systemIncidents.js';
+import { isProductionEnv } from './utils/urlValidation.js';
 
 dotenv.config();
 
@@ -168,8 +169,10 @@ app.get('/api/health/live', (_req, res) => {
 app.get('/api/health/ready', async (_req, res) => {
   const mongo = mongoose.connection.readyState === 1;
   let redis = true;
-  if (process.env.REDIS_URL && ['1', 'true', 'yes', 'on'].includes(String(process.env.TEMP_SESSION_REQUIRE_REDIS || '').toLowerCase())) {
-    redis = Boolean(await getRedisClient());
+  const redisRequired = isProductionEnv()
+    || ['1', 'true', 'yes', 'on'].includes(String(process.env.TEMP_SESSION_REQUIRE_REDIS || '').toLowerCase());
+  if (redisRequired) {
+    redis = Boolean(process.env.REDIS_URL && await getRedisClient());
   }
   const ready = !shuttingDown && mongo && redis;
   const config = configurationReadiness();

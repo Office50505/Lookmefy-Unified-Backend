@@ -1735,7 +1735,7 @@ function Header({ user, setUser, authChecked = true }) {
     <>
       {currentPath !== '/wishlist' && currentPath !== '/tokens' && currentPath !== '/tokens/top-up' && currentPath !== '/profile' && currentPath !== '/generation-history' && <div className="announcement">
         <span>✨</span>
-        <span>{user ? <>You have {user.tokens} tokens ready for AI try-on</> : <>Get free tokens on sign up to try AI try-on</>}</span>
+        <span>{user ? <>You have {user.tokens} tokens ready for AI try-on</> : <>Set up a mandate to unlock AI try-on credits</>}</span>
         <span>✨</span>
       </div>}
       <header className="site-header" ref={headerRef}>
@@ -2810,10 +2810,11 @@ function Home() {
 
   return (
     <main className="opening-page" aria-labelledby="opening-title">
+      <h1 className="sr-only" id="opening-title">Lookmefy AI Fashion Try-On</h1>
       <OptimizedImage className="opening-page-image" src={asset('opening-editorial-hero.png')} alt="A woman and man in tailored outerwear" eager />
       <div className="opening-page-overlay" aria-hidden="true" />
       <section className="opening-page-content">
-        <a className="opening-page-brand" href="/" id="opening-title" aria-label="Lookmefy home"><BrandLogo /></a>
+        <a className="opening-page-brand" href="/" aria-label="Lookmefy home"><BrandLogo /></a>
         <p>Personal style, considered.</p>
         <nav className="opening-page-actions" aria-label="Start exploring Lookmefy">
           <a href="/categories?gender=women">Women's edit</a>
@@ -6747,7 +6748,10 @@ function TokenPage({ user, setUser, mode = 'overview' }) {
                 });
                 if (verified.user) setUser(verified.user);
                 checkoutIdempotencyRef.current.delete(pack.id);
-                if (verified.pendingSubscriptionCredit) {
+                if (verified.mandateSetupCredit) {
+                  setMessage(verified.message || `${Number(verified.setupTokens || SUBSCRIPTION_PLAN.setupTokens || 20)} starter credits added. Your monthly charge starts after 24 hours.`);
+                  announce(verified.message || 'Starter credits added.');
+                } else if (verified.pendingSubscriptionCredit) {
                   setMessage(verified.message || 'Mandate verified. Credits will be added after payment confirmation.');
                   announce(verified.message || 'Mandate verified.');
                 } else {
@@ -6789,26 +6793,36 @@ function TokenPage({ user, setUser, mode = 'overview' }) {
       window.location.assign(data.redirectUrl);
     } catch (err) {
       checkoutIdempotencyRef.current.delete(pack.id);
-      setMessage(err.message);
+      if (err.data?.requiresMandate) {
+        setMessage(err.message || 'Set up monthly mandate before buying top-ups.');
+        if (isTopUpPage) {
+          window.setTimeout(() => {
+            window.location.assign('/tokens');
+          }, 1400);
+        }
+      } else {
+        setMessage(err.message);
+      }
       setCheckoutLoading(false);
     }
   };
 
   const recurringAmount = formatMinorAmount(SUBSCRIPTION_PLAN.mandate.recurringAmount, SUBSCRIPTION_PLAN.currency);
   const dueTodayAmount = formatMinorAmount(SUBSCRIPTION_PLAN.dueTodayAmount, SUBSCRIPTION_PLAN.currency);
+  const setupTokens = Number(SUBSCRIPTION_PLAN.setupTokens || 20);
   const firstRecurringDate = formatDate(firstRecurringPaymentDate(SUBSCRIPTION_PLAN));
   const subscriptionPack = {
     id: SUBSCRIPTION_PLAN.id,
     planId: SUBSCRIPTION_PLAN.id,
     plan: SUBSCRIPTION_PLAN,
     label: SUBSCRIPTION_PLAN.name,
-    headline: `${SUBSCRIPTION_PLAN.tokens} credits every month`,
+    headline: `${setupTokens} starter credits today`,
     price: dueTodayAmount,
-    tokensLabel: `${SUBSCRIPTION_PLAN.tokens} credits every month`,
+    tokensLabel: `${setupTokens} starter credits, then ${SUBSCRIPTION_PLAN.tokens} monthly`,
     rateLabel: `${creditRateLabel(SUBSCRIPTION_PLAN)} monthly`,
     billing: `${recurringAmount} on ${firstRecurringDate}, then monthly`,
-    copy: SUBSCRIPTION_PLAN.cancellation,
-    cta: user ? `Set up ${recurringAmount}/month mandate` : 'Create profile',
+    copy: `${recurringAmount} starts after 24 hours. ${SUBSCRIPTION_PLAN.cancellation}`,
+    cta: user ? `Pay ${dueTodayAmount} and set mandate` : 'Create profile',
     featured: true,
     payable: true
   };
@@ -6844,7 +6858,7 @@ function TokenPage({ user, setUser, mode = 'overview' }) {
       price: 'From Rs 199',
       tokensLabel: 'One-time packs',
       billing: 'No subscription change',
-      copy: 'Open the top-up page to choose 50, 75, 110, 135, or 400 extra tokens.',
+      copy: 'Top-ups unlock after your monthly mandate is active.',
       cta: 'View top-ups',
       href: '/tokens/top-up',
       featured: false
@@ -6873,7 +6887,7 @@ function TokenPage({ user, setUser, mode = 'overview' }) {
         {isTopUpPage && <a className="credit-back-link" href="/tokens" aria-label="Back to credits" title="Back to credits"><ArrowLeftIcon /></a>}
         <header className="credit-purchase-head">
           <h1>{isTopUpPage ? 'Top-ups' : 'Credits'}</h1>
-          <span>{isTopUpPage ? 'Choose a one-time token pack when you want extra image try-ons or videos on top of the monthly membership.' : 'Pick the monthly mandate setup or open one-time top-ups. Starter accounts include 8 tokens, images use 1 token, and videos use 3 tokens.'}</span>
+          <span>{isTopUpPage ? 'Top-ups are available after your monthly mandate is active.' : 'Set up the monthly mandate for starter credits today, then monthly credits after payment. Images use 1 credit and videos use 3 credits.'}</span>
         </header>
 
         {message && <p className={`credit-purchase-message ${/failed|not completed|missing|Could not|error/i.test(message) ? 'error-message' : ''}`} role="status">{message}</p>}
@@ -6920,7 +6934,9 @@ function TokenPage({ user, setUser, mode = 'overview' }) {
             {selectedPack.rateLabel && <div className="credit-summary-row"><span>Rate</span><strong>{selectedPack.rateLabel}</strong></div>}
             {isSubscriptionPack ? (
               <>
-                <div className="credit-summary-row"><span>First recurring payment</span><strong>{recurringAmount} on {firstRecurringDate}</strong></div>
+                <div className="credit-summary-row"><span>Starter credits</span><strong>{setupTokens} after mandate</strong></div>
+                <div className="credit-summary-row"><span>First recurring payment</span><strong>{recurringAmount} after 24 hours</strong></div>
+                <div className="credit-summary-row"><span>Monthly credits</span><strong>{SUBSCRIPTION_PLAN.tokens} after payment</strong></div>
                 <div className="credit-summary-row"><span>Then</span><strong>{recurringAmount}/month</strong></div>
                 <div className="credit-summary-row"><span>Billing frequency</span><strong>{selectedPlan.mandate.frequency}</strong></div>
                 <div className="credit-summary-row"><span>Cancellation</span><strong>{selectedPlan.cancellation}</strong></div>
@@ -6931,7 +6947,7 @@ function TokenPage({ user, setUser, mode = 'overview' }) {
             <div className="credit-summary-row"><span>Processing Fee</span><strong>Free</strong></div>
             <div className="credit-summary-total"><span>Due today</span><strong>{selectedPack.price}</strong></div>
             <button type="button" onClick={completeSelection} disabled={checkoutLoading}>{checkoutLoading ? 'Opening checkout...' : selectedPack.cta}</button>
-            <small>{isPaidPack ? (isActive && subscription.currentPeriodEnd && selectedPack.id === 'monthly_150_tokens' ? `Current plan ends ${formatDate(subscription.currentPeriodEnd)}. Credits are added after secure payment verification.` : 'Secured by Razorpay. Credits are added only after payment verification.') : selectedPack.copy}</small>
+            <small>{isPaidPack ? (isActive && subscription.currentPeriodEnd && selectedPack.id === 'monthly_150_tokens' ? `Current plan ends ${formatDate(subscription.currentPeriodEnd)}. Credits are added after secure payment verification.` : 'Secured by Razorpay. Top-ups require an active mandate.') : selectedPack.copy}</small>
           </aside>
         </div>
       </section>

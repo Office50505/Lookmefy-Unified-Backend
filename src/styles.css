@@ -31,8 +31,8 @@
   --space-8: 32px;
   --space-10: 40px;
   --space-12: 48px;
-  --font-heading: "Plus Jakarta Sans", sans-serif;
-  --font-body: "Manrope", sans-serif;
+  --font-heading: "Aptos Display", Aptos, "Segoe UI", Arial, sans-serif;
+  --font-body: Aptos, "Segoe UI", Arial, sans-serif;
   --font-display: var(--font-heading);
   --font-interface: var(--font-body);
   --font-sans: var(--font-body);
@@ -11520,8 +11520,8 @@ body {
   --fl-radius-xl: 22px;
   --fl-shadow: 0 14px 30px rgba(30, 20, 10, .1);
   --fl-shadow-soft: 0 10px 26px rgba(33, 29, 26, .06);
-  --font-heading: "Plus Jakarta Sans", sans-serif;
-  --font-body: "Manrope", sans-serif;
+  --font-heading: "Aptos Display", Aptos, "Segoe UI", Arial, sans-serif;
+  --font-body: Aptos, "Segoe UI", Arial, sans-serif;
   --font-display: var(--font-heading);
   --font-interface: var(--font-body);
   --font-sans: var(--font-body);
@@ -27087,7 +27087,7 @@ textarea:focus-visible,
   }
 }
 
-/* Lookmefy typography system: Plus Jakarta Sans for headings, Manrope for UI. */
+/* Lookmefy typography system: system display fonts for headings and UI. */
 body,
 .atelier-home,
 .atelier-category-page,
@@ -34865,7 +34865,7 @@ body:has(.network-status):has(.app-toast) .wishlist-undo-toast {
   }
 }
 
-/* Final typography normalization: Plus Jakarta Sans headings, Manrope body/UI. */
+/* Final typography normalization: system display fonts for headings and UI. */
 body,
 p,
 span,

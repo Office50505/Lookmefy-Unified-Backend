@@ -10,9 +10,14 @@ import {
   createDemoCreditPayment,
   createRazorpayPayment,
   completeRazorpayPayment,
+  hasMandateForTopUp,
+  mandateSetupAmountForPlan,
   orderIdFromCallback,
+  processRazorpayWebhook,
   reconcileOrder,
   recurringAmountForPlan,
+  requireMandateForTopUp,
+  setupTokensForPlan,
   statusFromRazorpayOrderStatus,
   statusFromPhonePeState,
   validatePhonePeCallbackAuth,
@@ -82,10 +87,20 @@ test('PhonePe redirect URL is generated from approved server configuration', () 
 
 test('payment amounts are derived server-side from shared pricing', () => {
   assert.equal(amountForPlan(SUBSCRIPTION_PLAN), SUBSCRIPTION_PLAN.dueTodayAmount);
+  assert.equal(mandateSetupAmountForPlan(SUBSCRIPTION_PLAN), SUBSCRIPTION_PLAN.mandate.setupAmount);
+  assert.equal(setupTokensForPlan(SUBSCRIPTION_PLAN), SUBSCRIPTION_PLAN.setupTokens);
   assert.equal(recurringAmountForPlan(SUBSCRIPTION_PLAN), SUBSCRIPTION_PLAN.mandate.recurringAmount);
   assert.equal(billingFrequencyForPlan(SUBSCRIPTION_PLAN), SUBSCRIPTION_PLAN.mandate.frequency);
   assert.equal(amountForPlan(TOP_UP_PLANS[0]), TOP_UP_PLANS[0].amount);
   assert.equal(recurringAmountForPlan(TOP_UP_PLANS[0]), null);
+});
+
+test('top-ups require an authenticated or active mandate', () => {
+  assert.equal(hasMandateForTopUp({ subscription: { status: 'none', merchantSubscriptionId: '' } }), false);
+  assert.equal(hasMandateForTopUp({ subscription: { status: 'created', merchantSubscriptionId: 'sub_1' } }), false);
+  assert.equal(hasMandateForTopUp({ subscription: { status: 'authenticated', merchantSubscriptionId: 'sub_1' } }), true);
+  assert.equal(hasMandateForTopUp({ subscription: { status: 'active', merchantSubscriptionId: 'sub_1' } }), true);
+  assert.throws(() => requireMandateForTopUp({ subscription: { status: 'none' } }), /monthly mandate/);
 });
 
 test('checkout idempotency key accepts only bounded opaque keys', () => {
@@ -337,6 +352,14 @@ test('Razorpay monthly checkout creates a subscription instead of a one rupee or
       const body = JSON.parse(options.body);
       assert.equal(body.plan_id, 'plan_test_monthly');
       assert.equal(body.total_count, 120);
+      assert.ok(Number(body.start_at) > Math.floor(Date.now() / 1000));
+      assert.deepEqual(body.addons, [{
+        item: {
+          name: `${SUBSCRIPTION_PLAN.name} setup credits`,
+          amount: SUBSCRIPTION_PLAN.mandate.setupAmount,
+          currency: SUBSCRIPTION_PLAN.currency
+        }
+      }]);
       assert.equal(body.notes.planId, SUBSCRIPTION_PLAN.id);
       return new Response(JSON.stringify({ id: 'sub_rzp_1', status: 'created' }), {
         status: 200,
@@ -472,14 +495,17 @@ test('Razorpay verification credits tokens once after signature validation', asy
   }
 });
 
-test('Razorpay subscription authorization below monthly amount does not credit tokens', async () => {
+test('Razorpay subscription authorization credits starter tokens but not monthly tokens', async () => {
   const original = {
     tokenFindOne: TokenOrder.findOne,
     tokenFindById: TokenOrder.findById,
     tokenFindByIdAndUpdate: TokenOrder.findByIdAndUpdate,
+    tokenUpdateOne: TokenOrder.updateOne,
     userFindById: User.findById,
     userFindByIdAndUpdate: User.findByIdAndUpdate,
     userFindOneAndUpdate: User.findOneAndUpdate,
+    creditEventFindOne: CreditEvent.findOne,
+    creditEventCreate: CreditEvent.create,
     fetch: global.fetch,
     env: {
       RAZORPAY_ENABLED: process.env.RAZORPAY_ENABLED,
@@ -520,11 +546,20 @@ test('Razorpay subscription authorization below monthly amount does not credit t
       order = { ...order, ...update.$set };
       return order;
     };
+    TokenOrder.updateOne = async (_filter, update) => {
+      order = { ...order, ...update.$set };
+      return { modifiedCount: 1 };
+    };
     User.findById = async () => ({ _id: 'user1', tokens: 8 + creditedTokens });
     User.findByIdAndUpdate = async (_id, update) => ({ _id: 'user1', tokens: 8 + creditedTokens, subscription: update.$set.subscription });
     User.findOneAndUpdate = async (_filter, update) => {
       creditedTokens += Number(update.$inc?.tokens || 0);
-      return { _id: 'user1', tokens: 8 + creditedTokens };
+      return { _id: 'user1', tokens: 8 + creditedTokens, subscription: update.$set?.subscription };
+    };
+    CreditEvent.findOne = async () => null;
+    CreditEvent.create = async (docOrDocs) => {
+      const doc = Array.isArray(docOrDocs) ? docOrDocs[0] : docOrDocs;
+      return { _id: 'credit-event-setup-1', ...doc };
     };
     global.fetch = async (url) => {
       if (String(url).endsWith('/subscriptions/sub_rzp_1')) {
@@ -548,20 +583,127 @@ test('Razorpay subscription authorization below monthly amount does not credit t
       razorpaySignature: signature
     });
     assert.equal(result.pendingSubscriptionCredit, true);
-    assert.equal(creditedTokens, 0);
+    assert.equal(result.mandateSetupCredit, true);
+    assert.equal(result.setupTokens, SUBSCRIPTION_PLAN.setupTokens);
+    assert.equal(creditedTokens, SUBSCRIPTION_PLAN.setupTokens);
     assert.equal(order.creditedAt, null);
   } finally {
     TokenOrder.findOne = original.tokenFindOne;
     TokenOrder.findById = original.tokenFindById;
     TokenOrder.findByIdAndUpdate = original.tokenFindByIdAndUpdate;
+    TokenOrder.updateOne = original.tokenUpdateOne;
     User.findById = original.userFindById;
     User.findByIdAndUpdate = original.userFindByIdAndUpdate;
     User.findOneAndUpdate = original.userFindOneAndUpdate;
+    CreditEvent.findOne = original.creditEventFindOne;
+    CreditEvent.create = original.creditEventCreate;
     global.fetch = original.fetch;
     for (const [key, value] of Object.entries(original.env)) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
     }
+  }
+});
+
+test('Razorpay subscription monthly webhook credits 150 tokens once per payment', async () => {
+  const original = {
+    tokenFindOne: TokenOrder.findOne,
+    tokenCreate: TokenOrder.create,
+    tokenUpdateOne: TokenOrder.updateOne,
+    userFindById: User.findById,
+    userFindOneAndUpdate: User.findOneAndUpdate,
+    creditEventFindOne: CreditEvent.findOne,
+    creditEventCreate: CreditEvent.create
+  };
+  let parentOrder = {
+    _id: 'order-subscription-parent',
+    user: 'user1',
+    provider: 'razorpay',
+    merchantOrderId: 'FLRZP_SUB_PARENT',
+    merchantSubscriptionId: 'sub_rzp_1',
+    razorpaySubscriptionId: 'sub_rzp_1',
+    razorpayMode: 'test',
+    amount: SUBSCRIPTION_PLAN.mandate.recurringAmount,
+    dueTodayAmount: SUBSCRIPTION_PLAN.dueTodayAmount,
+    recurringAmount: SUBSCRIPTION_PLAN.mandate.recurringAmount,
+    planId: SUBSCRIPTION_PLAN.id,
+    planName: SUBSCRIPTION_PLAN.name,
+    orderType: 'subscription',
+    tokens: SUBSCRIPTION_PLAN.tokens,
+    status: 'pending',
+    creditedAt: null
+  };
+  let cycleOrder = null;
+  let creditEvent = null;
+  let creditedTokens = 0;
+  const query = (value) => ({
+    lean: async () => value,
+    then: (resolve) => Promise.resolve(resolve(value))
+  });
+
+  try {
+    TokenOrder.findOne = async (filter = {}) => {
+      if (filter.merchantOrderId) return cycleOrder;
+      return parentOrder;
+    };
+    TokenOrder.create = async (doc) => {
+      cycleOrder = { _id: 'order-subscription-cycle', ...doc };
+      return cycleOrder;
+    };
+    TokenOrder.updateOne = async (_filter, update) => {
+      parentOrder = { ...parentOrder, ...update.$set };
+      return { modifiedCount: 1 };
+    };
+    User.findById = async () => ({ _id: 'user1', tokens: 8 + creditedTokens });
+    User.findOneAndUpdate = async (_filter, update) => {
+      creditedTokens += Number(update.$inc?.tokens || 0);
+      return { _id: 'user1', tokens: 8 + creditedTokens, subscription: update.$set?.subscription };
+    };
+    CreditEvent.findOne = () => query(creditEvent);
+    CreditEvent.create = async (docOrDocs) => {
+      const doc = Array.isArray(docOrDocs) ? docOrDocs[0] : docOrDocs;
+      creditEvent = { _id: 'credit-event-monthly-1', ...doc };
+      return creditEvent;
+    };
+
+    const payload = {
+      event: 'payment.captured',
+      payload: {
+        payment: {
+          entity: {
+            id: 'pay_monthly_1',
+            subscription_id: 'sub_rzp_1',
+            amount: SUBSCRIPTION_PLAN.mandate.recurringAmount,
+            status: 'captured'
+          }
+        },
+        subscription: {
+          entity: {
+            id: 'sub_rzp_1',
+            status: 'active',
+            current_start: 1788760000,
+            current_end: 1791438400
+          }
+        }
+      }
+    };
+
+    const first = await processRazorpayWebhook(payload, { mode: 'test' });
+    assert.equal(first.alreadyCredited, false);
+    assert.equal(creditedTokens, SUBSCRIPTION_PLAN.tokens);
+    assert.equal(cycleOrder.tokens, SUBSCRIPTION_PLAN.tokens);
+
+    const duplicate = await processRazorpayWebhook(payload, { mode: 'test' });
+    assert.equal(duplicate.alreadyCredited, true);
+    assert.equal(creditedTokens, SUBSCRIPTION_PLAN.tokens);
+  } finally {
+    TokenOrder.findOne = original.tokenFindOne;
+    TokenOrder.create = original.tokenCreate;
+    TokenOrder.updateOne = original.tokenUpdateOne;
+    User.findById = original.userFindById;
+    User.findOneAndUpdate = original.userFindOneAndUpdate;
+    CreditEvent.findOne = original.creditEventFindOne;
+    CreditEvent.create = original.creditEventCreate;
   }
 });
 

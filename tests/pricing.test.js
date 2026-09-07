@@ -14,6 +14,7 @@ test('subscription pricing separates due-today setup amount from recurring manda
   assert.equal(SUBSCRIPTION_PLAN.amount, SUBSCRIPTION_PLAN.dueTodayAmount);
   assert.equal(SUBSCRIPTION_PLAN.dueTodayAmount, SUBSCRIPTION_PLAN.mandate.setupAmount);
   assert.equal(SUBSCRIPTION_PLAN.dueTodayAmount, 100);
+  assert.equal(SUBSCRIPTION_PLAN.setupTokens, 20);
   assert.equal(SUBSCRIPTION_PLAN.tokens, 150);
   assert.equal(SUBSCRIPTION_PLAN.mandate.recurringAmount, 49900);
   assert.equal(formatMinorAmount(SUBSCRIPTION_PLAN.dueTodayAmount, 'INR'), '₹1');

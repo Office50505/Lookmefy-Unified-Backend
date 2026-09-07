@@ -1,8 +1,8 @@
 import mongoose from 'mongoose';
 
 function signupTokens() {
-  const value = Number(process.env.SIGNUP_FREE_TOKENS || 8);
-  return Number.isFinite(value) && value >= 0 ? value : 8;
+  const value = Number(process.env.SIGNUP_FREE_TOKENS || 0);
+  return Number.isFinite(value) && value >= 0 ? value : 0;
 }
 
 function defaultDevMode() {

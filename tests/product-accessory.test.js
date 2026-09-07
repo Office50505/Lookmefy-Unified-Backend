@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import Product from '../server/models/Product.js';
 import { normalizeGarmentPlacement } from '../server/routes/products.js';
-import { fitRoomClothTypeForProduct, fitRoomClothTypeForPromptKey } from '../server/routes/tryons.js';
-import { promptKeyForProduct } from '../server/utils/tryOnPrompts.js';
+import { fitRoomClothTypeForProduct, fitRoomClothTypeForPromptKey, shouldUseFalImageEditForProduct } from '../server/routes/tryons.js';
+import { promptForProduct, promptKeyForProduct } from '../server/utils/tryOnPrompts.js';
 
 test('product fit area accepts an explicit accessory classification', () => {
   const product = new Product({
@@ -59,4 +59,17 @@ test('garment targeting maps bottoms and full body garments to the right provide
   assert.equal(fitRoomClothTypeForProduct({ name: 'Blue straight jeans', category: 'jeans' }), 'lower');
   assert.equal(fitRoomClothTypeForProduct({ name: 'Printed midi dress', category: 'dresses' }), 'full_set');
   assert.equal(fitRoomClothTypeForPromptKey('full_outfit'), 'full_set');
+});
+
+test('saree products use saree-specific prompt and FAL image-edit routing', () => {
+  const product = { name: 'Kanjivaram silk saree', category: 'sarees', garmentPlacement: 'full-body' };
+  const prompt = promptForProduct(product);
+  assert.equal(prompt.key, 'saree');
+  assert.match(prompt.prompt, /complete traditional outfit/i);
+  assert.match(prompt.prompt, /blouse\/choli/i);
+  assert.match(prompt.prompt, /waist pleats/i);
+  assert.match(prompt.prompt, /full lower-body drape/i);
+  assert.match(prompt.prompt, /Jeans, trousers, pants/i);
+  assert.equal(fitRoomClothTypeForProduct(product), 'full_set');
+  assert.equal(shouldUseFalImageEditForProduct(product), true);
 });

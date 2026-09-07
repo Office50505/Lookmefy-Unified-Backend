@@ -6,6 +6,7 @@ const SUBSCRIPTION_PLAN = {
   amount: 100,
   currency: 'INR',
   tokens: 150,
+  setupTokens: 20,
   billing: 'Monthly',
   cancellation: 'Cancel future monthly billing before the next renewal from your account or by contacting support.',
   mandate: {

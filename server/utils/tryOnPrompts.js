@@ -69,6 +69,29 @@ Priority:
 5. Preserve all non-clothing elements of Image 2.
 6. Produce a photorealistic, naturally fitted virtual try-on result.`,
 
+  saree: String.raw`Use the saree from Image 1 as the complete traditional outfit reference and apply it to the person in Image 2.
+
+Treat the saree as a COMPLETE outfit, not as an upper-body cloth, scarf, dupatta, shawl, diagonal overlay, or partial drape. The final result must include the full saree styling: blouse/choli coverage, pallu over the shoulder/torso, waist pleats, and full lower-body drape from waist to feet.
+
+Replace or fully cover the person's existing clothing wherever the saree naturally covers the body. Jeans, trousers, pants, shorts, leggings, skirt waistbands, belt loops, pockets, denim texture, trouser seams, and any existing lower-body garment must NOT remain visible.
+
+Preserve the saree's original design, color, border, embroidery, pattern, fabric texture, shine, pleats, pallu styling, blouse/choli relationship, and traditional drape as accurately as possible.
+
+Do NOT make the saree look like a loose piece of fabric placed over jeans or pants. The output is invalid if the saree appears only as a diagonal cloth/pallu while lower-body jeans, trousers, pockets, waistband, or pant legs are still visible.
+
+STRICTLY preserve the person from Image 2: same identity, face, hair, skin tone, body shape, pose, hands, feet/footwear, background, lighting, camera angle, framing, and image composition.
+
+ONLY the clothing should change into a complete saree outfit.
+
+Priority:
+
+1. Preserve the person from Image 2 exactly.
+2. Dress the person in the complete saree outfit from Image 1.
+3. Ensure blouse/choli, pallu, waist pleats, and lower-body drape are all present.
+4. Remove or fully cover jeans, pants, trouser waistbands, pockets, and lower-body garment traces.
+5. Preserve the exact saree appearance and traditional drape.
+6. Produce a photorealistic, full-body virtual try-on result.`,
+
   shoes: String.raw`Use ONLY the footwear from Image 1 as the reference and apply it to the person in Image 2.
 
 Replace ONLY the person's existing footwear with the exact shoes, sneakers, boots, heels, sandals, slippers, or other footwear shown in Image 1.
@@ -242,15 +265,20 @@ function isWatchProduct(product = {}) {
   return /\b(watch(?:es)?|smart\s?watch(?:es)?|wrist\s?watch(?:es)?|wristwear|fitness\s?band(?:s)?)\b/i.test(textForProduct(product));
 }
 
+function isSareeProduct(product = {}) {
+  return /\b(sarees?|saris?|kanjivarams?|kanchipurams?)\b/i.test(textForProduct(product));
+}
+
 function promptKeyForProduct(product = {}, fallback = 'upper') {
   const text = textForProduct(product);
   if (isWatchProduct(product)) return 'watch';
+  if (isSareeProduct(product)) return 'saree';
   if (/\b(sunglasses?|eyeglasses?|glasses|eyewear|spectacles?|frames?)\b/i.test(text)) return 'glasses';
   if (/\b(hats?|caps?|beanies?|bucket\s?hats?|fedoras?|headwear|head\s?wear)\b/i.test(text)) return 'hat';
   if (/\b(shoes?|sneakers?|boots?|heels?|sandals?|slippers?|loafers?|footwear)\b/i.test(text)) return 'shoes';
   if (product.garmentPlacement === 'accessory') return 'accessory';
   if (product.garmentPlacement === 'full-body') return 'full_outfit';
-  if (/\b(outfits?|sets?|co-?ords?|coordinated|tracksuits?|suits?|jumpsuits?|rompers?|dress(?:es)?|gowns?|sarees?|lehenga|kurta\s?sets?)\b/i.test(text)) return 'full_outfit';
+  if (/\b(outfits?|sets?|co-?ords?|coordinated|tracksuits?|suits?|jumpsuits?|rompers?|dress(?:es)?|gowns?|lehenga|kurta\s?sets?)\b/i.test(text)) return 'full_outfit';
   if (/\b(pants?|trousers?|jeans?|denim|shorts?|skirts?|leggings?|joggers?|palazzos?|bottoms?|lower)\b/i.test(text)) return 'lower';
   if (/\b(tops?|shirts?|t-?shirts?|tees?|blouses?|sweaters?|sweatshirts?|hoodies?|jackets?|coats?|blazers?|kurtas?|bras?|bralettes?|sports?\s+bras?|lingerie|innerwear|camisoles?|bustiers?|corsets?|upper)\b/i.test(text)) return 'upper';
   if (/\b(bags?|handbags?|purses?|totes?|backpacks?|wallets?|belts?|scarves?|jewelry|jewellery|necklaces?|rings?|earrings?|bracelets?)\b/i.test(text)) return 'accessory';
@@ -286,6 +314,7 @@ function promptForProduct(product = {}, fallback = 'upper') {
 }
 
 export {
+  isSareeProduct,
   isWatchProduct,
   promptForKey,
   promptForProduct,
