@@ -3,6 +3,8 @@ function clean(value = '') {
 }
 
 const womenSpecificFashionPattern = /\b(bras?|bralettes?|sports?\s+bras?|lingerie|pant(?:y|ies)|bikinis?|swimsuits?|swimwear|one\s*piece\s+swimsuits?|monokinis?)\b/i;
+const malePreferencePattern = /\b(?:men'?s?|man'?s?|male|gentlemen|boys?)\b/gi;
+const femalePreferencePattern = /\b(?:women'?s?|woman'?s?|female|lad(?:y|ies)|girls?)\b/gi;
 
 export function normalizeGenderPreference(value = '') {
   const gender = clean(value);
@@ -19,7 +21,18 @@ export function productGenderForPreference(value = '') {
   return '';
 }
 
+export function explicitGenderPreferenceForText(value = '') {
+  const text = clean(value);
+  const mentions = [
+    ...Array.from(text.matchAll(malePreferencePattern), (match) => ({ gender: 'male', index: match.index ?? -1 })),
+    ...Array.from(text.matchAll(femalePreferencePattern), (match) => ({ gender: 'female', index: match.index ?? -1 }))
+  ].sort((left, right) => left.index - right.index);
+  return mentions.at(-1)?.gender || '';
+}
+
 export function genderPreferenceForQuery(query = '', preference = '') {
+  const explicitPreference = explicitGenderPreferenceForText(query);
+  if (explicitPreference) return explicitPreference;
   if (womenSpecificFashionPattern.test(String(query || ''))) return 'female';
   return normalizeGenderPreference(preference);
 }
@@ -48,6 +61,9 @@ export function genderCompatibility(product = {}, preference = '') {
   ].filter(Boolean).join(' ');
   const isMens = /\b(men'?s?|male|boys?|gentlemen)\b/i.test(text);
   const isWomens = /\b(women'?s?|female|girls?|ladies)\b/i.test(text);
+  const isUnisex = ['unisex', 'other'].includes(productGender) || /\bunisex\b/i.test(text) || (isMens && isWomens);
+
+  if (isUnisex) return { compatible: true };
 
   if (target === 'women' && (productGender === 'men' || isMens)) {
     return { compatible: false, reason: 'This result is for men, but your profile preference is female.' };

@@ -34,6 +34,8 @@ import {
   availableStatusClause,
   normalizeAvailabilityStatus
 } from '../utils/productAvailability.js';
+import { temporaryExternalAmazonFilter } from '../utils/productCatalogVisibility.js';
+import { accessoryIdentityPattern } from '../utils/accessoryTaxonomy.js';
 
 const router = express.Router();
 const requireUserOperationsAdmin = requireAdminSection(ADMIN_SECTIONS.USER_OPERATIONS);
@@ -497,10 +499,10 @@ const categoryRules = [
   ['sleepwear', /\b(night(?:y|ie|wear|gown|suit|dress)|sleepwear|pajamas?|pyjamas?|loungewear|robe)\b/i, 26],
   ['dresses', /\b(dress(?:es)?|gowns?|bodycon|maxi|midi|mini\s*dress|a-line\s*dress|wrap\s*dress|party\s*dress)\b/i, 24],
   ['skirts', /\b(skirts?|skorts?)\b/i, 24],
-  ['watches', /\b(watches?|smart\s*watches?|smartwatch(?:es)?|chronograph)\b/i, 24],
+  ['watches', /\b(watch(?:es)?|smart\s*watch(?:es)?|smartwatch(?:es)?|chronographs?)\b/i, 24],
   ['shoes', /\b(shoes?|sneakers?|boots?|loafers?|sandals?|slippers?|heels?|pumps?|flats?|footwear|trainers?)\b/i, 24],
   ['bags', /\b(wallets?|purses?|backpacks?|handbags?|totes?|sling\s*bags?|crossbody|duffels?|clutches?)\b/i, 24],
-  ['accessories', /\b(belts?|caps?|hats?|scarves?|ties?|jewellery|jewelry|necklaces?|bracelets?|earrings?|accessor(?:y|ies))\b/i, 18],
+  ['accessories', accessoryIdentityPattern, 18],
   ['jeans', /\b(jeans?|denim\s*(?:jeans|pants|trousers)?)\b/i, 23],
   ['shorts', /\b(shorts?|bermudas?)\b/i, 23],
   ['pants', /\b(pants?|trousers?|joggers?|leggings?|chinos?|cargo\s*pants?|track\s*pants?|bottomwear)\b/i, 21],
@@ -1265,15 +1267,6 @@ function sortFor(value) {
   if (value === 'price-desc') return { price: -1 };
   if (value === 'newest') return { createdAt: -1 };
   return { isFeatured: -1, createdAt: -1 };
-}
-
-function temporaryExternalAmazonFilter() {
-  return {
-    catalogApproved: { $ne: true },
-    badge: 'Amazon',
-    availabilityStatus: { $ne: 'draft' },
-    $or: [{ sourceUrl: /amazon\.[a-z.]+\/dp\//i }, { affiliateLink: /amazon\.[a-z.]+\/dp\//i }]
-  };
 }
 
 function optionalNumber(value, fieldName) {

@@ -1,0 +1,147 @@
+{
+  "auditReportVersion": 2,
+  "vulnerabilities": {
+    "body-parser": {
+      "name": "body-parser",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "qs"
+      ],
+      "effects": [],
+      "range": "1.20.5 - 1.20.6",
+      "nodes": [
+        "node_modules/body-parser"
+      ],
+      "fixAvailable": true
+    },
+    "browserslist": {
+      "name": "browserslist",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1153171,
+          "name": "browserslist",
+          "dependency": "browserslist",
+          "title": "Browserslist: Unbounded memory growth (no cache eviction) via distinct query results, leading to eventual OOM",
+          "url": "https://github.com/advisories/GHSA-c83g-rgw3-j3cx",
+          "severity": "high",
+          "cwe": [
+            "CWE-770"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": "<=4.28.6"
+        },
+        {
+          "source": 1153172,
+          "name": "browserslist",
+          "dependency": "browserslist",
+          "title": "Browserslist: Uncaught crash / prototype write via untrusted browserslist-stats.json custom stats (normalizeStats)",
+          "url": "https://github.com/advisories/GHSA-73wf-gq98-2v4g",
+          "severity": "high",
+          "cwe": [
+            "CWE-248",
+            "CWE-1321"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": "<=4.28.6"
+        }
+      ],
+      "effects": [],
+      "range": "<=4.28.6",
+      "nodes": [
+        "node_modules/browserslist"
+      ],
+      "fixAvailable": true
+    },
+    "express": {
+      "name": "express",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        "body-parser",
+        "qs"
+      ],
+      "effects": [],
+      "range": "4.22.2",
+      "nodes": [
+        "node_modules/express"
+      ],
+      "fixAvailable": true
+    },
+    "qs": {
+      "name": "qs",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1158506,
+          "name": "qs",
+          "dependency": "qs",
+          "title": "qs array-limit bypass via bracket-key comma parsing",
+          "url": "https://github.com/advisories/GHSA-x5fp-wj9c-mxmx",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-770"
+          ],
+          "cvss": {
+            "score": 3.7,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L"
+          },
+          "range": ">=6.14.2 <=6.15.3"
+        },
+        {
+          "source": 1158507,
+          "name": "qs",
+          "dependency": "qs",
+          "title": "qs: Denial of Service via Attacker Controlled isBuffer",
+          "url": "https://github.com/advisories/GHSA-4mjr-xmp4-gh2g",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-248",
+            "CWE-703"
+          ],
+          "cvss": {
+            "score": 5.3,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"
+          },
+          "range": ">=2.2.5 <6.16.0"
+        }
+      ],
+      "effects": [
+        "body-parser",
+        "express"
+      ],
+      "range": "2.2.5 - 6.15.3",
+      "nodes": [
+        "node_modules/qs"
+      ],
+      "fixAvailable": true
+    }
+  },
+  "metadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 3,
+      "high": 1,
+      "critical": 0,
+      "total": 4
+    },
+    "dependencies": {
+      "prod": 266,
+      "dev": 31,
+      "optional": 88,
+      "peer": 0,
+      "peerOptional": 0,
+      "total": 383
+    }
+  }
+}

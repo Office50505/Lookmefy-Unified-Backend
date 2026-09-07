@@ -1,0 +1,493 @@
+{
+  "auditReportVersion": 2,
+  "vulnerabilities": {
+    "@expo/cli": {
+      "name": "@expo/cli",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@expo/config",
+        "@expo/config-plugins",
+        "@expo/metro-config",
+        "@expo/prebuild-config"
+      ],
+      "effects": [
+        "expo"
+      ],
+      "range": "<=0.0.0-canary-20231123-1b19f96-4 || >=0.0.1-canary-20231125-d600e44",
+      "nodes": [
+        "node_modules/@expo/cli"
+      ],
+      "fixAvailable": {
+        "name": "expo",
+        "version": "46.0.21",
+        "isSemVerMajor": true
+      }
+    },
+    "@expo/config": {
+      "name": "@expo/config",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@expo/config-plugins"
+      ],
+      "effects": [
+        "@expo/metro-config",
+        "expo",
+        "expo-constants"
+      ],
+      "range": "<=0.0.1-canary-20240418-8d74597 || >=3.3.23-alpha.0",
+      "nodes": [
+        "node_modules/@expo/config"
+      ],
+      "fixAvailable": {
+        "name": "expo",
+        "version": "46.0.21",
+        "isSemVerMajor": true
+      }
+    },
+    "@expo/config-plugins": {
+      "name": "@expo/config-plugins",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "xcode"
+      ],
+      "effects": [
+        "@expo/cli",
+        "@expo/config",
+        "@expo/prebuild-config",
+        "expo"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/@expo/config-plugins"
+      ],
+      "fixAvailable": {
+        "name": "expo",
+        "version": "46.0.21",
+        "isSemVerMajor": true
+      }
+    },
+    "@expo/metro-config": {
+      "name": "@expo/metro-config",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@expo/config"
+      ],
+      "effects": [
+        "expo"
+      ],
+      "range": "<=0.0.1-canary-20240418-8d74597 || >=0.1.49-alpha.0",
+      "nodes": [
+        "node_modules/@expo/metro-config"
+      ],
+      "fixAvailable": {
+        "name": "expo",
+        "version": "46.0.21",
+        "isSemVerMajor": true
+      }
+    },
+    "@expo/prebuild-config": {
+      "name": "@expo/prebuild-config",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@expo/config",
+        "@expo/config-plugins"
+      ],
+      "effects": [],
+      "range": "*",
+      "nodes": [
+        "node_modules/@expo/prebuild-config"
+      ],
+      "fixAvailable": true
+    },
+    "@react-native/community-cli-plugin": {
+      "name": "@react-native/community-cli-plugin",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "metro",
+        "metro-config"
+      ],
+      "effects": [
+        "react-native"
+      ],
+      "range": "<=0.81.0-rc.5 || 0.82.0-nightly-20250710-586f5ba89 - 0.82.0-rc.5 || >=0.87.0-nightly-20260507-ba204faa7",
+      "nodes": [
+        "node_modules/@react-native/community-cli-plugin"
+      ],
+      "fixAvailable": {
+        "name": "react-native",
+        "version": "0.86.3",
+        "isSemVerMajor": true
+      }
+    },
+    "@xmldom/xmldom": {
+      "name": "@xmldom/xmldom",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1158517,
+          "name": "@xmldom/xmldom",
+          "dependency": "@xmldom/xmldom",
+          "title": "xmldom: XML fragment injection via invalid EntityReference.nodeName during requireWellFormed serialization",
+          "url": "https://github.com/advisories/GHSA-6gmq-8vp8-gcm6",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-116"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": ">=0.9.0 <=0.9.11"
+        },
+        {
+          "source": 1158518,
+          "name": "@xmldom/xmldom",
+          "dependency": "@xmldom/xmldom",
+          "title": "xmldom: XML fragment injection via invalid EntityReference.nodeName during requireWellFormed serialization",
+          "url": "https://github.com/advisories/GHSA-6gmq-8vp8-gcm6",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-116"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": ">=0.7.0 <=0.8.14"
+        }
+      ],
+      "effects": [],
+      "range": "<=0.8.14 || 0.9.0 - 0.9.11",
+      "nodes": [
+        "node_modules/@xmldom/xmldom",
+        "node_modules/plist/node_modules/@xmldom/xmldom"
+      ],
+      "fixAvailable": true
+    },
+    "browserslist": {
+      "name": "browserslist",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1153171,
+          "name": "browserslist",
+          "dependency": "browserslist",
+          "title": "Browserslist: Unbounded memory growth (no cache eviction) via distinct query results, leading to eventual OOM",
+          "url": "https://github.com/advisories/GHSA-c83g-rgw3-j3cx",
+          "severity": "high",
+          "cwe": [
+            "CWE-770"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": "<=4.28.6"
+        },
+        {
+          "source": 1153172,
+          "name": "browserslist",
+          "dependency": "browserslist",
+          "title": "Browserslist: Uncaught crash / prototype write via untrusted browserslist-stats.json custom stats (normalizeStats)",
+          "url": "https://github.com/advisories/GHSA-73wf-gq98-2v4g",
+          "severity": "high",
+          "cwe": [
+            "CWE-248",
+            "CWE-1321"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": "<=4.28.6"
+        }
+      ],
+      "effects": [],
+      "range": "<=4.28.6",
+      "nodes": [
+        "node_modules/browserslist"
+      ],
+      "fixAvailable": true
+    },
+    "expo": {
+      "name": "expo",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        "@expo/cli",
+        "@expo/config",
+        "@expo/config-plugins",
+        "@expo/metro-config",
+        "expo-asset",
+        "expo-constants"
+      ],
+      "effects": [],
+      "range": "40.0.0-alpha.0 - 40.0.0-beta.5 || >=41.0.0-alpha.0",
+      "nodes": [
+        "node_modules/expo"
+      ],
+      "fixAvailable": {
+        "name": "expo",
+        "version": "46.0.21",
+        "isSemVerMajor": true
+      }
+    },
+    "expo-asset": {
+      "name": "expo-asset",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "expo-constants"
+      ],
+      "effects": [
+        "expo"
+      ],
+      "range": "<=0.0.1-canary-20240418-8d74597 || 8.6.1 - 55.0.0-canary-20260223-05214f1 || 55.0.3-canary-20260128-67ce8d5 || 55.0.8-canary-20260424-7bedc9d - 55.0.8-canary-20260429-a5e59cf || 55.0.11-canary-20260327-0789fbc - 55.0.11-canary-20260402-9da566b || 56.0.0-canary-20260212-4f61309 - 56.0.0-canary-20260506-964f25d",
+      "nodes": [
+        "node_modules/expo-asset"
+      ],
+      "fixAvailable": {
+        "name": "expo",
+        "version": "46.0.21",
+        "isSemVerMajor": true
+      }
+    },
+    "expo-constants": {
+      "name": "expo-constants",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "@expo/config"
+      ],
+      "effects": [
+        "expo",
+        "expo-asset"
+      ],
+      "range": "<=0.0.1-canary-20240418-8d74597 || 10.1.2 - 55.0.14 || 56.0.0-canary-20260212-4f61309 - 56.0.0-canary-20260506-964f25d",
+      "nodes": [
+        "node_modules/expo-constants"
+      ],
+      "fixAvailable": {
+        "name": "expo",
+        "version": "46.0.21",
+        "isSemVerMajor": true
+      }
+    },
+    "image-size": {
+      "name": "image-size",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1138808,
+          "name": "image-size",
+          "dependency": "image-size",
+          "title": "image-size: ICNS parser allows denial of service through an infinite loop",
+          "url": "https://github.com/advisories/GHSA-w3rx-r6r6-pgpr",
+          "severity": "high",
+          "cwe": [
+            "CWE-835"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": "<=2.0.2"
+        },
+        {
+          "source": 1138809,
+          "name": "image-size",
+          "dependency": "image-size",
+          "title": "image-size: JXL and HEIF parsers allow denial of service through infinite loops",
+          "url": "https://github.com/advisories/GHSA-5p2g-fcmc-qvqq",
+          "severity": "high",
+          "cwe": [
+            "CWE-835"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": "<=2.0.2"
+        }
+      ],
+      "effects": [
+        "metro"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/image-size"
+      ],
+      "fixAvailable": {
+        "name": "react-native",
+        "version": "0.86.3",
+        "isSemVerMajor": true
+      }
+    },
+    "metro": {
+      "name": "metro",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "image-size",
+        "metro-config",
+        "metro-transform-worker"
+      ],
+      "effects": [
+        "@react-native/community-cli-plugin",
+        "metro-config",
+        "metro-transform-worker"
+      ],
+      "range": "0.22.1 - 0.83.7 || 0.84.0 - 0.84.4 || >=0.85.0",
+      "nodes": [
+        "node_modules/metro"
+      ],
+      "fixAvailable": {
+        "name": "react-native",
+        "version": "0.86.3",
+        "isSemVerMajor": true
+      }
+    },
+    "metro-config": {
+      "name": "metro-config",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "metro"
+      ],
+      "effects": [
+        "@react-native/community-cli-plugin",
+        "metro"
+      ],
+      "range": "<=0.83.7 || 0.84.0 - 0.84.4 || >=0.85.0",
+      "nodes": [
+        "node_modules/metro-config"
+      ],
+      "fixAvailable": {
+        "name": "react-native",
+        "version": "0.86.3",
+        "isSemVerMajor": true
+      }
+    },
+    "metro-transform-worker": {
+      "name": "metro-transform-worker",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "metro"
+      ],
+      "effects": [
+        "metro"
+      ],
+      "range": "0.60.0 - 0.83.7 || 0.84.0 - 0.84.4 || >=0.85.0",
+      "nodes": [
+        "node_modules/metro-transform-worker"
+      ],
+      "fixAvailable": {
+        "name": "react-native",
+        "version": "0.86.3",
+        "isSemVerMajor": true
+      }
+    },
+    "react-native": {
+      "name": "react-native",
+      "severity": "high",
+      "isDirect": true,
+      "via": [
+        "@react-native/community-cli-plugin"
+      ],
+      "effects": [],
+      "range": "0.73.0-nightly-20230506-1af868c52 - 0.81.0-rc.5 || 0.82.0-nightly-20250710-586f5ba89 - 0.82.0-rc.5 || >=0.87.0-nightly-20260507-ba204faa7",
+      "nodes": [
+        "node_modules/react-native"
+      ],
+      "fixAvailable": {
+        "name": "react-native",
+        "version": "0.86.3",
+        "isSemVerMajor": true
+      }
+    },
+    "uuid": {
+      "name": "uuid",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1119441,
+          "name": "uuid",
+          "dependency": "uuid",
+          "title": "uuid: Missing buffer bounds check in v3/v5/v6 when buf is provided",
+          "url": "https://github.com/advisories/GHSA-w5hq-g745-h8pq",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-787",
+            "CWE-1285"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:N"
+          },
+          "range": "<11.1.1"
+        }
+      ],
+      "effects": [
+        "xcode"
+      ],
+      "range": "<11.1.1",
+      "nodes": [
+        "node_modules/uuid"
+      ],
+      "fixAvailable": {
+        "name": "expo",
+        "version": "46.0.21",
+        "isSemVerMajor": true
+      }
+    },
+    "xcode": {
+      "name": "xcode",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "uuid"
+      ],
+      "effects": [
+        "@expo/config-plugins"
+      ],
+      "range": ">=0.9.2",
+      "nodes": [
+        "node_modules/xcode"
+      ],
+      "fixAvailable": {
+        "name": "expo",
+        "version": "46.0.21",
+        "isSemVerMajor": true
+      }
+    }
+  },
+  "metadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 11,
+      "high": 7,
+      "critical": 0,
+      "total": 18
+    },
+    "dependencies": {
+      "prod": 673,
+      "dev": 0,
+      "optional": 12,
+      "peer": 0,
+      "peerOptional": 0,
+      "total": 684
+    }
+  }
+}

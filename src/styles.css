@@ -22460,7 +22460,7 @@ body.onboarding-scroll-locked {
 .concierge-loading { display: inline-flex; color: #806e68; font-size: 9px; }
 .concierge-product-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; margin-top: 14px; }
 .concierge-product-card { position: relative; min-width: 0; }
-.concierge-product-image { display: block; aspect-ratio: 4 / 5; overflow: hidden; border-radius: 4px; background: #f1ebe8; }
+.concierge-product-image { display: block; width: 100%; aspect-ratio: 4 / 5; overflow: hidden; border: 0; border-radius: 4px; padding: 0; background: #f1ebe8; cursor: zoom-in; }
 .concierge-product-image img { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform .25s ease; }
 .concierge-product-card:hover .concierge-product-image img { transform: scale(1.03); }
 .concierge-product-card > p { overflow: hidden; margin: 7px 0 2px; color: #8d837d; font-family: var(--font-interface); font-size: 7px; font-weight: 700; letter-spacing: .04em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
@@ -28400,6 +28400,22 @@ a.atelier-hero-orbit-wardrobe:hover {
 
 .concierge-product-image img {
   object-fit: cover !important;
+}
+
+.concierge-product-image-missing {
+  display: grid !important;
+  place-items: center !important;
+  padding: 20px !important;
+  background: linear-gradient(145deg, #f4efec, #ebe2de) !important;
+  color: #8a7d77 !important;
+  text-align: center !important;
+}
+
+.concierge-product-image-missing span {
+  font-family: var(--font-interface) !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: .04em !important;
 }
 
 .concierge-product-card .card-wishlist-heart {

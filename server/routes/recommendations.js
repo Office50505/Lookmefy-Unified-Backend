@@ -82,7 +82,19 @@ const EVENT_WEIGHTS = {
 };
 
 function catalogFilter(extra = {}) {
-  const botAmazonRecord = { badge: 'Amazon', $or: [{ sourceUrl: /amazon\.[a-z.]+\/dp\//i }, { affiliateLink: /amazon\.[a-z.]+\/dp\//i }] };
+  const amazonUrl = /(amazon\.[a-z.]+|amzn\.to|a\.co)\//i;
+  const botAmazonRecord = {
+    catalogApproved: { $ne: true },
+    availabilityStatus: { $ne: 'draft' },
+    $or: [
+      { badge: /amazon/i },
+      { source: /amazon/i },
+      { sourceLabel: /amazon/i },
+      { searchSource: /amazon/i },
+      { sourceUrl: amazonUrl },
+      { affiliateLink: amazonUrl }
+    ]
+  };
   const extraAnd = Array.isArray(extra.$and) ? extra.$and : [];
   const filter = { ...extra };
   delete filter.$and;

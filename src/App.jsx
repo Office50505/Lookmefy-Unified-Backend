@@ -201,6 +201,7 @@ async function prepareClosetItemPhoto(file) {
 }
 
 function formatMoney(value, currency = 'INR') {
+  if (value === null || value === undefined || String(value).trim() === '') return 'Price unavailable';
   const amount = Number(value);
   if (!Number.isFinite(amount)) return 'Price unavailable';
   const requestedCurrency = String(currency || 'INR').toUpperCase();
@@ -6270,6 +6271,14 @@ function styleBotProductKey(product = {}) {
   return String(product?.id || product?.sourceUrl || product?.affiliateLink || product?.name || 'product');
 }
 
+function isOnlineAiStudioProduct(product = {}) {
+  const source = String([product.source, product.searchSource, product.sourceLabel].filter(Boolean).join(' ')).toLowerCase();
+  if (/lookmefy|catalog/.test(source)) return false;
+  return product.tryOnAvailable === false
+    || product.aiTryOnAvailable === false
+    || /web|amazon|serpapi|online/.test(source);
+}
+
 function normalizeAiStudioAction(action) {
   if (!action) return null;
   if (typeof action === 'string') return { type: 'message', label: action, prompt: action };
@@ -6310,7 +6319,9 @@ function normalizeAiStudioProducts(products = [], outfits = []) {
       id: styleBotProductKey(product),
       name: product.name || product.title || 'Product',
       title: product.title || product.name || 'Product',
-      sourceLabel: product.sourceLabel || (product.source === 'amazon' ? 'Amazon result' : product.source === 'wardrobe' ? 'Wardrobe item' : product.source ? 'Lookmefy catalog' : '')
+      sourceLabel: isOnlineAiStudioProduct(product)
+        ? 'Amazon result'
+        : product.sourceLabel || (product.source === 'wardrobe' ? 'Wardrobe item' : product.source ? 'Lookmefy catalog' : '')
     }))
     .filter((product) => {
       if (!product.id || seen.has(product.id)) return false;
@@ -6419,7 +6430,7 @@ function StyleBotPage({ user, setUser }) {
 
   const generateChatTryOn = async (product) => {
     const key = styleBotProductKey(product);
-    if (!product || product.searchLink || chatTryOnLoading[key]) return;
+    if (!product || product.searchLink || isOnlineAiStudioProduct(product) || chatTryOnLoading[key]) return;
     const profileMessage = tryOnProfileBlockMessage(user);
     if (profileMessage) {
       setChatTryOnErrors((current) => ({ ...current, [key]: profileMessage }));
@@ -6551,32 +6562,52 @@ function StyleBotOutfit({ outfit }) {
 
 function StyleBotProduct({ product, tryOn, loading, error, onFullscreen, onTryOn }) {
   const [tryOnImageFailed, setTryOnImageFailed] = useState(false);
-  const productImage = product.imageUrl || asset('hero2.png');
-  const hasUsableTryOn = Boolean(tryOn?.imageUrl) && !tryOnImageFailed;
+  const [productImageFailed, setProductImageFailed] = useState(false);
+  const productImage = String(product.imageUrl || '').trim();
+  const hasProductImage = Boolean(productImage) && !productImageFailed;
+  const onlineProduct = isOnlineAiStudioProduct(product);
+  const hasUsableTryOn = !onlineProduct && Boolean(tryOn?.imageUrl) && !tryOnImageFailed;
+  const displayedImage = hasUsableTryOn ? String(tryOn.imageUrl) : productImage;
   const externalShop = Boolean(product.affiliateLink || product.sourceUrl);
-  const localProduct = !product.searchLink && !externalShop;
+  const localProduct = !onlineProduct && !product.searchLink && Boolean(product.id);
+  const canTryOn = !onlineProduct && !product.searchLink && hasProductImage;
+  const numericPrice = Number(product.price);
+  const hasVerifiedPrice = product.price !== null && product.price !== undefined && String(product.price).trim() !== '' && Number.isFinite(numericPrice) && numericPrice > 0;
+  const visibleBrand = ['amazon', 'web'].includes(String(product.source || '').toLowerCase()) && displayBrand(product).toLowerCase() === 'amazon'
+    ? 'Online retailer'
+    : displayBrand(product);
   const localDetailHref = `/product/${encodeURIComponent(product.id)}`;
   const shopHref = product.affiliateLink || product.sourceUrl || localDetailHref;
-  const detailHref = localProduct ? localDetailHref : shopHref;
+  const detailHref = onlineProduct ? shopHref : localDetailHref;
+  const detailIsExternal = onlineProduct && externalShop;
 
   useEffect(() => {
     setTryOnImageFailed(false);
   }, [tryOn?.imageUrl]);
 
+  useEffect(() => {
+    setProductImageFailed(false);
+  }, [productImage]);
+
   return (
     <article className="concierge-product-card">
-      <a className="concierge-product-image" href={detailHref} target={externalShop ? '_blank' : undefined} rel={externalShop ? 'noreferrer' : undefined} onClick={() => recordEvent(externalShop ? 'shop_click' : 'product_click', { productId: product.id })}><OptimizedImage src={productImage} alt={product.name} /></a>
+      {hasProductImage ? (
+        <button className="concierge-product-image" type="button" aria-label={`View ${hasUsableTryOn ? 'AI preview' : 'product photo'} for ${product.name}`} onClick={() => onFullscreen({ src: displayedImage, alt: `${hasUsableTryOn ? 'AI try-on' : 'Product photo'} for ${product.name}`, title: product.name })}>
+          <OptimizedImage src={displayedImage} alt={product.name} fallbackSrc="" onError={() => hasUsableTryOn ? setTryOnImageFailed(true) : setProductImageFailed(true)} />
+        </button>
+      ) : <div className="concierge-product-image concierge-product-image-missing" role="img" aria-label={`Image unavailable for ${product.name}`}><span>Image unavailable</span></div>}
       {localProduct ? <WishlistHeartButton product={product} className="card-wishlist-heart" /> : null}
       {product.sourceLabel ? <span className="concierge-source-badge">{product.sourceLabel}</span> : null}
-      <p>{displayBrand(product)}</p>
-      <h2>{product.name}</h2>
-      <strong>{formatMoney(product.price, product.currency)}</strong>
-      {loading && <span className="concierge-product-state">Preparing preview</span>}
+      <p>{visibleBrand}</p>
+      <h2><a href={detailHref} target={detailIsExternal ? '_blank' : undefined} rel={detailIsExternal ? 'noreferrer' : undefined} onClick={() => recordEvent(detailIsExternal ? 'shop_click' : 'product_click', { productId: product.id })}>{product.name}</a></h2>
+      <strong>{hasVerifiedPrice ? formatMoney(product.price, product.currency) : 'Price unavailable'}</strong>
+      {!onlineProduct && loading && <span className="concierge-product-state">Preparing preview</span>}
       {hasUsableTryOn && <button className="concierge-preview-action" type="button" onClick={() => onFullscreen({ src: tryOn.imageUrl, alt: `AI try-on for ${product.name}`, title: product.name })}>View preview</button>}
-      {tryOn?.imageUrl && !hasUsableTryOn && <span className="concierge-product-state">Preview unavailable</span>}
-      {error && <span className="concierge-product-error">{error}</span>}
-      {!product.searchLink && <button className="concierge-preview-action" type="button" disabled={loading} onClick={onTryOn}>{tryOn?.imageUrl ? 'Generate Again' : 'Generate Try-On'}</button>}
-      <a className="concierge-shop-action" href={shopHref} target={externalShop ? '_blank' : undefined} rel={externalShop ? 'noreferrer' : undefined} onClick={() => recordEvent(externalShop ? 'shop_click' : 'product_click', { productId: product.id })}>{product.searchLink ? 'Open search' : 'Shop the suggestion'}</a>
+      {!onlineProduct && tryOn?.imageUrl && !hasUsableTryOn && <span className="concierge-product-state">Preview unavailable</span>}
+      {!onlineProduct && error && <span className="concierge-product-error">{error}</span>}
+      {canTryOn ? <button className="concierge-preview-action" type="button" disabled={loading} onClick={onTryOn}>{tryOn?.imageUrl ? 'Generate Again' : 'Generate Try-On'}</button> : null}
+      {!onlineProduct && !product.searchLink && !hasProductImage ? <span className="concierge-product-state">Try-on needs a product image</span> : null}
+      <a className="concierge-shop-action" href={shopHref} target={externalShop ? '_blank' : undefined} rel={externalShop ? 'noreferrer' : undefined} onClick={() => recordEvent(externalShop ? 'shop_click' : 'product_click', { productId: product.id })}>{product.searchLink ? 'Search Amazon' : externalShop ? 'View on Amazon' : 'View product'}</a>
     </article>
   );
 }

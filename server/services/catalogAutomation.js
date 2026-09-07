@@ -1,3 +1,5 @@
+import { accessoryIdentityPattern } from '../utils/accessoryTaxonomy.js';
+
 const DEFAULT_QUANTITY = 10;
 const MAX_QUANTITY = 12;
 
@@ -30,10 +32,10 @@ const CATEGORY_INTENTS = [
   ['sleepwear', /\b(night(?:y|ie|wear|gown|suit|dress)|sleepwear|pajamas?|pyjamas?|loungewear|robes?)\b/i],
   ['dresses', /\b(dress(?:es)?|gowns?|bodycon|maxi|midi|mini\s+dress|a-line\s+dress|wrap\s+dress)\b/i],
   ['skirts', /\b(skirts?|skorts?)\b/i],
-  ['watches', /\b(watches?|smart\s*watches?|smartwatches?|chronographs?)\b/i],
+  ['watches', /\b(watch(?:es)?|smart\s*watch(?:es)?|smartwatch(?:es)?|chronographs?)\b/i],
   ['shoes', /\b(shoes?|sneakers?|boots?|loafers?|sandals?|slippers?|heels?|pumps?|flats?|footwear|trainers?)\b/i],
   ['bags', /\b(wallets?|purses?|backpacks?|handbags?|totes?|sling\s+bags?|crossbody|duffels?|clutches?)\b/i],
-  ['accessories', /\b(belts?|caps?|hats?|scarves?|ties?|jewellery|jewelry|necklaces?|bracelets?|earrings?|accessor(?:y|ies))\b/i],
+  ['accessories', accessoryIdentityPattern],
   ['jeans', /\b(jeans?|denim\s*(?:jeans|pants|trousers)?)\b/i],
   ['shorts', /\b(shorts?|bermudas?)\b/i],
   ['pants', /\b(pants?|trousers?|joggers?|leggings?|chinos?|cargo\s+pants?|track\s+pants?|bottomwear)\b/i],
