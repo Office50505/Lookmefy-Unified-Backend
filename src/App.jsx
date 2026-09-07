@@ -133,6 +133,10 @@ function imageFromFile(file) {
   });
 }
 
+function preventDefaultIfCancelable(event) {
+  if (event?.cancelable) event.preventDefault();
+}
+
 function canvasToBlob(canvas, quality) {
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
@@ -301,7 +305,7 @@ function ZoomableImage({ src, alt, className = '', imageClassName = '', zoom = 1
 
   const handleWheel = (event) => {
     if (disableZoom || zoom <= 1 || Math.abs(event.deltaY) < 2) return;
-    event.preventDefault();
+    preventDefaultIfCancelable(event);
     moveOrigin(event);
     setZooming(true);
     window.clearTimeout(wheelZoomTimeoutRef.current);
@@ -9473,9 +9477,7 @@ function OnboardingOverview({ user, onComplete, onClose, persist = true }) {
     const previousBodyHeight = document.body.style.height;
     const previousBodyOverscroll = document.body.style.overscrollBehavior;
     const previousBodyTouchAction = document.body.style.touchAction;
-    const preventTourScroll = (event) => {
-      event.preventDefault();
-    };
+    const preventTourScroll = preventDefaultIfCancelable;
     const holdTourScroll = () => {
       if (window.scrollX !== scrollX || window.scrollY !== scrollY) {
         window.scrollTo(scrollX, scrollY);
