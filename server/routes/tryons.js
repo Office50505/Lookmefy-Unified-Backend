@@ -357,7 +357,8 @@ function prunaVideoTrySync() {
   return ['1', 'true', 'yes', 'on'].includes(value);
 }
 
-function tryOnModelForProduct() {
+function tryOnModelForProduct(product = {}) {
+  if (shouldUseFalImageEditForProduct(product)) return imageModel();
   return usePrunaProvider() ? prunaTryOnModel() : 'fitroom/tryon-v2';
 }
 
@@ -1797,7 +1798,7 @@ async function isolateGeneratedImage(user, image, timer) {
 async function generateProductTryOnImage({ user, product, tryOnModel, timer }) {
   const selectedModel = tryOnModel || tryOnModelForProduct(product);
   timer?.mark('image generator selected', { tryOnModel: selectedModel });
-  if (!tryOnModel && shouldUseFalImageEditForProduct(product)) {
+  if (shouldUseFalImageEditForProduct(product)) {
     timer?.mark('fal image edit forced for garment', { promptKey: promptKeyForProduct(product, 'full_outfit') });
     return callFalImageEdit({ user, product, timer });
   }

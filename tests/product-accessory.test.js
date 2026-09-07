@@ -66,10 +66,12 @@ test('saree products use saree-specific prompt and FAL image-edit routing', () =
   const product = { name: 'Kanjivaram silk saree', category: 'sarees', garmentPlacement: 'full-body' };
   const prompt = promptForProduct(product);
   assert.equal(prompt.key, 'saree');
+  assert.match(prompt.prompt, /Reference image 1 is the person image\. Reference image 2 is the garment reference image\./);
   assert.match(prompt.prompt, /complete traditional outfit/i);
   assert.match(prompt.prompt, /blouse\/choli/i);
   assert.match(prompt.prompt, /waist pleats/i);
   assert.match(prompt.prompt, /full lower-body drape/i);
+  assert.match(prompt.prompt, /Replacing the lower-body clothing is mandatory/i);
   assert.match(prompt.prompt, /Jeans, trousers, pants/i);
   assert.equal(fitRoomClothTypeForProduct(product), 'full_set');
   assert.equal(shouldUseFalImageEditForProduct(product), true);
@@ -80,5 +82,5 @@ test('saree try-on generation replaces stale cached output and preserves default
   assert.match(source, /const generationModel = hasRequestedModel \? selectedModel : '';/);
   assert.match(source, /const shouldReplaceExisting = forceGenerate \|\| staleSareeTryOn;/);
   assert.match(source, /shouldReplaceExisting\s*\?\s*await replaceGeneratedTryOn/);
-  assert.match(source, /if \(!tryOnModel && shouldUseFalImageEditForProduct\(product\)\)/);
+  assert.match(source, /if \(shouldUseFalImageEditForProduct\(product\)\)/);
 });

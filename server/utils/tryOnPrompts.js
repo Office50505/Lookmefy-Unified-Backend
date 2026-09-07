@@ -71,13 +71,15 @@ Priority:
 
   saree: String.raw`Use the saree from Image 1 as the complete traditional outfit reference and apply it to the person in Image 2.
 
-Treat the saree as a COMPLETE outfit, not as an upper-body cloth, scarf, dupatta, shawl, diagonal overlay, or partial drape. The final result must include the full saree styling: blouse/choli coverage, pallu over the shoulder/torso, waist pleats, and full lower-body drape from waist to feet.
+Treat the saree as a COMPLETE full-body outfit, not as an upper-body cloth, scarf, dupatta, shawl, diagonal overlay, or partial drape. The final result must include the full saree styling: blouse/choli coverage when present in the reference, pallu over the shoulder/torso, waist pleats, and full lower-body drape from waist to feet.
 
-Replace or fully cover the person's existing clothing wherever the saree naturally covers the body. Jeans, trousers, pants, shorts, leggings, skirt waistbands, belt loops, pockets, denim texture, trouser seams, and any existing lower-body garment must NOT remain visible.
+Replacing the lower-body clothing is mandatory. Wrap the saree fabric around the waist and legs as a real worn saree, with visible vertical drape and pleats continuing down the full lower body. Jeans, trousers, pants, shorts, leggings, skirt waistbands, belt loops, pockets, denim texture, trouser seams, pant legs, and any existing lower-body garment must NOT remain visible.
+
+Do not preserve the person's original pants or leggings. The legs must be covered by saree fabric from waist to ankles/feet except where the reference saree naturally exposes feet or footwear below the hem.
 
 Preserve the saree's original design, color, border, embroidery, pattern, fabric texture, shine, pleats, pallu styling, blouse/choli relationship, and traditional drape as accurately as possible.
 
-Do NOT make the saree look like a loose piece of fabric placed over jeans or pants. The output is invalid if the saree appears only as a diagonal cloth/pallu while lower-body jeans, trousers, pockets, waistband, or pant legs are still visible.
+Do NOT make the saree look like a loose piece of fabric placed over jeans or pants. The output is invalid if the saree appears only as a diagonal cloth/pallu or blouse while lower-body jeans, trousers, pockets, waistband, leggings, or pant legs are still visible.
 
 STRICTLY preserve the person from Image 2: same identity, face, hair, skin tone, body shape, pose, hands, feet/footwear, background, lighting, camera angle, framing, and image composition.
 
@@ -87,8 +89,8 @@ Priority:
 
 1. Preserve the person from Image 2 exactly.
 2. Dress the person in the complete saree outfit from Image 1.
-3. Ensure blouse/choli, pallu, waist pleats, and lower-body drape are all present.
-4. Remove or fully cover jeans, pants, trouser waistbands, pockets, and lower-body garment traces.
+3. Ensure pallu, waist pleats, and full lower-body saree drape are all present.
+4. Remove or fully cover jeans, pants, leggings, trouser waistbands, pockets, and lower-body garment traces.
 5. Preserve the exact saree appearance and traditional drape.
 6. Produce a photorealistic, full-body virtual try-on result.`,
 
@@ -294,6 +296,7 @@ function promptForKey(key, product = {}) {
   const descriptor = productBrand ? `${productName} by ${productBrand}` : productName;
 
   return [
+    'Reference image 1 is the person image. Reference image 2 is the garment reference image.',
     `Product context: ${descriptor}.`,
     selected
       .replace(/\bImage 1\b/g, 'the garment reference image')
