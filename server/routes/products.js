@@ -105,17 +105,18 @@ function toBoolean(value) {
 }
 
 function normalizeGarmentPlacement(value, product = {}) {
-  const explicit = String(value || '').trim().toLowerCase();
-  if (explicit === 'accessory' || explicit === 'accessories') return 'accessory';
-  if (explicit === 'full-body' || explicit === 'full_body' || explicit === 'full body' || explicit === 'full' || explicit === 'outfit' || explicit === 'one-piece' || explicit === 'one piece') return 'full-body';
-  if (explicit === 'bottom' || explicit === 'bottomwear' || explicit === 'lower') return 'bottom';
-  if (explicit === 'top' || explicit === 'topwear' || explicit === 'upper') return 'top';
   const text = [
     product.name,
     product.category,
     product.description,
     Array.isArray(product.tags) ? product.tags.join(' ') : product.tags
   ].filter(Boolean).join(' ').toLowerCase();
+  if (/\b(sarees?|saris?|kanjivarams?|kanchipurams?)\b/.test(text)) return 'full-body';
+  const explicit = String(value || '').trim().toLowerCase();
+  if (explicit === 'accessory' || explicit === 'accessories') return 'accessory';
+  if (explicit === 'full-body' || explicit === 'full_body' || explicit === 'full body' || explicit === 'full' || explicit === 'outfit' || explicit === 'one-piece' || explicit === 'one piece') return 'full-body';
+  if (explicit === 'bottom' || explicit === 'bottomwear' || explicit === 'lower') return 'bottom';
+  if (explicit === 'top' || explicit === 'topwear' || explicit === 'upper') return 'top';
   if (/\b(outfits?|sets?|co-?ords?|coordinated|tracksuits?|suits?|jumpsuits?|rompers?|playsuits?|dress(?:es)?|gowns?|sarees?|saris?|lehenga(?:s)?|kurta\s?sets?)\b/.test(text)) return 'full-body';
   if (/\b(pants?|trousers?|jeans?|denim|shorts?|skirts?|leggings?|joggers?|palazzos?|bottoms?|lower)\b/.test(text)) return 'bottom';
   return 'top';

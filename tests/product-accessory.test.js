@@ -35,6 +35,7 @@ test('product fit area accepts full-body garments', () => {
 test('fit-area normalization preserves accessory overrides and garment inference', () => {
   assert.equal(normalizeGarmentPlacement('accessories'), 'accessory');
   assert.equal(normalizeGarmentPlacement('', { name: 'Halter neck midi dress', category: 'dresses' }), 'full-body');
+  assert.equal(normalizeGarmentPlacement('topwear', { name: 'SGF11 Women Kanjivaram Soft Lichi Silk Saree With Blouse Piece', category: 'ethnic wear' }), 'full-body');
   assert.equal(normalizeGarmentPlacement('', { name: 'Wide leg trousers' }), 'bottom');
   assert.equal(normalizeGarmentPlacement('', { name: 'Oxford shirt' }), 'top');
 });
@@ -62,19 +63,30 @@ test('garment targeting maps bottoms and full body garments to the right provide
   assert.equal(fitRoomClothTypeForPromptKey('full_outfit'), 'full_set');
 });
 
-test('saree products use saree-specific prompt and FAL image-edit routing', () => {
+test('saree products use saree-specific prompt and FAL image-edit routing', async () => {
   const product = { name: 'Kanjivaram silk saree', category: 'sarees', garmentPlacement: 'full-body' };
   const officeSari = {
     name: "MIRCHI FASHION Saree for Woman Chiffon Batik Printed | Lightweight Daily Wear Women's Office Sari with Blouse Piece",
     category: 'ethnic wear',
-    garmentPlacement: 'full-body',
+    garmentPlacement: 'top',
     tryOnModel: 'gpt-image-2'
   };
+  const kanjivaram = new Product({
+    name: 'SGF11 Women Kanjivaram Soft Lichi Silk Saree With Blouse Piece',
+    brand: 'SGF11',
+    category: 'ethnic wear',
+    garmentPlacement: 'top',
+    price: 999
+  });
   const prompt = promptForProduct(product);
   assert.equal(prompt.key, 'saree');
   assert.equal(promptKeyForProduct(officeSari), 'saree');
+  assert.equal(kanjivaram.toClient().garmentPlacement, 'full-body');
+  await kanjivaram.validate();
+  assert.equal(kanjivaram.garmentPlacement, 'full-body');
   assert.match(prompt.prompt, /Reference image 1 is the person image\. Reference image 2 is the garment reference image\./);
   assert.match(prompt.prompt, /complete traditional outfit/i);
+  assert.match(prompt.prompt, /catalogue reference is cropped/i);
   assert.match(prompt.prompt, /blouse\/choli/i);
   assert.match(prompt.prompt, /waist pleats/i);
   assert.match(prompt.prompt, /full lower-body drape/i);
@@ -90,6 +102,7 @@ test('saree try-on generation replaces stale cached output and preserves default
   assert.match(source, /const productPromptKey = promptKeyForProduct\(product, 'full_outfit'\);/);
   assert.match(source, /if \(productPromptKey === 'saree'\)/);
   assert.match(source, /const generationModel = isSareeTryOn \? '' : \(hasRequestedModel \? selectedModel : ''\);/);
+  assert.match(source, /catalogue reference is cropped/i);
   assert.match(source, /const shouldReplaceExisting = forceGenerate \|\| staleSareeTryOn;/);
   assert.match(source, /shouldReplaceExisting\s*\?\s*await replaceGeneratedTryOn/);
   assert.match(source, /function isStaleSareeTryOnRecord/);

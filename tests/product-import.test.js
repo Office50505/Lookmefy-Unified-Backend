@@ -114,6 +114,7 @@ test('rejects accessories and invalid gender/category pairs', () => {
 test('classifies garment placement', () => {
   assert.equal(inferPlacement({ category: 'Jeans', name: 'Blue jeans' }), 'bottom');
   assert.equal(inferPlacement({ category: 'Dresses', name: 'Halter neck midi dress' }), 'full-body');
+  assert.equal(inferPlacement({ category: 'ethnic wear', name: 'SGF11 Women Kanjivaram Soft Lichi Silk Saree With Blouse Piece', garmentPlacement: 'top' }), 'full-body');
   assert.equal(inferPlacement({ category: 'T-Shirts', name: 'Crew neck tee' }), 'top');
 });
 

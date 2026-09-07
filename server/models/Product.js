@@ -2,15 +2,17 @@ import mongoose from 'mongoose';
 import { productAvailabilityStatus } from '../utils/productAvailability.js';
 
 const LEGACY_UNRESTRICTED_MODEL = ['v' + 'to', 'unrestricted'].join('-');
+const SAREE_PATTERN = /\b(sarees?|saris?|kanjivarams?|kanchipurams?)\b/i;
 
 function inferGarmentPlacement(product = {}) {
-  if (['top', 'bottom', 'accessory', 'full-body'].includes(product.garmentPlacement)) return product.garmentPlacement;
   const text = [
     product.name,
     product.category,
     product.description,
     Array.isArray(product.tags) ? product.tags.join(' ') : product.tags
   ].filter(Boolean).join(' ').toLowerCase();
+  if (SAREE_PATTERN.test(text)) return 'full-body';
+  if (['top', 'bottom', 'accessory', 'full-body'].includes(product.garmentPlacement)) return product.garmentPlacement;
   if (/\b(outfits?|sets?|co-?ords?|coordinated|tracksuits?|suits?|jumpsuits?|rompers?|playsuits?|dress(?:es)?|gowns?|sarees?|saris?|lehenga(?:s)?|kurta\s?sets?)\b/.test(text)) return 'full-body';
   if (/\b(pants?|trousers?|jeans?|denim|shorts?|skirts?|leggings?|joggers?|palazzos?|bottoms?|lower)\b/.test(text)) return 'bottom';
   return 'top';
@@ -115,6 +117,7 @@ productSchema.index(
 );
 
 productSchema.pre('validate', function synchronizeAvailability() {
+  this.garmentPlacement = inferGarmentPlacement(this);
   const status = productAvailabilityStatus(this);
   this.availabilityStatus = status;
   this.isActive = status === 'available';

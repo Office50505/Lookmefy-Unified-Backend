@@ -1673,9 +1673,13 @@ function customTryOnToClient(tryOn) {
 }
 
 function isStaleSareeTryOnRecord(tryOn, product) {
+  if (!tryOn) return false;
+  const prompt = String(tryOn?.prompt || '');
   return product
     && promptKeyForProduct(product, 'full_outfit') === 'saree'
-    && (tryOn?.promptKey !== 'saree' || tryOn?.provider !== 'fal');
+    && (tryOn?.promptKey !== 'saree'
+      || tryOn?.provider !== 'fal'
+      || !/catalogue reference is cropped/i.test(prompt));
 }
 
 function customHistoryItem(tryOn) {
@@ -2155,7 +2159,7 @@ async function runProductTryOnJob({ userId, productId, requestedModel = '', forc
       existingModel: existing?.model || ''
     });
 
-    const staleSareeTryOn = isSareeTryOn && (existing?.promptKey !== 'saree' || existing?.provider !== 'fal');
+    const staleSareeTryOn = Boolean(existing) && isSareeTryOn && isStaleSareeTryOnRecord(existing, product);
     if (existing && !forceGenerate && !staleSareeTryOn) {
       timer.end({ reused: true });
       await recordGenerationMetric({ user: user._id, product: product._id, type: 'product_image', status: 'reused', provider: existing.provider, model: existing.model, durationMs: Date.now() - analyticsStartedAt });
