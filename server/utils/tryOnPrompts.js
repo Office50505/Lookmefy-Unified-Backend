@@ -252,7 +252,7 @@ function promptKeyForProduct(product = {}, fallback = 'upper') {
   if (product.garmentPlacement === 'full-body') return 'full_outfit';
   if (/\b(outfits?|sets?|co-?ords?|coordinated|tracksuits?|suits?|jumpsuits?|rompers?|dress(?:es)?|gowns?|sarees?|lehenga|kurta\s?sets?)\b/i.test(text)) return 'full_outfit';
   if (/\b(pants?|trousers?|jeans?|denim|shorts?|skirts?|leggings?|joggers?|palazzos?|bottoms?|lower)\b/i.test(text)) return 'lower';
-  if (/\b(tops?|shirts?|t-?shirts?|tees?|blouses?|sweaters?|sweatshirts?|hoodies?|jackets?|coats?|blazers?|kurtas?|upper)\b/i.test(text)) return 'upper';
+  if (/\b(tops?|shirts?|t-?shirts?|tees?|blouses?|sweaters?|sweatshirts?|hoodies?|jackets?|coats?|blazers?|kurtas?|bras?|bralettes?|sports?\s+bras?|lingerie|innerwear|camisoles?|bustiers?|corsets?|upper)\b/i.test(text)) return 'upper';
   if (/\b(bags?|handbags?|purses?|totes?|backpacks?|wallets?|belts?|scarves?|jewelry|jewellery|necklaces?|rings?|earrings?|bracelets?)\b/i.test(text)) return 'accessory';
   if (product.garmentPlacement === 'bottom') return 'lower';
   return fallback;

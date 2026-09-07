@@ -6,6 +6,7 @@ const storefrontSettingSchema = new mongoose.Schema(
   {
     key: { type: String, default: STOREFRONT_SETTING_KEY, unique: true, index: true },
     demoEcommerceMode: { type: Boolean, default: false },
+    razorpayMode: { type: String, enum: ['test', 'live'], default: 'test', index: true },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'AdminUser' }
   },
   { timestamps: true }
@@ -14,6 +15,7 @@ const storefrontSettingSchema = new mongoose.Schema(
 storefrontSettingSchema.methods.toClient = function toClient() {
   return {
     demoEcommerceMode: Boolean(this.demoEcommerceMode),
+    razorpayMode: this.razorpayMode || 'test',
     updatedAt: this.updatedAt || null
   };
 };
@@ -21,7 +23,7 @@ storefrontSettingSchema.methods.toClient = function toClient() {
 async function getStorefrontSetting() {
   return StorefrontSetting.findOneAndUpdate(
     { key: STOREFRONT_SETTING_KEY },
-    { $setOnInsert: { key: STOREFRONT_SETTING_KEY, demoEcommerceMode: false } },
+    { $setOnInsert: { key: STOREFRONT_SETTING_KEY, demoEcommerceMode: false, razorpayMode: 'test' } },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );
 }

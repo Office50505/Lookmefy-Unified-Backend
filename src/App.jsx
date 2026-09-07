@@ -6722,13 +6722,12 @@ function TokenPage({ user, setUser, mode = 'overview' }) {
             settled = true;
             return true;
           };
-          const checkout = new Razorpay({
+          const checkoutOptions = {
             key: data.razorpay.key,
             amount: data.razorpay.amount,
             currency: data.razorpay.currency || 'INR',
             name: data.razorpay.name || 'Lookmefy',
             description: data.razorpay.description || pack.label,
-            order_id: data.razorpay.orderId,
             prefill: data.razorpay.prefill || {},
             notes: data.razorpay.notes || {},
             theme: { color: '#1f1b19' },
@@ -6741,15 +6740,21 @@ function TokenPage({ user, setUser, mode = 'overview' }) {
                   body: JSON.stringify({
                     merchantOrderId: data.order?.merchantOrderId,
                     razorpay_order_id: response.razorpay_order_id,
+                    razorpay_subscription_id: response.razorpay_subscription_id,
                     razorpay_payment_id: response.razorpay_payment_id,
                     razorpay_signature: response.razorpay_signature
                   })
                 });
                 if (verified.user) setUser(verified.user);
-                setCreditedOrder({ order: verified.order, user: verified.user || user });
                 checkoutIdempotencyRef.current.delete(pack.id);
-                setMessage('');
-                announce(`${Number(verified.order?.tokens || 0)} credits credited.`);
+                if (verified.pendingSubscriptionCredit) {
+                  setMessage(verified.message || 'Mandate verified. Credits will be added after payment confirmation.');
+                  announce(verified.message || 'Mandate verified.');
+                } else {
+                  setCreditedOrder({ order: verified.order, user: verified.user || user });
+                  setMessage('');
+                  announce(`${Number(verified.order?.tokens || 0)} credits credited.`);
+                }
                 if (finish()) resolve();
               } catch (error) {
                 if (finish()) reject(error);
@@ -6765,7 +6770,10 @@ function TokenPage({ user, setUser, mode = 'overview' }) {
                 resolve();
               }
             }
-          });
+          };
+          if (data.razorpay.subscriptionId) checkoutOptions.subscription_id = data.razorpay.subscriptionId;
+          else checkoutOptions.order_id = data.razorpay.orderId;
+          const checkout = new Razorpay(checkoutOptions);
           checkout.on('payment.failed', (response) => {
             if (!finish()) return;
             setMessage(razorpayFailureMessage(response));

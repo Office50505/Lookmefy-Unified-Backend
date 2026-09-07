@@ -7,6 +7,7 @@ import CustomTryOn from '../models/CustomTryOn.js';
 import TokenOrder from '../models/TokenOrder.js';
 import TryOn from '../models/TryOn.js';
 import User from '../models/User.js';
+import { getStorefrontSetting } from '../models/StorefrontSetting.js';
 import { requireUser } from './auth.js';
 import { createRateLimiter, rateLimitKeys } from '../utils/rateLimit.js';
 import { creditUser } from '../services/creditLedger.js';
@@ -227,13 +228,47 @@ function readableRazorpayError(value, fallback = 'Razorpay request failed') {
   return String(value);
 }
 
-function requireRazorpayConfig() {
+function normalizeRazorpayMode(value = '') {
+  return String(value || '').trim().toLowerCase() === 'live' ? 'live' : 'test';
+}
+
+function razorpayEnvName(mode, suffix) {
+  return `RAZORPAY_${normalizeRazorpayMode(mode).toUpperCase()}_${suffix}`;
+}
+
+function razorpayCredentialsForMode(mode = process.env.RAZORPAY_MODE) {
+  const normalized = normalizeRazorpayMode(mode);
+  return {
+    mode: normalized,
+    keyId: String(process.env[razorpayEnvName(normalized, 'KEY_ID')] || process.env.RAZORPAY_KEY_ID || '').trim(),
+    keySecret: String(process.env[razorpayEnvName(normalized, 'KEY_SECRET')] || process.env.RAZORPAY_KEY_SECRET || '').trim(),
+    webhookSecret: String(process.env[razorpayEnvName(normalized, 'WEBHOOK_SECRET')] || process.env.RAZORPAY_WEBHOOK_SECRET || '').trim()
+  };
+}
+
+async function activeRazorpayMode() {
+  if (mongoose.connection.readyState !== 1) return normalizeRazorpayMode(process.env.RAZORPAY_MODE);
+  try {
+    const setting = await getStorefrontSetting();
+    return normalizeRazorpayMode(setting?.razorpayMode || process.env.RAZORPAY_MODE);
+  } catch {
+    return normalizeRazorpayMode(process.env.RAZORPAY_MODE);
+  }
+}
+
+async function activeRazorpayCredentials() {
+  return razorpayCredentialsForMode(await activeRazorpayMode());
+}
+
+function requireRazorpayConfig(credentials = razorpayCredentialsForMode()) {
   if (!razorpayEnabled()) {
     const error = new Error('Razorpay payments are temporarily unavailable');
     error.statusCode = 503;
     throw error;
   }
-  const missing = ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET'].filter((key) => !process.env[key]);
+  const missing = [];
+  if (!credentials.keyId) missing.push(`${razorpayEnvName(credentials.mode, 'KEY_ID')} or RAZORPAY_KEY_ID`);
+  if (!credentials.keySecret) missing.push(`${razorpayEnvName(credentials.mode, 'KEY_SECRET')} or RAZORPAY_KEY_SECRET`);
   if (missing.length) {
     const error = new Error(`${missing.join(', ')} missing on the server`);
     error.statusCode = 503;
@@ -245,14 +280,14 @@ function razorpayBaseUrl() {
   return String(process.env.RAZORPAY_BASE_URL || 'https://api.razorpay.com/v1').replace(/\/+$/, '');
 }
 
-async function razorpayFetch(path, options = {}) {
-  requireRazorpayConfig();
-  const credentials = Buffer.from(`${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`).toString('base64');
+async function razorpayFetch(path, options = {}, credentials = razorpayCredentialsForMode()) {
+  requireRazorpayConfig(credentials);
+  const authorization = Buffer.from(`${credentials.keyId}:${credentials.keySecret}`).toString('base64');
   const response = await fetch(`${razorpayBaseUrl()}${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Basic ${credentials}`,
+      Authorization: `Basic ${authorization}`,
       ...options.headers
     }
   });
@@ -458,10 +493,11 @@ function createRazorpayReceipt(userId) {
   return `FLRZP_${Date.now()}_${userPart}_${random}`.slice(0, 40);
 }
 
-function razorpayCheckoutPayload({ req, user, order, plan }) {
-  return {
-    key: process.env.RAZORPAY_KEY_ID,
+function razorpayCheckoutPayload({ req, user, order, plan, credentials = razorpayCredentialsForMode(order.razorpayMode) }) {
+  const payload = {
+    key: credentials.keyId,
     orderId: order.razorpayOrderId,
+    subscriptionId: order.merchantSubscriptionId || order.razorpaySubscriptionId || '',
     amount: order.dueTodayAmount || order.amount,
     currency: order.currency || 'INR',
     name: 'Lookmefy',
@@ -479,10 +515,15 @@ function razorpayCheckoutPayload({ req, user, order, plan }) {
     statusPath: `/payments/orders/${encodeURIComponent(order.merchantOrderId)}/status`,
     returnUrl: `${clientOrigin(req)}/tokens?merchantOrderId=${encodeURIComponent(order.merchantOrderId)}&plan=${encodeURIComponent(plan.id)}`
   };
+  if (plan.orderType === 'subscription') delete payload.orderId;
+  else delete payload.subscriptionId;
+  return payload;
 }
 
 async function createRazorpayPayment({ req, user, plan = SUBSCRIPTION_PLAN }) {
-  requireRazorpayConfig();
+  if (plan.orderType === 'subscription') return createRazorpaySubscriptionPayment({ req, user, plan });
+  const credentials = await activeRazorpayCredentials();
+  requireRazorpayConfig(credentials);
   const idempotencyKey = checkoutIdempotencyKey(req);
   if (idempotencyKey) {
     const existingOrder = await TokenOrder.findOne({ user: user._id, idempotencyKey });
@@ -501,6 +542,7 @@ async function createRazorpayPayment({ req, user, plan = SUBSCRIPTION_PLAN }) {
     user: user._id,
     merchantOrderId,
     provider: 'razorpay',
+    razorpayMode: credentials.mode,
     planId: plan.id,
     planName: plan.name,
     orderType: plan.orderType,
@@ -546,12 +588,113 @@ async function createRazorpayPayment({ req, user, plan = SUBSCRIPTION_PLAN }) {
           brand: 'Lookmefy'
         }
       })
-    });
+    }, credentials);
 
     order.status = 'pending';
     order.provider = 'razorpay';
     order.providerState = String(data.status || 'created').toUpperCase();
     order.razorpayOrderId = data.id;
+    order.providerResponse = data;
+    await order.save();
+    return order;
+  } catch (error) {
+    order.status = 'failed';
+    order.provider = 'razorpay';
+    order.providerState = 'CREATE_FAILED';
+    order.providerResponse = { message: readableRazorpayError(error) };
+    await order.save();
+    throw error;
+  }
+}
+
+async function createRazorpaySubscriptionPayment({ req, user, plan = SUBSCRIPTION_PLAN }) {
+  if (!razorpaySubscriptionsEnabled()) {
+    const error = new Error('Razorpay subscription mandates are temporarily unavailable');
+    error.statusCode = 503;
+    throw error;
+  }
+  const credentials = await activeRazorpayCredentials();
+  requireRazorpayConfig(credentials);
+  const planId = razorpayMonthlyPlanIdForMode(credentials.mode);
+  if (!planId) {
+    const error = new Error(`${razorpayEnvName(credentials.mode, 'MONTHLY_PLAN_ID')} missing on the server`);
+    error.statusCode = 503;
+    throw error;
+  }
+  const idempotencyKey = checkoutIdempotencyKey(req);
+  if (idempotencyKey) {
+    const existingOrder = await TokenOrder.findOne({ user: user._id, idempotencyKey });
+    if (existingOrder) {
+      if (existingOrder.status === 'failed') {
+        const error = new Error('Previous checkout attempt failed. Please start checkout again.');
+        error.statusCode = 409;
+        throw error;
+      }
+      return existingOrder;
+    }
+  }
+
+  const merchantOrderId = createRazorpayReceipt(user._id);
+  const orderPayload = {
+    user: user._id,
+    merchantOrderId,
+    provider: 'razorpay',
+    razorpayMode: credentials.mode,
+    planId: plan.id,
+    planName: plan.name,
+    orderType: plan.orderType,
+    purchaseType: 'subscription_setup',
+    amount: recurringAmountForPlan(plan) || amountForPlan(plan),
+    dueTodayAmount: amountForPlan(plan),
+    recurringAmount: recurringAmountForPlan(plan),
+    billingFrequency: billingFrequencyForPlan(plan),
+    currency: plan.currency || 'INR',
+    tokens: plan.tokens,
+    redirectUrl: '',
+    idempotencyKey
+  };
+  let order;
+  try {
+    order = await TokenOrder.create(orderPayload);
+  } catch (error) {
+    if (error.code === 11000 && idempotencyKey) {
+      const existingOrder = await TokenOrder.findOne({ user: user._id, idempotencyKey });
+      if (existingOrder) {
+        if (existingOrder.status === 'failed') {
+          const conflict = new Error('Previous checkout attempt failed. Please start checkout again.');
+          conflict.statusCode = 409;
+          throw conflict;
+        }
+        return existingOrder;
+      }
+    }
+    throw error;
+  }
+
+  try {
+    const data = await razorpayFetch('/subscriptions', {
+      method: 'POST',
+      body: JSON.stringify({
+        plan_id: planId,
+        total_count: razorpaySubscriptionTotalCount(),
+        quantity: 1,
+        customer_notify: 0,
+        notes: {
+          userId: user._id.toString(),
+          merchantOrderId,
+          planId: plan.id,
+          tokens: String(plan.tokens),
+          orderType: plan.orderType,
+          brand: 'Lookmefy'
+        }
+      })
+    }, credentials);
+
+    order.status = 'pending';
+    order.provider = 'razorpay';
+    order.providerState = String(data.status || 'created').toUpperCase();
+    order.merchantSubscriptionId = data.id;
+    order.razorpaySubscriptionId = data.id;
     order.providerResponse = data;
     await order.save();
     return order;
@@ -571,11 +714,313 @@ function verifyRazorpaySignature({ orderId, paymentId, signature, secret = proce
   return safeCompareHex(generated, signature);
 }
 
-async function completeRazorpayPayment({ user, merchantOrderId, razorpayOrderId, razorpayPaymentId, razorpaySignature }) {
-  requireRazorpayConfig();
+function verifyRazorpaySubscriptionSignature({ subscriptionId, paymentId, signature, secret = process.env.RAZORPAY_KEY_SECRET }) {
+  if (!subscriptionId || !paymentId || !signature || !secret) return false;
+  const generated = createHmac('sha256', secret).update(`${paymentId}|${subscriptionId}`).digest('hex');
+  return safeCompareHex(generated, signature);
+}
+
+function verifyRazorpayWebhookSignature({ rawBody, signature, secret }) {
+  if (!rawBody || !signature || !secret) return false;
+  const payload = Buffer.isBuffer(rawBody) ? rawBody : Buffer.from(String(rawBody || ''));
+  const generated = createHmac('sha256', secret).update(payload).digest('hex');
+  return safeCompareHex(generated, signature);
+}
+
+function razorpaySubscriptionsEnabled() {
+  return ['1', 'true', 'yes', 'on'].includes(String(process.env.RAZORPAY_SUBSCRIPTIONS_ENABLED || '').trim().toLowerCase());
+}
+
+function razorpayMonthlyPlanIdForMode(mode = process.env.RAZORPAY_MODE) {
+  const normalized = normalizeRazorpayMode(mode);
+  return String(
+    process.env[razorpayEnvName(normalized, 'MONTHLY_PLAN_ID')]
+    || process.env.RAZORPAY_MONTHLY_PLAN_ID
+    || process.env.RAZORPAY_SUBSCRIPTION_PLAN_ID
+    || ''
+  ).trim();
+}
+
+function razorpaySubscriptionTotalCount() {
+  const value = Number(process.env.RAZORPAY_SUBSCRIPTION_TOTAL_COUNT || 120);
+  return Number.isFinite(value) && value > 0 ? Math.round(value) : 120;
+}
+
+function razorpayTimestamp(value) {
+  const number = Number(value || 0);
+  return Number.isFinite(number) && number > 0 ? new Date(number * 1000) : null;
+}
+
+function subscriptionStatusForRazorpay(value = '') {
+  const status = String(value || '').trim().toLowerCase();
+  if (['active', 'authenticated'].includes(status)) return status;
+  if (['cancelled', 'completed', 'paused', 'halted'].includes(status)) return status;
+  if (['created', 'pending'].includes(status)) return 'pending';
+  return status || 'pending';
+}
+
+function capturedPayment(payment = {}) {
+  return ['captured', 'authorized'].includes(String(payment.status || '').toLowerCase());
+}
+
+function paymentCoversSubscriptionAmount(payment = {}, order = {}) {
+  const paidAmount = Number(payment.amount || 0);
+  const requiredAmount = Number(order.recurringAmount || SUBSCRIPTION_PLAN.mandate?.recurringAmount || 0);
+  return paidAmount > 0 && requiredAmount > 0 && paidAmount >= requiredAmount;
+}
+
+async function updateRazorpaySubscriptionSnapshot({ order, subscription = {}, payment = {}, providerResponse = {} }) {
+  if (!order?.user) return null;
+  const now = new Date();
+  const periodStart = razorpayTimestamp(subscription.current_start) || now;
+  const periodEnd = razorpayTimestamp(subscription.current_end) || addMonths(periodStart, 1);
+  const status = subscriptionStatusForRazorpay(subscription.status || order.providerState);
+  return User.findByIdAndUpdate(
+    order.user,
+    {
+      $set: {
+        subscription: {
+          planId: order.planId || SUBSCRIPTION_PLAN.id,
+          status,
+          provider: 'razorpay',
+          merchantSubscriptionId: order.merchantSubscriptionId || order.razorpaySubscriptionId || subscription.id || '',
+          razorpayMode: order.razorpayMode || 'test',
+          amount: Number(order.recurringAmount || SUBSCRIPTION_PLAN.mandate?.recurringAmount || 0),
+          currency: order.currency || SUBSCRIPTION_PLAN.currency,
+          tokensPerMonth: Number(order.tokens || SUBSCRIPTION_PLAN.tokens || 0),
+          currentPeriodStart: periodStart,
+          currentPeriodEnd: periodEnd,
+          nextBillingAt: razorpayTimestamp(subscription.charge_at) || periodEnd,
+          willAutoRenew: !['cancelled', 'completed', 'halted'].includes(status),
+          billingRetry: status === 'halted',
+          lastOrderId: payment.id || order.merchantOrderId
+        }
+      }
+    },
+    { new: true }
+  );
+}
+
+async function grantRazorpaySubscriptionCycleTokens({ order, subscription = {}, payment = {}, invoice = {}, providerResponse = {} }) {
+  const subscriptionId = order.merchantSubscriptionId || order.razorpaySubscriptionId || subscription.id || payment.subscription_id || invoice.subscription_id || '';
+  const paymentId = payment.id || '';
+  const invoiceId = invoice.id || payment.invoice_id || '';
+  const sourceId = invoiceId || paymentId || subscriptionId;
+  if (!subscriptionId || !sourceId) {
+    const error = new Error('Razorpay subscription payment reference is missing');
+    error.statusCode = 400;
+    throw error;
+  }
+  const fulfillmentKey = `razorpay_subscription:${subscriptionId}:${sourceId}`;
+  const existingEvent = await CreditEvent.findOne({ fulfillmentKey }).lean();
+  if (existingEvent) return { user: await User.findById(order.user), order, alreadyCredited: true };
+
+  const now = new Date();
+  const periodStart = razorpayTimestamp(invoice.period_start || subscription.current_start) || now;
+  const periodEnd = razorpayTimestamp(invoice.period_end || subscription.current_end) || addMonths(periodStart, 1);
+  const cycleHash = createHash('sha256').update(`${subscriptionId}:${sourceId}`).digest('hex').slice(0, 18);
+  const merchantOrderId = `RZPSUB_${cycleHash}`;
+  let cycleOrder = await TokenOrder.findOne({ merchantOrderId });
+  if (!cycleOrder) {
+    cycleOrder = await TokenOrder.create({
+      user: order.user,
+      merchantOrderId,
+      provider: 'razorpay',
+      merchantSubscriptionId: subscriptionId,
+      razorpaySubscriptionId: subscriptionId,
+      razorpayInvoiceId: invoiceId,
+      razorpayPaymentId: paymentId,
+      razorpayMode: order.razorpayMode || 'test',
+      planId: order.planId || SUBSCRIPTION_PLAN.id,
+      planName: order.planName || SUBSCRIPTION_PLAN.name,
+      orderType: order.creditedAt ? 'subscription_renewal' : 'subscription',
+      purchaseType: order.creditedAt ? 'subscription_renewal' : 'subscription_setup',
+      amount: Number(order.recurringAmount || SUBSCRIPTION_PLAN.mandate?.recurringAmount || 0),
+      dueTodayAmount: Number(payment.amount || order.recurringAmount || SUBSCRIPTION_PLAN.mandate?.recurringAmount || 0),
+      recurringAmount: Number(order.recurringAmount || SUBSCRIPTION_PLAN.mandate?.recurringAmount || 0),
+      billingFrequency: order.billingFrequency || SUBSCRIPTION_PLAN.mandate?.frequency || 'Monthly',
+      currency: order.currency || SUBSCRIPTION_PLAN.currency,
+      tokens: Number(order.tokens || SUBSCRIPTION_PLAN.tokens || 0),
+      parentOrderId: order.merchantOrderId,
+      status: 'completed',
+      providerState: 'COMPLETED',
+      creditedAt: now,
+      currentPeriodStart: periodStart,
+      currentPeriodEnd: periodEnd,
+      providerResponse
+    });
+  }
+
+  await TokenOrder.updateOne(
+    { _id: order._id },
+    {
+      $set: {
+        status: 'completed',
+        providerState: 'COMPLETED',
+        razorpayPaymentId: paymentId || order.razorpayPaymentId,
+        razorpayInvoiceId: invoiceId || order.razorpayInvoiceId,
+        creditedAt: order.creditedAt || now,
+        currentPeriodStart: periodStart,
+        currentPeriodEnd: periodEnd,
+        providerResponse
+      }
+    }
+  );
+
+  const user = await creditUser({
+    userId: order.user,
+    action: 'subscription_tokens_purchased',
+    tokens: Number(order.tokens || SUBSCRIPTION_PLAN.tokens || 0),
+    source: 'razorpay',
+    sourceId,
+    fulfillmentKey,
+    userSet: {
+      subscription: {
+        planId: order.planId || SUBSCRIPTION_PLAN.id,
+        status: 'active',
+        provider: 'razorpay',
+        merchantSubscriptionId: subscriptionId,
+        razorpayMode: order.razorpayMode || 'test',
+        amount: Number(order.recurringAmount || SUBSCRIPTION_PLAN.mandate?.recurringAmount || 0),
+        currency: order.currency || SUBSCRIPTION_PLAN.currency,
+        tokensPerMonth: Number(order.tokens || SUBSCRIPTION_PLAN.tokens || 0),
+        currentPeriodStart: periodStart,
+        currentPeriodEnd: periodEnd,
+        nextBillingAt: periodEnd,
+        willAutoRenew: true,
+        billingRetry: false,
+        lastOrderId: cycleOrder.merchantOrderId
+      }
+    },
+    metadata: {
+      orderId: cycleOrder._id,
+      merchantOrderId: cycleOrder.merchantOrderId,
+      parentOrderId: order.merchantOrderId,
+      planId: order.planId,
+      orderType: 'subscription',
+      providerState: 'COMPLETED',
+      providerResponse
+    }
+  });
+  return { user, order: cycleOrder, alreadyCredited: false };
+}
+
+function razorpayWebhookCredentialCandidates() {
+  const byMode = ['test', 'live'].map((mode) => razorpayCredentialsForMode(mode));
+  const legacy = {
+    mode: normalizeRazorpayMode(process.env.RAZORPAY_MODE),
+    keyId: String(process.env.RAZORPAY_KEY_ID || '').trim(),
+    keySecret: String(process.env.RAZORPAY_KEY_SECRET || '').trim(),
+    webhookSecret: String(process.env.RAZORPAY_WEBHOOK_SECRET || '').trim()
+  };
+  const seen = new Set();
+  return [...byMode, legacy].filter((candidate) => {
+    if (!candidate.webhookSecret) return false;
+    const key = `${candidate.mode}:${candidate.webhookSecret}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function verifiedRazorpayWebhookCredentials(req) {
+  const signature = String(req.get?.('x-razorpay-signature') || '').trim();
+  const rawBody = req.rawBody || Buffer.from(JSON.stringify(req.body || {}));
+  const candidate = razorpayWebhookCredentialCandidates()
+    .find((credentials) => verifyRazorpayWebhookSignature({ rawBody, signature, secret: credentials.webhookSecret }));
+  if (!candidate) {
+    const error = new Error('Razorpay webhook signature verification failed');
+    error.statusCode = 400;
+    throw error;
+  }
+  return candidate;
+}
+
+function webhookEntity(payload = {}, name = '') {
+  return payload.payload?.[name]?.entity || payload[name] || null;
+}
+
+function webhookSubscriptionId(payload = {}) {
+  const subscription = webhookEntity(payload, 'subscription');
+  const payment = webhookEntity(payload, 'payment');
+  const invoice = webhookEntity(payload, 'invoice');
+  return subscription?.id || payment?.subscription_id || invoice?.subscription_id || '';
+}
+
+function paymentFromInvoice(invoice = {}) {
+  if (!invoice) return null;
+  return {
+    id: invoice.payment_id || '',
+    subscription_id: invoice.subscription_id || '',
+    invoice_id: invoice.id || '',
+    amount: Number(invoice.amount_paid || invoice.amount || 0),
+    status: Number(invoice.amount_paid || 0) > 0 || String(invoice.status || '').toLowerCase() === 'paid' ? 'captured' : invoice.status
+  };
+}
+
+async function processRazorpayWebhook(payload = {}, credentials = razorpayCredentialsForMode()) {
+  const event = String(payload.event || '').trim().toLowerCase();
+  const subscriptionId = webhookSubscriptionId(payload);
+  if (!subscriptionId) return { ignored: true, reason: 'missing_subscription_id' };
+  const order = await TokenOrder.findOne({
+    provider: 'razorpay',
+    orderType: 'subscription',
+    $or: [
+      { merchantSubscriptionId: subscriptionId },
+      { razorpaySubscriptionId: subscriptionId }
+    ]
+  });
+  if (!order) return { ignored: true, reason: 'subscription_order_not_found' };
+
+  const subscription = webhookEntity(payload, 'subscription') || { id: subscriptionId };
+  const invoice = webhookEntity(payload, 'invoice') || null;
+  const payment = webhookEntity(payload, 'payment') || paymentFromInvoice(invoice) || null;
+  const providerResponse = {
+    provider: 'razorpay',
+    verifiedBy: 'webhook',
+    event,
+    subscription,
+    invoice,
+    payment
+  };
+
+  await TokenOrder.updateOne(
+    { _id: order._id },
+    {
+      $set: {
+        providerState: String(subscription.status || payment?.status || invoice?.status || event || '').toUpperCase(),
+        providerResponse,
+        razorpayInvoiceId: invoice?.id || order.razorpayInvoiceId,
+        razorpayPaymentId: payment?.id || order.razorpayPaymentId
+      }
+    }
+  );
+
+  if (['subscription.authenticated', 'subscription.activated', 'subscription.paused', 'subscription.halted', 'subscription.cancelled', 'subscription.completed'].includes(event)) {
+    const user = await updateRazorpaySubscriptionSnapshot({ order, subscription, payment: payment || {}, providerResponse });
+    return { order, user, credited: false };
+  }
+
+  if (
+    ['subscription.charged', 'invoice.paid', 'payment.captured', 'payment.authorized'].includes(event)
+    && payment
+    && capturedPayment(payment)
+    && paymentCoversSubscriptionAmount(payment, order)
+  ) {
+    return grantRazorpaySubscriptionCycleTokens({ order, subscription, payment, invoice: invoice || {}, providerResponse });
+  }
+
+  const user = await updateRazorpaySubscriptionSnapshot({ order, subscription, payment: payment || {}, providerResponse });
+  return { order, user, credited: false };
+}
+
+async function completeRazorpayPayment({ user, merchantOrderId, razorpayOrderId, razorpayPaymentId, razorpaySignature, razorpaySubscriptionId }) {
+  const fallbackMode = await activeRazorpayMode();
   const candidates = [
     String(merchantOrderId || '').trim() ? { merchantOrderId: String(merchantOrderId || '').trim() } : null,
-    String(razorpayOrderId || '').trim() ? { razorpayOrderId: String(razorpayOrderId || '').trim() } : null
+    String(razorpayOrderId || '').trim() ? { razorpayOrderId: String(razorpayOrderId || '').trim() } : null,
+    String(razorpaySubscriptionId || '').trim() ? { merchantSubscriptionId: String(razorpaySubscriptionId || '').trim() } : null,
+    String(razorpaySubscriptionId || '').trim() ? { razorpaySubscriptionId: String(razorpaySubscriptionId || '').trim() } : null
   ].filter(Boolean);
   if (!candidates.length) {
     const error = new Error('Razorpay order id is required');
@@ -591,19 +1036,73 @@ async function completeRazorpayPayment({ user, merchantOrderId, razorpayOrderId,
     error.statusCode = 404;
     throw error;
   }
+  const credentials = razorpayCredentialsForMode(order.razorpayMode || fallbackMode);
+  requireRazorpayConfig(credentials);
   if (order.creditedAt) return { order, user: await User.findById(order.user), alreadyCredited: true };
+  if (order.orderType === 'subscription') {
+    if (!order.merchantSubscriptionId || order.merchantSubscriptionId !== razorpaySubscriptionId) {
+      const error = new Error('Razorpay subscription does not match this checkout');
+      error.statusCode = 400;
+      throw error;
+    }
+    if (!verifyRazorpaySubscriptionSignature({
+      subscriptionId: order.merchantSubscriptionId,
+      paymentId: razorpayPaymentId,
+      signature: razorpaySignature,
+      secret: credentials.keySecret
+    })) {
+      const error = new Error('Razorpay subscription signature verification failed');
+      error.statusCode = 400;
+      throw error;
+    }
+    const [subscription, payment] = await Promise.all([
+      razorpayFetch(`/subscriptions/${encodeURIComponent(order.merchantSubscriptionId)}`, {}, credentials),
+      razorpayFetch(`/payments/${encodeURIComponent(razorpayPaymentId)}`, {}, credentials)
+    ]);
+    if (payment.subscription_id && payment.subscription_id !== order.merchantSubscriptionId) {
+      const error = new Error('Razorpay payment belongs to a different subscription');
+      error.statusCode = 400;
+      throw error;
+    }
+    const providerResponse = {
+      provider: 'razorpay',
+      verifiedBy: 'subscription_checkout_signature',
+      subscription,
+      payment
+    };
+    await TokenOrder.findByIdAndUpdate(order._id, {
+      $set: {
+        provider: 'razorpay',
+        razorpayPaymentId,
+        razorpaySignature,
+        providerState: String(subscription.status || payment.status || 'authenticated').toUpperCase(),
+        providerResponse
+      }
+    });
+    const refreshedOrder = await TokenOrder.findById(order._id);
+    if (capturedPayment(payment) && paymentCoversSubscriptionAmount(payment, refreshedOrder || order)) {
+      return grantRazorpaySubscriptionCycleTokens({ order: refreshedOrder || order, subscription, payment, providerResponse });
+    }
+    const snapshotUser = await updateRazorpaySubscriptionSnapshot({ order: refreshedOrder || order, subscription, payment, providerResponse });
+    return {
+      order: refreshedOrder || order,
+      user: snapshotUser || await User.findById(order.user),
+      alreadyCredited: false,
+      pendingSubscriptionCredit: true
+    };
+  }
   if (!order.razorpayOrderId || order.razorpayOrderId !== razorpayOrderId) {
     const error = new Error('Razorpay order does not match this checkout');
     error.statusCode = 400;
     throw error;
   }
-  if (!verifyRazorpaySignature({ orderId: order.razorpayOrderId, paymentId: razorpayPaymentId, signature: razorpaySignature })) {
+  if (!verifyRazorpaySignature({ orderId: order.razorpayOrderId, paymentId: razorpayPaymentId, signature: razorpaySignature, secret: credentials.keySecret })) {
     const error = new Error('Razorpay payment signature verification failed');
     error.statusCode = 400;
     throw error;
   }
 
-  const payment = await razorpayFetch(`/payments/${encodeURIComponent(razorpayPaymentId)}`);
+  const payment = await razorpayFetch(`/payments/${encodeURIComponent(razorpayPaymentId)}`, {}, credentials);
   if (payment.order_id && payment.order_id !== order.razorpayOrderId) {
     const error = new Error('Razorpay payment belongs to a different order');
     error.statusCode = 400;
@@ -653,12 +1152,26 @@ function statusFromRazorpayOrderStatus(status) {
 async function reconcileRazorpayOrder(order) {
   if (!order) return { order: null, user: null };
   if (order.creditedAt) return { order, user: await User.findById(order.user) };
+  const credentials = razorpayCredentialsForMode(order.razorpayMode || process.env.RAZORPAY_MODE);
+  if (order.orderType === 'subscription') {
+    if (!order.merchantSubscriptionId && !order.razorpaySubscriptionId) return { order, user: await User.findById(order.user) };
+    const subscriptionId = order.merchantSubscriptionId || order.razorpaySubscriptionId;
+    const subscription = await razorpayFetch(`/subscriptions/${encodeURIComponent(subscriptionId)}`, {}, credentials);
+    const providerState = String(subscription.status || '').toUpperCase();
+    order.provider = 'razorpay';
+    order.providerState = providerState || order.providerState;
+    order.providerResponse = subscription;
+    order.status = ['active', 'authenticated'].includes(String(subscription.status || '').toLowerCase()) ? 'pending' : order.status;
+    await order.save();
+    const user = await updateRazorpaySubscriptionSnapshot({ order, subscription, providerResponse: { provider: 'razorpay', verifiedBy: 'subscription_status', subscription } });
+    return { order, user: user || await User.findById(order.user) };
+  }
   if (!order.razorpayOrderId) return { order, user: await User.findById(order.user) };
 
-  const razorpayOrder = await razorpayFetch(`/orders/${encodeURIComponent(order.razorpayOrderId)}`);
+  const razorpayOrder = await razorpayFetch(`/orders/${encodeURIComponent(order.razorpayOrderId)}`, {}, credentials);
   const providerState = String(razorpayOrder.status || '').toUpperCase();
   if (String(razorpayOrder.status || '').toLowerCase() === 'paid') {
-    const payments = await razorpayFetch(`/orders/${encodeURIComponent(order.razorpayOrderId)}/payments`);
+    const payments = await razorpayFetch(`/orders/${encodeURIComponent(order.razorpayOrderId)}/payments`, {}, credentials);
     const payment = (payments.items || []).find((item) => ['captured', 'authorized'].includes(String(item.status || '').toLowerCase()));
     const providerResponse = {
       provider: 'razorpay',
@@ -1597,6 +2110,16 @@ router.post('/apple/notifications', async (req, res) => {
   }
 });
 
+router.post('/razorpay/webhook', async (req, res) => {
+  try {
+    const credentials = verifiedRazorpayWebhookCredentials(req);
+    await processRazorpayWebhook(req.body || {}, credentials);
+    res.status(204).send();
+  } catch (error) {
+    res.status(error.statusCode || 400).json({ message: readableRazorpayError(error, 'Could not verify Razorpay webhook') });
+  }
+});
+
 router.post('/checkout', requireUser, paymentCreateLimiter, async (req, res) => {
   try {
     const requestedPlanId = String(req.body?.planId || '').trim();
@@ -1655,6 +2178,7 @@ router.post('/razorpay/verify', requireUser, paymentStatusLimiter, async (req, r
       user: req.user,
       merchantOrderId: String(req.body?.merchantOrderId || '').trim(),
       razorpayOrderId: String(req.body?.razorpay_order_id || req.body?.razorpayOrderId || '').trim(),
+      razorpaySubscriptionId: String(req.body?.razorpay_subscription_id || req.body?.razorpaySubscriptionId || '').trim(),
       razorpayPaymentId: String(req.body?.razorpay_payment_id || req.body?.razorpayPaymentId || '').trim(),
       razorpaySignature: String(req.body?.razorpay_signature || req.body?.razorpaySignature || '').trim()
     });
@@ -1662,7 +2186,10 @@ router.post('/razorpay/verify', requireUser, paymentStatusLimiter, async (req, r
       order: result.order.toClient(),
       user: result.user?.toClient?.() || req.user.toClient(),
       alreadyCredited: result.alreadyCredited,
-      message: 'Payment verified. Credits credited.'
+      pendingSubscriptionCredit: Boolean(result.pendingSubscriptionCredit),
+      message: result.pendingSubscriptionCredit
+        ? 'Mandate verified. Credits will be added after Razorpay confirms the monthly payment.'
+        : 'Payment verified. Credits credited.'
     });
   } catch (error) {
     res.status(error.statusCode || 400).json({ message: readableRazorpayError(error, 'Could not verify Razorpay payment') });
@@ -1693,10 +2220,17 @@ router.get('/subscriptions/current/status', requireUser, async (req, res) => {
 
 router.post('/subscriptions/current/cancel', requireUser, async (req, res) => {
   const current = req.user.subscription || {};
-  if (!current.status || !['active', 'trialing', 'billing_retry'].includes(String(current.status))) {
+  if (!current.status || !['active', 'authenticated', 'trialing', 'billing_retry'].includes(String(current.status))) {
     return res.status(400).json({ message: 'No active subscription found' });
   }
   const currentSubscription = current.toObject?.() || current;
+  if (current.provider === 'razorpay' && current.merchantSubscriptionId) {
+    const credentials = razorpayCredentialsForMode(current.razorpayMode || process.env.RAZORPAY_MODE);
+    await razorpayFetch(`/subscriptions/${encodeURIComponent(current.merchantSubscriptionId)}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ cancel_at_cycle_end: 1 })
+    }, credentials);
+  }
   req.user.subscription = {
     ...currentSubscription,
     status: 'cancelled',
@@ -1732,6 +2266,7 @@ router.post('/phonepe/callback', async (req, res) => {
 });
 
 export {
+  activeRazorpayMode,
   amountForPlan,
   billingFrequencyForPlan,
   calculatePhonePeCallbackAuthorization,
@@ -1746,11 +2281,15 @@ export {
   createDemoCreditPayment,
   createMerchantOrderId,
   createRazorpayPayment,
+  createRazorpaySubscriptionPayment,
   findOrderFromCallback,
   grantPaidTokens,
+  grantRazorpaySubscriptionCycleTokens,
   orderIdFromCallback,
   phonePeFetch,
+  processRazorpayWebhook,
   razorpayCheckoutPayload,
+  razorpayCredentialsForMode,
   razorpayFetch,
   readableRazorpayError,
   reconcileOrder,
@@ -1763,7 +2302,9 @@ export {
   statusFromRazorpayOrderStatus,
   statusFromPhonePeState,
   validatePhonePeCallbackAuth,
-  verifyRazorpaySignature
+  verifyRazorpaySignature,
+  verifyRazorpaySubscriptionSignature,
+  verifyRazorpayWebhookSignature
 };
 
 export default router;

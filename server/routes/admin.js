@@ -50,6 +50,33 @@ function validAdminRole(value) {
   return Object.values(ADMIN_ROLES).includes(value);
 }
 
+function normalizeRazorpayMode(value = '') {
+  return String(value || '').trim().toLowerCase() === 'live' ? 'live' : 'test';
+}
+
+function razorpayModeConfigured(mode) {
+  const upper = normalizeRazorpayMode(mode).toUpperCase();
+  const keyId = String(process.env[`RAZORPAY_${upper}_KEY_ID`] || process.env.RAZORPAY_KEY_ID || '').trim();
+  const keySecret = String(process.env[`RAZORPAY_${upper}_KEY_SECRET`] || process.env.RAZORPAY_KEY_SECRET || '').trim();
+  const planId = String(process.env[`RAZORPAY_${upper}_MONTHLY_PLAN_ID`] || process.env.RAZORPAY_MONTHLY_PLAN_ID || process.env.RAZORPAY_SUBSCRIPTION_PLAN_ID || '').trim();
+  const subscriptionsEnabled = ['1', 'true', 'yes', 'on'].includes(String(process.env.RAZORPAY_SUBSCRIPTIONS_ENABLED || '').trim().toLowerCase());
+  return {
+    payments: Boolean(keyId && keySecret),
+    subscriptions: Boolean(subscriptionsEnabled && keyId && keySecret && planId)
+  };
+}
+
+function storefrontSettingPayload(setting) {
+  return {
+    ...setting.toClient(),
+    razorpay: {
+      mode: setting.razorpayMode || 'test',
+      test: razorpayModeConfigured('test'),
+      live: razorpayModeConfigured('live')
+    }
+  };
+}
+
 function roleUpdatePayload(body = {}, current = {}) {
   const role = body.role === undefined ? current.role : String(body.role).trim().toLowerCase();
   if (!validAdminRole(role)) throw new Error('Admin role must be master or developer');
@@ -146,7 +173,7 @@ router.post('/roles/:id/revoke-sessions', async (req, res, next) => {
 router.get('/storefront-settings', requireSystemAdmin, async (_req, res, next) => {
   try {
     const setting = await getStorefrontSetting();
-    res.json({ setting: setting.toClient() });
+    res.json({ setting: storefrontSettingPayload(setting) });
   } catch (error) {
     next(error);
   }
@@ -166,7 +193,32 @@ router.patch('/storefront-settings/demo-mode', requireSystemAdmin, async (req, r
       label: 'Demo ecommerce mode',
       detail: { before, after: enabled }
     });
-    res.json({ setting: setting.toClient() });
+    res.json({ setting: storefrontSettingPayload(setting) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.patch('/storefront-settings/razorpay-mode', requireSystemAdmin, async (req, res, next) => {
+  try {
+    const requestedMode = String(req.body?.mode || '').trim().toLowerCase();
+    if (!['test', 'live'].includes(requestedMode)) return res.status(400).json({ message: 'Razorpay mode must be test or live' });
+    const mode = normalizeRazorpayMode(requestedMode);
+    const status = razorpayModeConfigured(mode);
+    if (!status.payments) return res.status(400).json({ message: `Razorpay ${mode} credentials are not configured on the server` });
+    if (!status.subscriptions) return res.status(400).json({ message: `Razorpay ${mode} subscription mandate config is incomplete on the server` });
+    const setting = await getStorefrontSetting();
+    const before = setting.razorpayMode || 'test';
+    setting.razorpayMode = mode;
+    setting.updatedBy = req.admin._id;
+    await setting.save();
+    await recordAdminAudit(req, {
+      action: 'razorpay_mode_changed',
+      entityType: 'storefront_setting',
+      label: 'Razorpay mode',
+      detail: { before, after: mode }
+    });
+    res.json({ setting: storefrontSettingPayload(setting) });
   } catch (error) {
     next(error);
   }
