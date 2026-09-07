@@ -1,0 +1,70 @@
+{
+  "title": "Lookmefy API Overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "timezone": "browser",
+  "tags": ["lookmefy", "api", "production"],
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "API Up",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [{ "expr": "lookmefy_api_up", "legendFormat": "{{instance}}" }]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Requests",
+      "gridPos": { "h": 8, "w": 12, "x": 6, "y": 0 },
+      "targets": [{ "expr": "sum(lookmefy_http_requests_total) by (endpoint)", "legendFormat": "{{endpoint}}" }]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "5xx Errors",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 0 },
+      "targets": [{ "expr": "sum(lookmefy_http_errors_total) by (endpoint)", "legendFormat": "{{endpoint}}" }]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "P95 Latency",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "targets": [{ "expr": "lookmefy_http_request_duration_ms_p95", "legendFormat": "{{endpoint}}" }]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Average Latency",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "targets": [{ "expr": "lookmefy_http_request_duration_ms_avg", "legendFormat": "{{endpoint}}" }]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Memory",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+      "targets": [{ "expr": "lookmefy_process_resident_memory_bytes", "legendFormat": "{{instance}}" }]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Process Uptime",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [{ "expr": "lookmefy_process_uptime_seconds", "legendFormat": "{{instance}}" }]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Nginx Active Connections",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 },
+      "targets": [{ "expr": "lookmefy_nginx_active_connections", "legendFormat": "active" }]
+    }
+  ]
+}

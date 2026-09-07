@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import SystemIncident from '../models/SystemIncident.js';
+import { emitStructuredLog } from './logging.js';
 
 function cleanText(value, maxLength = 800) {
   return String(value || '')
@@ -41,7 +42,7 @@ async function recordSystemIncident(entry = {}) {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
   } catch (error) {
-    console.warn('[system-incidents] could not record incident', error?.message || error);
+    emitStructuredLog({ level: 'warn', event: 'system_incident_record_failed', message: error?.message || error });
     return null;
   }
 }

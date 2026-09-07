@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import GenerationMetric from '../models/GenerationMetric.js';
+import { emitStructuredLog } from './logging.js';
 
 function generationErrorCategory(value) {
   const message = String(value?.message || value || '').toLowerCase();
@@ -30,7 +31,7 @@ async function recordGenerationMetric(entry = {}) {
       errorCategory: entry.errorCategory || generationErrorCategory(entry.error)
     });
   } catch (error) {
-    console.warn('[generation-metrics] could not record outcome', error?.message || error);
+    emitStructuredLog({ level: 'warn', event: 'generation_metric_failed', message: error?.message || error });
     return null;
   }
 }

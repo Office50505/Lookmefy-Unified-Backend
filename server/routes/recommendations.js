@@ -6,6 +6,7 @@ import { loadAdminAnalytics } from '../services/adminAnalytics.js';
 import { analyticsPeriodFromQuery } from '../utils/analyticsPeriod.js';
 import { requireUser } from './auth.js';
 import { createRateLimiter, rateLimitKeys } from '../utils/rateLimit.js';
+import { emitStructuredLog } from '../utils/logging.js';
 import { requireAdmin, requireAdminSection } from '../utils/adminAccess.js';
 import { ADMIN_SECTIONS } from '../utils/adminPermissions.js';
 import { normalizeSessionPath, touchUserSession } from '../utils/userSessions.js';
@@ -245,7 +246,7 @@ router.post('/events', requireUser, recommendationEventLimiter, async (req, res)
     ]);
     res.status(201).json({ ok: true });
   } catch (error) {
-    console.warn('[recommendations:events] ignored event', error.message);
+    emitStructuredLog({ level: 'warn', event: 'recommendation_event_ignored', requestId: req.requestId, message: error.message });
     res.json({ ok: false, ignored: true });
   }
 });
@@ -279,7 +280,7 @@ router.post('/events/batch', requireUser, recommendationEventLimiter, async (req
     }
     res.status(201).json({ ok: true, accepted: rows.length });
   } catch (error) {
-    console.warn('[recommendations:events-batch] ignored batch', error.message);
+    emitStructuredLog({ level: 'warn', event: 'recommendation_event_batch_ignored', requestId: req.requestId, message: error.message });
     res.json({ ok: false, ignored: true, accepted: 0 });
   }
 });
@@ -353,7 +354,7 @@ router.post(['/studio-chat', '/stylist-chat'], requireUser, recommendationEventL
     ]);
     res.json(payload);
   } catch (error) {
-    console.error('[recommendations:studio-chat] failed', error.message);
+    emitStructuredLog({ level: 'error', event: 'recommendation_studio_chat_failed', requestId: req.requestId, message: error.message });
     res.status(error.statusCode || 500).json({ message: error.statusCode ? error.message : 'AI Studio request failed' });
   }
 });
@@ -382,7 +383,7 @@ router.get('/for-you', requireUser, recommendationReadLimiter, async (req, res) 
       includeDiagnostics: wantsRecommendationDebug(req)
     }));
   } catch (error) {
-    console.error('[recommendations:for-you] failed', error.message);
+    emitStructuredLog({ level: 'error', event: 'recommendations_for_you_failed', requestId: req.requestId, message: error.message });
     res.status(500).json({ message: 'Could not load recommendations' });
   }
 });

@@ -3,6 +3,7 @@ import test from 'node:test';
 import { configurationReadiness, phonePeEnabled, razorpayEnabled, validateServerEnv } from '../server/utils/envValidation.js';
 
 const productionAiEnv = {
+  CLIENT_ORIGIN: 'https://fitlook.in',
   AI_PROVIDER: 'pruna',
   TRYON_VIDEO_PROVIDER: 'pixverse',
   PRUNA_API_KEY: 'pruna-test-key',
@@ -120,6 +121,7 @@ test('validateServerEnv rejects unsafe OTP delivery but permits fail-closed OTP 
     ...productionAiEnv,
     MONGODB_URI: 'mongodb://localhost:27017/fitlook',
     JWT_SECRET: 'secret',
+    CLIENT_ORIGIN: 'https://fitlook.in',
     OTP_DELIVERY_PROVIDER: 'disabled',
     PHONEPE_ENABLED: 'false'
   }));
@@ -275,6 +277,7 @@ test('production requires keys for selected AI providers and enabled generation 
     NODE_ENV: 'production',
     MONGODB_URI: 'mongodb://localhost:27017/fitlook',
     JWT_SECRET: 'secret',
+    CLIENT_ORIGIN: 'https://fitlook.in',
     OTP_DELIVERY_PROVIDER: 'disabled',
     PHONEPE_ENABLED: 'false'
   };

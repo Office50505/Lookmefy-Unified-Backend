@@ -35,6 +35,32 @@ function featureEnabled(env, key, defaultValue = true) {
   return !FALSE_ENV_VALUES.has(value);
 }
 
+function localOriginConfigured(value = '') {
+  if (!String(value || '').trim()) return false;
+  try {
+    const url = new URL(String(value).trim());
+    return ['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(url.hostname)
+      || url.hostname.startsWith('192.168.')
+      || url.hostname.startsWith('10.')
+      || /^172\.(1[6-9]|2\d|3[0-1])\./.test(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function validateProductionOriginList(env, errors) {
+  const origins = [
+    ['CLIENT_ORIGIN', env.CLIENT_ORIGIN],
+    ['ADMIN_ORIGIN', env.ADMIN_ORIGIN],
+    ...String(env.ALLOWED_ORIGINS || '')
+      .split(',')
+      .map((origin, index) => [`ALLOWED_ORIGINS[${index}]`, origin])
+  ].filter(([, value]) => String(value || '').trim());
+  origins.forEach(([name, value]) => {
+    if (localOriginConfigured(value)) errors.push(`${name} cannot point to localhost or private network addresses in production.`);
+  });
+}
+
 function validateProductionAiConfiguration(env, errors) {
   if (!isProductionEnv(env) || !featureEnabled(env, 'AI_FEATURES_ENABLED', true)) return;
   const imageProvider = String(env.AI_PROVIDER || 'pruna').trim().toLowerCase();
@@ -90,6 +116,16 @@ export function validateServerEnv(env = process.env) {
 
   const production = isProductionEnv(env);
   validateProductionAiConfiguration(env, errors);
+  if (production) {
+    if (!String(env.CLIENT_ORIGIN || '').trim()) errors.push('CLIENT_ORIGIN is required in production.');
+    if (TRUE_ENV_VALUES.has(String(env.ALLOW_LOCAL_ORIGINS || '').trim().toLowerCase())) {
+      errors.push('ALLOW_LOCAL_ORIGINS cannot be enabled in production.');
+    }
+    if (TRUE_ENV_VALUES.has(String(env.ENABLE_DEV_MODE || '').trim().toLowerCase())) {
+      errors.push('ENABLE_DEV_MODE cannot be enabled in production.');
+    }
+    validateProductionOriginList(env, errors);
+  }
   const catalogSearchProvider = String(env.CATALOG_SEARCH_PROVIDER || '').trim().toLowerCase();
   if (catalogSearchProvider && !['amazon', 'amazon-html', 'serpapi'].includes(catalogSearchProvider)) {
     errors.push(`Unsupported CATALOG_SEARCH_PROVIDER "${catalogSearchProvider}".`);
@@ -171,6 +207,18 @@ export function validateServerEnv(env = process.env) {
 
   if (paymentsEnabled) assertUrl('PHONEPE_REDIRECT_URL');
   assertUrl('CLIENT_ORIGIN');
+  assertUrl('ADMIN_ORIGIN');
+  String(env.ALLOWED_ORIGINS || '').split(',').map((value) => value.trim()).filter(Boolean).forEach((origin, index) => {
+    try {
+      validateConfiguredHttpsUrl(origin, { name: `ALLOWED_ORIGINS[${index}]`, env });
+    } catch (error) {
+      errors.push(error.message);
+    }
+  });
+  if (TRUE_ENV_VALUES.has(String(env.LOKI_ENABLED || '').trim().toLowerCase())) {
+    if (!String(env.LOKI_URL || '').trim()) errors.push('LOKI_URL is required when LOKI_ENABLED=true.');
+    else assertUrl('LOKI_URL');
+  }
   const phonePeKeys = FEATURE_ENV_GROUPS.find((group) => group.name === 'PhonePe payments').keys;
   const presentPhonePeKeys = phonePeKeys.filter((key) => String(env[key] || '').trim());
   if (production && paymentsEnabled && presentPhonePeKeys.length && presentPhonePeKeys.length !== phonePeKeys.length) {

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { getRedisClient, keyPrefix, ttlSeconds, withTimeout } from './cache.js';
+import { emitStructuredLog } from './logging.js';
 import { requestPath } from './logSanitization.js';
 import { normalizeIndianMobile } from './phone.js';
 
@@ -10,7 +11,7 @@ function warnOnce(message) {
   const now = Date.now();
   if (now - lastWarningAt < 30_000) return;
   lastWarningAt = now;
-  console.warn(`[rate-limit] ${message}`);
+  emitStructuredLog({ level: 'warn', event: 'rate_limit_warning', message });
 }
 
 function hashIdentifier(value) {
@@ -105,16 +106,17 @@ function createRateLimiter(options = {}) {
 
       if (bucket.count <= max) return next();
 
-      console.warn(JSON.stringify({
+      emitStructuredLog({
         level: 'warn',
         event: 'rate_limited',
         name,
         method: req.method,
         path: requestPath(req),
+        requestId: req.requestId,
         userId: userId(req) || undefined,
         ip: clientIp(req),
         retryAfterSeconds
-      }));
+      });
 
       return res.status(429).json({
         code: 'RATE_LIMITED',

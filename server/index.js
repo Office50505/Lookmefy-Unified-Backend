@@ -23,6 +23,10 @@ import { closeJobQueues, queueEnabled } from './utils/jobQueue.js';
 import { configureMongoSlowQueryLogging, flushRequestMetrics, observabilitySnapshot, prometheusMetrics, requestLogger, startRequestMetricFlush } from './utils/observability.js';
 import { createRateLimiter, rateLimitKeys } from './utils/rateLimit.js';
 import { redactSensitiveText, requestPath } from './utils/logSanitization.js';
+import { emitStructuredLog, flushLokiLogs } from './utils/logging.js';
+import { requestContext } from './utils/requestContext.js';
+import { ipBlocklistMiddleware } from './utils/ipBlocklist.js';
+import { securityFilterMiddleware } from './utils/securityFilters.js';
 import { appRole, mongoConnectOptions, serviceMetadata } from './utils/runtime.js';
 import { configurationReadiness, validateServerEnv } from './utils/envValidation.js';
 import { securityHeaders, serveUploadedMedia } from './utils/security.js';
@@ -83,9 +87,12 @@ function requireMetricsToken(req, res, next) {
 }
 
 function allowedOrigins() {
+  const production = process.env.NODE_ENV === 'production';
+  const defaults = production ? [] : ['http://localhost:5173', 'http://localhost:5174'];
   return [
-    process.env.CLIENT_ORIGIN || 'http://localhost:5173',
-    process.env.ADMIN_ORIGIN || 'http://localhost:5174',
+    process.env.CLIENT_ORIGIN,
+    process.env.ADMIN_ORIGIN,
+    ...defaults,
     ...(process.env.ALLOWED_ORIGINS || '').split(',')
   ]
     .map((origin) => origin.trim())
@@ -119,7 +126,11 @@ function isLocalDevOrigin(origin) {
 
 app.set('trust proxy', trustProxySetting());
 app.disable('x-powered-by');
+app.use(requestContext);
+app.use(requestLogger);
 app.use(securityHeaders);
+app.use(ipBlocklistMiddleware());
+app.use(securityFilterMiddleware());
 app.use(cors({
   origin(origin, callback) {
     if (!origin || allowedOrigins().includes(origin) || isLocalDevOrigin(origin)) return callback(null, true);
@@ -128,7 +139,6 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
-app.use(requestLogger);
 app.use('/uploads', serveUploadedMedia());
 app.use('/api', globalApiLimiter);
 app.use('/api/auth', authRoutes);
@@ -202,7 +212,16 @@ app.use((error, req, res, _next) => {
       : error?.message || 'Request failed.';
 
   const errorDetail = process.env.NODE_ENV === 'production' ? error?.message : error?.stack || error?.message;
-  console.error(`[api] ${req.method} ${requestPath(req)} failed: ${redactSensitiveText(errorDetail || 'Unknown error')}`);
+  emitStructuredLog({
+    level: status >= 500 ? 'error' : 'warn',
+    event: 'api_error',
+    requestId: req.requestId,
+    method: req.method,
+    path: requestPath(req),
+    status,
+    message,
+    error: redactSensitiveText(errorDetail || 'Unknown error')
+  });
   if (status >= 500) {
     void recordSystemIncident({
       service: 'api',
@@ -210,7 +229,7 @@ app.use((error, req, res, _next) => {
       severity: 'critical',
       title: `${req.method} ${req.route?.path || req.path} failed`,
       message,
-      metadata: { method: req.method, path: req.path, status }
+      metadata: { method: req.method, path: req.path, status, requestId: req.requestId }
     });
   }
   res.status(status).json({ message });
@@ -219,10 +238,10 @@ app.use((error, req, res, _next) => {
 async function shutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
-  console.log(JSON.stringify({ level: 'info', event: 'api_shutdown_started', signal, ...service }));
+  emitStructuredLog({ level: 'info', event: 'api_shutdown_started', signal, ...service, forceConsole: true });
 
   const timeout = setTimeout(() => {
-    console.error(JSON.stringify({ level: 'error', event: 'api_shutdown_timeout', signal, ...service }));
+    emitStructuredLog({ level: 'error', event: 'api_shutdown_timeout', signal, ...service, forceConsole: true });
     process.exit(1);
   }, Number(process.env.GRACEFUL_SHUTDOWN_TIMEOUT_MS || 25_000));
   timeout.unref?.();
@@ -234,29 +253,30 @@ async function shutdown(signal) {
       });
     }
     await flushRequestMetrics();
+    await flushLokiLogs();
     await closeJobQueues();
     await closeRedisClient();
     await mongoose.disconnect();
     clearTimeout(timeout);
-    console.log(JSON.stringify({ level: 'info', event: 'api_shutdown_complete', signal, ...service }));
+    emitStructuredLog({ level: 'info', event: 'api_shutdown_complete', signal, ...service, forceConsole: true });
     process.exit(0);
   } catch (error) {
     clearTimeout(timeout);
-    console.error(JSON.stringify({ level: 'error', event: 'api_shutdown_failed', signal, error: error.message, ...service }));
+    emitStructuredLog({ level: 'error', event: 'api_shutdown_failed', signal, error: error.message, ...service, forceConsole: true });
     process.exit(1);
   }
 }
 
 async function start() {
   const envReport = validateServerEnv();
-  envReport.warnings.forEach((warning) => console.warn(`[env] ${warning}`));
+  envReport.warnings.forEach((warning) => emitStructuredLog({ level: 'warn', event: 'env_warning', message: warning }));
 
   configureMongoSlowQueryLogging(mongoose);
   await mongoose.connect(process.env.MONGODB_URI, mongoConnectOptions());
   startRequestMetricFlush();
 
   server = app.listen(port, () => {
-    console.log(JSON.stringify({ level: 'info', event: 'api_started', port: Number(port), ...service }));
+    emitStructuredLog({ level: 'info', event: 'api_started', port: Number(port), ...service, forceConsole: true });
   });
 }
 
@@ -264,6 +284,6 @@ process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 
 start().catch((error) => {
-  console.error(error.message);
+  emitStructuredLog({ level: 'error', event: 'api_start_failed', message: error.message, forceConsole: true });
   process.exit(1);
 });

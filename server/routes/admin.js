@@ -1,9 +1,11 @@
 import express from 'express';
 import mongoose from 'mongoose';
 import AdminUser from '../models/AdminUser.js';
+import BlockedIp from '../models/BlockedIp.js';
 import { getStorefrontSetting } from '../models/StorefrontSetting.js';
 import SystemIncident from '../models/SystemIncident.js';
 import { recordAdminAudit } from '../utils/adminAudit.js';
+import { blockedIpToClient, clearIpBlocklistCache, createBlockedIp, normalizeIpRule } from '../utils/ipBlocklist.js';
 import { requireAdmin, requireAdminPermission, requireAdminSection, signAdminSession } from '../utils/adminAccess.js';
 import {
   ADMIN_PERMISSIONS,
@@ -185,6 +187,74 @@ router.get('/system/incidents', async (req, res, next) => {
       service: req.query.service,
       limit: req.query.limit
     }));
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/system/ip-blocks', async (req, res, next) => {
+  try {
+    const active = String(req.query.active ?? 'true').trim().toLowerCase();
+    const filter = {};
+    if (!['all', '*'].includes(active)) filter.active = !['0', 'false', 'no', 'off'].includes(active);
+    const blocks = await BlockedIp.find(filter)
+      .sort({ active: -1, updatedAt: -1 })
+      .limit(Math.min(Math.max(Number(req.query.limit) || 100, 1), 500))
+      .lean();
+    res.json({ blocks: blocks.map(blockedIpToClient) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/system/ip-blocks', async (req, res, next) => {
+  try {
+    const value = normalizeIpRule(req.body?.value);
+    if (!value) return res.status(400).json({ message: 'Provide a valid IP address or IPv4 CIDR' });
+    const expiresAt = req.body?.expiresAt ? new Date(req.body.expiresAt) : undefined;
+    if (expiresAt && Number.isNaN(expiresAt.getTime())) return res.status(400).json({ message: 'Invalid expiry date' });
+    const block = await createBlockedIp({
+      value,
+      reason: req.body?.reason,
+      source: 'manual',
+      expiresAt,
+      createdBy: req.admin._id
+    });
+    await recordAdminAudit(req, {
+      action: 'ip_block_created',
+      entityType: 'blocked_ip',
+      entityId: String(block._id),
+      label: block.value,
+      detail: { reason: block.reason, expiresAt: block.expiresAt }
+    });
+    res.status(201).json({ block: blockedIpToClient(block) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.patch('/system/ip-blocks/:id', async (req, res, next) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ message: 'Invalid block id' });
+    const set = {};
+    if (req.body?.active !== undefined) set.active = Boolean(req.body.active);
+    if (req.body?.reason !== undefined) set.reason = String(req.body.reason || '').trim().slice(0, 300);
+    if (req.body?.expiresAt !== undefined) {
+      const expiresAt = req.body.expiresAt ? new Date(req.body.expiresAt) : null;
+      if (expiresAt && Number.isNaN(expiresAt.getTime())) return res.status(400).json({ message: 'Invalid expiry date' });
+      set.expiresAt = expiresAt;
+    }
+    const block = await BlockedIp.findByIdAndUpdate(req.params.id, { $set: set }, { new: true });
+    if (!block) return res.status(404).json({ message: 'IP block not found' });
+    clearIpBlocklistCache();
+    await recordAdminAudit(req, {
+      action: 'ip_block_updated',
+      entityType: 'blocked_ip',
+      entityId: String(block._id),
+      label: block.value,
+      detail: set
+    });
+    res.json({ block: blockedIpToClient(block) });
   } catch (error) {
     next(error);
   }

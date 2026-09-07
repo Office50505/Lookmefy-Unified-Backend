@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { getRedisClient, keyPrefix, ttlSeconds, withTimeout } from './cache.js';
+import { emitStructuredLog } from './logging.js';
 
 const localStores = new Map();
 let lastWarningAt = 0;
@@ -8,7 +9,7 @@ function warnOnce(message) {
   const now = Date.now();
   if (now - lastWarningAt < 30_000) return;
   lastWarningAt = now;
-  console.warn(`[temp-session] ${message}`);
+  emitStructuredLog({ level: 'warn', event: 'temp_session_warning', message });
 }
 
 function localStore(name) {

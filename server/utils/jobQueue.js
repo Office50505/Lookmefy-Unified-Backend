@@ -1,3 +1,4 @@
+import { emitStructuredLog } from './logging.js';
 import { serviceMetadata } from './runtime.js';
 
 let Queue;
@@ -7,7 +8,7 @@ let Worker;
 try {
   ({ Queue, QueueEvents, Worker } = await import('bullmq'));
 } catch (error) {
-  console.warn('[jobs] bullmq unavailable; queue features disabled', { error: error.message });
+  emitStructuredLog({ level: 'warn', event: 'job_queue_unavailable', error: error.message });
 }
 
 const queues = new Map();
@@ -132,17 +133,17 @@ function startWorker(queueName, processor, options = {}) {
     concurrency: Number(options.concurrency || process.env.QUEUE_WORKER_CONCURRENCY || 2)
   });
   worker.on('completed', (job) => {
-    console.log(JSON.stringify({
+    emitStructuredLog({
       level: 'info',
       event: 'job_completed',
       ...serviceMetadata('worker'),
       queue: queueName,
       jobName: job.name,
       jobId: job.id
-    }));
+    });
   });
   worker.on('failed', (job, error) => {
-    console.error(JSON.stringify({
+    emitStructuredLog({
       level: 'error',
       event: 'job_failed',
       ...serviceMetadata('worker'),
@@ -150,7 +151,7 @@ function startWorker(queueName, processor, options = {}) {
       jobName: job?.name,
       jobId: job?.id,
       error: error?.message || String(error)
-    }));
+    });
   });
   return worker;
 }

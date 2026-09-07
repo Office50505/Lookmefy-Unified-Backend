@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { createClient } from 'redis';
+import { emitStructuredLog } from './logging.js';
 
 let redisClient = null;
 let redisClientUrl = null;
@@ -19,7 +20,7 @@ function warnRedis(message) {
   const now = Date.now();
   if (now - lastRedisWarningAt < 30_000) return;
   lastRedisWarningAt = now;
-  console.warn(`[cache] ${message}`);
+  emitStructuredLog({ level: 'warn', event: 'redis_cache_warning', message });
 }
 
 function redisTimeoutMs() {

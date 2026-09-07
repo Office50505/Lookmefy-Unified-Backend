@@ -2,6 +2,7 @@ import os from 'node:os';
 import fs from 'node:fs/promises';
 import RequestMetric from '../models/RequestMetric.js';
 import { cleanRedisError, getRedisClient, redisConnectionStatus, withTimeout } from './cache.js';
+import { emitStructuredLog } from './logging.js';
 import { requestPath } from './logSanitization.js';
 import { serviceMetadata } from './runtime.js';
 
@@ -158,9 +159,7 @@ async function flushRequestMetrics() {
       })), { ordered: false });
     } catch (error) {
       batch.forEach(mergePendingMetric);
-      if (process.env.NODE_ENV !== 'test') {
-        console.warn(JSON.stringify({ level: 'warn', event: 'request_metrics_flush_failed', message: error.message, ...service }));
-      }
+      if (process.env.NODE_ENV !== 'test') emitStructuredLog({ level: 'warn', event: 'request_metrics_flush_failed', message: error.message, ...service });
     } finally {
       metricFlushPromise = null;
     }
@@ -197,7 +196,7 @@ function requestLogger(req, res, next) {
       ip: req.ip,
       userAgent: req.get('user-agent')
     };
-    console.log(JSON.stringify(log));
+    emitStructuredLog(log);
   });
   next();
 }
@@ -411,7 +410,7 @@ function configureMongoSlowQueryLogging(mongoose) {
     } finally {
       const durationMs = Number(process.hrtime.bigint() - started) / 1e6;
       if (durationMs >= thresholdMs) {
-        console.warn(JSON.stringify({
+        emitStructuredLog({
           level: 'warn',
           event: 'mongo_slow_query',
           ...service,
@@ -420,7 +419,7 @@ function configureMongoSlowQueryLogging(mongoose) {
           durationMs: Math.round(durationMs * 100) / 100,
           filter: this.getFilter?.(),
           options: this.getOptions?.()
-        }));
+        });
       }
     }
   };
@@ -433,14 +432,14 @@ function configureMongoSlowQueryLogging(mongoose) {
     } finally {
       const durationMs = Number(process.hrtime.bigint() - started) / 1e6;
       if (durationMs >= thresholdMs) {
-        console.warn(JSON.stringify({
+        emitStructuredLog({
           level: 'warn',
           event: 'mongo_slow_aggregate',
           ...service,
           collection: this._model?.collection?.name,
           durationMs: Math.round(durationMs * 100) / 100,
           pipeline: this.pipeline?.()
-        }));
+        });
       }
     }
   };

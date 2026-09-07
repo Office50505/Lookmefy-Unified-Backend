@@ -2,11 +2,13 @@ import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import AdminAuditLog from '../server/models/AdminAuditLog.js';
 import AdminUser from '../server/models/AdminUser.js';
+import BlockedIp from '../server/models/BlockedIp.js';
 import ClosetItem from '../server/models/ClosetItem.js';
 import ClosetOutfit from '../server/models/ClosetOutfit.js';
 import CustomTryOn from '../server/models/CustomTryOn.js';
 import ExternalTryOn from '../server/models/ExternalTryOn.js';
 import GenerationMetric from '../server/models/GenerationMetric.js';
+import Migration from '../server/models/Migration.js';
 import OtpDeliveryMetric from '../server/models/OtpDeliveryMetric.js';
 import Product from '../server/models/Product.js';
 import ProductOrder from '../server/models/ProductOrder.js';
@@ -25,11 +27,13 @@ dotenv.config({ path: process.env.ENV_FILE || '.env' });
 const models = [
   AdminAuditLog,
   AdminUser,
+  BlockedIp,
   ClosetItem,
   ClosetOutfit,
   CustomTryOn,
   ExternalTryOn,
   GenerationMetric,
+  Migration,
   OtpDeliveryMetric,
   Product,
   ProductOrder,

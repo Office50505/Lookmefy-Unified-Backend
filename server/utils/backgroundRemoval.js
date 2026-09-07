@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
+import { emitStructuredLog } from './logging.js';
 import { publicUrlForKey, publicUrlForStoredFile, readStoredFile, saveBuffer, useBunny } from './storage.js';
 import { safeFetchImageBuffer } from './security.js';
 
@@ -64,7 +65,7 @@ async function metadataForBuffer(buffer) {
 
 function logIsolation(step, meta = {}) {
   if (!DEBUG_SUBJECT_ISOLATION) return;
-  console.log(`[subject-isolation] ${step}`, meta);
+  emitStructuredLog({ level: 'info', event: 'subject_isolation_debug', step, meta });
 }
 
 function numberFromEnv(name, fallback) {

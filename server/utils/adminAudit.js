@@ -1,4 +1,5 @@
 import AdminAuditLog from '../models/AdminAuditLog.js';
+import { emitStructuredLog } from './logging.js';
 
 function adminActor(req) {
   return req.admin?.email || 'unknown-admin';
@@ -17,7 +18,7 @@ async function recordAdminAudit(req, entry = {}) {
       detail: entry.detail
     });
   } catch (error) {
-    console.warn('[admin-audit] could not record action', error?.message || error);
+    emitStructuredLog({ level: 'warn', event: 'admin_audit_failed', message: error?.message || error });
   }
 }
 
