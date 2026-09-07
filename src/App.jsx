@@ -6430,7 +6430,7 @@ function StyleBotPage({ user, setUser }) {
 
   const generateChatTryOn = async (product) => {
     const key = styleBotProductKey(product);
-    if (!product || product.searchLink || isOnlineAiStudioProduct(product) || chatTryOnLoading[key]) return;
+    if (!product || product.searchLink || product.tryOnAvailable === false || product.aiTryOnAvailable === false || chatTryOnLoading[key]) return;
     const profileMessage = tryOnProfileBlockMessage(user);
     if (profileMessage) {
       setChatTryOnErrors((current) => ({ ...current, [key]: profileMessage }));
@@ -6439,7 +6439,7 @@ function StyleBotPage({ user, setUser }) {
     setChatTryOnLoading((current) => ({ ...current, [key]: true }));
     setChatTryOnErrors((current) => ({ ...current, [key]: '' }));
     try {
-      const isExternalProduct = Boolean(product.external || product.sourceUrl || product.affiliateLink);
+      const isExternalProduct = isOnlineAiStudioProduct(product);
       const regenerate = Boolean(chatTryOns[key]?.imageUrl);
       const data = await generateQueuedTryOn(isExternalProduct ? '/tryons/external' : `/tryons/${encodeURIComponent(product.id)}`, {
         method: 'POST',
@@ -6566,11 +6566,14 @@ function StyleBotProduct({ product, tryOn, loading, error, onFullscreen, onTryOn
   const productImage = String(product.imageUrl || '').trim();
   const hasProductImage = Boolean(productImage) && !productImageFailed;
   const onlineProduct = isOnlineAiStudioProduct(product);
-  const hasUsableTryOn = !onlineProduct && Boolean(tryOn?.imageUrl) && !tryOnImageFailed;
+  const hasUsableTryOn = Boolean(tryOn?.imageUrl) && !tryOnImageFailed;
   const displayedImage = hasUsableTryOn ? String(tryOn.imageUrl) : productImage;
   const externalShop = Boolean(product.affiliateLink || product.sourceUrl);
   const localProduct = !onlineProduct && !product.searchLink && Boolean(product.id);
-  const canTryOn = !onlineProduct && !product.searchLink && hasProductImage;
+  const canTryOn = !product.searchLink
+    && product.tryOnAvailable !== false
+    && product.aiTryOnAvailable !== false
+    && hasProductImage;
   const numericPrice = Number(product.price);
   const hasVerifiedPrice = product.price !== null && product.price !== undefined && String(product.price).trim() !== '' && Number.isFinite(numericPrice) && numericPrice > 0;
   const visibleBrand = ['amazon', 'web'].includes(String(product.source || '').toLowerCase()) && displayBrand(product).toLowerCase() === 'amazon'
@@ -6601,12 +6604,12 @@ function StyleBotProduct({ product, tryOn, loading, error, onFullscreen, onTryOn
       <p>{visibleBrand}</p>
       <h2><a href={detailHref} target={detailIsExternal ? '_blank' : undefined} rel={detailIsExternal ? 'noreferrer' : undefined} onClick={() => recordEvent(detailIsExternal ? 'shop_click' : 'product_click', { productId: product.id })}>{product.name}</a></h2>
       <strong>{hasVerifiedPrice ? formatMoney(product.price, product.currency) : 'Price unavailable'}</strong>
-      {!onlineProduct && loading && <span className="concierge-product-state">Preparing preview</span>}
+      {loading && <span className="concierge-product-state">Preparing preview</span>}
       {hasUsableTryOn && <button className="concierge-preview-action" type="button" onClick={() => onFullscreen({ src: tryOn.imageUrl, alt: `AI try-on for ${product.name}`, title: product.name })}>View preview</button>}
-      {!onlineProduct && tryOn?.imageUrl && !hasUsableTryOn && <span className="concierge-product-state">Preview unavailable</span>}
-      {!onlineProduct && error && <span className="concierge-product-error">{error}</span>}
+      {tryOn?.imageUrl && !hasUsableTryOn && <span className="concierge-product-state">Preview unavailable</span>}
+      {error && <span className="concierge-product-error">{error}</span>}
       {canTryOn ? <button className="concierge-preview-action" type="button" disabled={loading} onClick={onTryOn}>{tryOn?.imageUrl ? 'Generate Again' : 'Generate Try-On'}</button> : null}
-      {!onlineProduct && !product.searchLink && !hasProductImage ? <span className="concierge-product-state">Try-on needs a product image</span> : null}
+      {!product.searchLink && product.tryOnAvailable !== false && product.aiTryOnAvailable !== false && !hasProductImage ? <span className="concierge-product-state">Try-on needs a product image</span> : null}
       <a className="concierge-shop-action" href={shopHref} target={externalShop ? '_blank' : undefined} rel={externalShop ? 'noreferrer' : undefined} onClick={() => recordEvent(externalShop ? 'shop_click' : 'product_click', { productId: product.id })}>{product.searchLink ? 'Search Amazon' : externalShop ? 'View on Amazon' : 'View product'}</a>
     </article>
   );

@@ -1892,15 +1892,17 @@ function externalProductFromBody(value = {}) {
   };
 }
 
-async function saveGeneratedExternalTryOn({ user, product, timer }) {
-  let generated;
+async function generateExternalTryOnImage({ user, product, timer }) {
   if (usePrunaProvider()) {
-    generated = await callPrunaTryOn({ user, product, timer });
-  } else {
-    const clothType = fitRoomClothTypeForProduct(product);
-    timer?.mark('external fitroom cloth type selected', { clothType });
-    generated = await callFitRoomTryOn({ user, product, clothType, timer });
+    return callPrunaTryOn({ user, product, timer });
   }
+  const clothType = fitRoomClothTypeForProduct(product);
+  timer?.mark('external fitroom cloth type selected', { clothType });
+  return callFitRoomTryOn({ user, product, clothType, timer });
+}
+
+async function saveGeneratedExternalTryOn({ user, product, timer }) {
+  const generated = await generateExternalTryOnImage({ user, product, timer });
   const filename = `tryon-external-${Date.now()}-${Math.round(Math.random() * 1e9)}${extensionFor(generated.mimetype)}`;
   const image = await saveUserCacheFile({ user, bytes: generated.bytes, filename, mimetype: generated.mimetype });
   timer?.mark('external try-on saved', { path: image.path });
@@ -1928,6 +1930,46 @@ async function saveGeneratedExternalTryOn({ user, product, timer }) {
     transparentImage: isolation.image || undefined,
     imageProcessing: isolation.metadata
   });
+}
+
+async function replaceGeneratedExternalTryOn({ user, product, timer }) {
+  const generated = await generateExternalTryOnImage({ user, product, timer });
+  const filename = `tryon-external-${Date.now()}-${Math.round(Math.random() * 1e9)}${extensionFor(generated.mimetype)}`;
+  const image = await saveUserCacheFile({ user, bytes: generated.bytes, filename, mimetype: generated.mimetype });
+  timer?.mark('external try-on replaced', { path: image.path });
+  const isolation = await isolateGeneratedImage(user, image, timer);
+
+  return ExternalTryOn.findOneAndUpdate(
+    { user: user._id, sourceUrl: product.sourceUrl },
+    {
+      $set: {
+        affiliateLink: product.affiliateLink,
+        productName: product.name,
+        brand: product.brand,
+        category: product.category,
+        imageUrl: product.imageUrl,
+        provider: generated.provider || 'fitroom',
+        model: generated.model,
+        quality: generated.quality,
+        prompt: generated.prompt,
+        promptKey: generated.promptKey,
+        providerPredictionId: generated.providerPredictionId,
+        providerOutputUrl: generated.providerOutputUrl,
+        providerCostUsd: generated.providerCostUsd,
+        turbo: generated.turbo,
+        garmentCount: generated.garmentCount,
+        tokenCost: chargedTokenCost(user),
+        image,
+        transparentImage: isolation.image || undefined,
+        imageProcessing: isolation.metadata
+      },
+      $setOnInsert: {
+        user: user._id,
+        sourceUrl: product.sourceUrl
+      }
+    },
+    { new: true, upsert: true, setDefaultsOnInsert: true }
+  );
 }
 
 async function normalizeMemoryImageFile(file, label, timer) {
@@ -2400,6 +2442,7 @@ router.post('/custom', requireUser, tryOnImageBurstLimiter, tryOnImageHourlyLimi
 
 router.post('/external', requireUser, tryOnImageBurstLimiter, tryOnImageHourlyLimiter, async (req, res) => {
   const analyticsStartedAt = Date.now();
+  const forceGenerate = Boolean(req.body?.force || req.body?.refresh);
   let product;
   try {
     product = externalProductFromBody(req.body?.product);
@@ -2418,13 +2461,14 @@ router.post('/external', requireUser, tryOnImageBurstLimiter, tryOnImageHourlyLi
 
   const timer = createTimer('external', {
     userId: req.user._id.toString(),
-    sourceUrl: product.sourceUrl
+    sourceUrl: product.sourceUrl,
+    forceGenerate
   });
   let reserved = false;
 
   try {
     const existing = await ExternalTryOn.findOne({ user: req.user._id, sourceUrl: product.sourceUrl });
-    if (existing) {
+    if (existing && !forceGenerate) {
       timer.end({ reused: true });
       await recordGenerationMetric({ user: req.user._id, type: 'external_image', status: 'reused', provider: existing.provider, model: existing.model, durationMs: Date.now() - analyticsStartedAt });
       return res.json({ tryOn: existing.toClient(), user: req.user.toClient(), reused: true });
@@ -2440,7 +2484,9 @@ router.post('/external', requireUser, tryOnImageBurstLimiter, tryOnImageHourlyLi
     reserved = true;
     req.user = chargedUser;
 
-    const tryOn = await saveGeneratedExternalTryOn({ user: req.user, product, timer });
+    const tryOn = forceGenerate
+      ? await replaceGeneratedExternalTryOn({ user: req.user, product, timer })
+      : await saveGeneratedExternalTryOn({ user: req.user, product, timer });
     timer.end({ reused: false, tokensRemaining: req.user.tokens });
     await recordGenerationMetric({ user: req.user._id, type: 'external_image', status: 'succeeded', provider: tryOn.provider, model: tryOn.model, providerCostUsd: tryOn.providerCostUsd, tokensCharged: chargedTokenCost(req.user), durationMs: Date.now() - analyticsStartedAt });
     res.status(201).json({ tryOn: tryOn.toClient(), user: req.user.toClient(), reused: false });

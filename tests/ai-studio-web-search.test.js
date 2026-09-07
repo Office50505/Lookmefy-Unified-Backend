@@ -175,7 +175,7 @@ test('AI Studio uses structured web results and removes incomplete or conflictin
   assert.equal(result.products[0].source, 'web');
   assert.equal(result.products[0].sourceLabel, 'Amazon result');
   assert.ok(result.products.every((product) => product.source === 'web'));
-  assert.ok(result.products.every((product) => product.tryOnAvailable === false && product.aiTryOnAvailable === false));
+  assert.ok(result.products.every((product) => product.tryOnAvailable === true && product.aiTryOnAvailable === true));
   assert.deepEqual(result.outfits, []);
   assert.doesNotMatch(result.reply, /amazon/i);
 });
@@ -224,7 +224,35 @@ test('a generic online switch reuses the product request instead of a previous s
   assert.deepEqual(result.outfits, []);
 });
 
-test('online blue jeans returns ten direct Amazon products with try-on disabled', async (t) => {
+test('an online search-link fallback remains ineligible for try-on', async (t) => {
+  mockContext(t);
+  withEnv(t, {
+    CATALOG_SEARCH_PROVIDER: 'serpapi',
+    SERPAPI_API_KEY: 'empty-web-search-key',
+    SERPAPI_AMAZON_DOMAIN: 'amazon.in',
+    AI_STUDIO_DIRECT_WEB_FALLBACK_ENABLED: 'false',
+    AI_STUDIO_DIRECT_AMAZON_ENABLED: 'false',
+    LOOKMEFY_CATALOG_API_BASE_URL: '',
+    CATALOG_API_BASE_URL: '',
+    VITE_API_BASE_URL: ''
+  });
+  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({ organic_results: [] }), {
+    status: 200,
+    headers: { 'content-type': 'application/json' }
+  }));
+
+  const result = await orchestrateAiStudio({
+    user: { _id: `empty-online-${t.name}`, genderPreference: 'female' },
+    message: 'Search online for blue jeans'
+  });
+
+  assert.equal(result.products.length, 1);
+  assert.equal(result.products[0].searchLink, true);
+  assert.equal(result.products[0].tryOnAvailable, false);
+  assert.equal(result.products[0].aiTryOnAvailable, false);
+});
+
+test('online blue jeans returns ten direct Amazon products with external try-on enabled', async (t) => {
   mockContext(t);
   withEnv(t, {
     CATALOG_SEARCH_PROVIDER: 'serpapi',
@@ -259,7 +287,7 @@ test('online blue jeans returns ten direct Amazon products with try-on disabled'
   assert.ok(result.products.every((product) => product.source === 'web'));
   assert.ok(result.products.every((product) => product.sourceLabel === 'Amazon result'));
   assert.ok(result.products.every((product) => /^https:\/\/www\.amazon\.in\/dp\//.test(product.sourceUrl)));
-  assert.ok(result.products.every((product) => product.tryOnAvailable === false && product.aiTryOnAvailable === false));
+  assert.ok(result.products.every((product) => product.tryOnAvailable === true && product.aiTryOnAvailable === true));
   assert.ok(!result.actions.some((action) => /try[_ -]?on/i.test(`${action.type} ${action.label} ${action.prompt}`)));
   assert.deepEqual(result.outfits, []);
 });
@@ -420,7 +448,9 @@ test('AI Studio product cards never turn missing commerce data into a room image
   assert.match(card, /fallbackSrc=""/);
   assert.match(card, /Image unavailable/);
   assert.match(card, /Price unavailable/);
-  assert.match(card, /const canTryOn = !onlineProduct && !product\.searchLink && hasProductImage/);
+  assert.match(card, /const canTryOn = !product\.searchLink/);
+  assert.match(card, /product\.tryOnAvailable !== false/);
+  assert.match(card, /product\.aiTryOnAvailable !== false/);
   assert.match(card, /Search Amazon/);
   assert.match(card, /View product/);
   assert.match(card, /const detailHref = onlineProduct \? shopHref : localDetailHref/);
@@ -428,9 +458,10 @@ test('AI Studio product cards never turn missing commerce data into a room image
   assert.match(card, /<button className="concierge-product-image"/);
   assert.match(card, /<h2><a href=\{detailHref\}/);
   assert.match(card, /externalShop \? 'View on Amazon' : 'View product'/);
+  assert.match(source, /const isExternalProduct = isOnlineAiStudioProduct\(product\)/);
 });
 
-test('the iOS AI Studio card opens Amazon products without exposing try-on', async (t) => {
+test('the iOS AI Studio card exposes try-on for eligible Amazon products', async (t) => {
   const source = await readOptionalFixture('../fit-look-APP/mobile/App.js');
   if (!source) {
     t.skip('fit-look-APP is not present in this checkout');
@@ -443,11 +474,13 @@ test('the iOS AI Studio card opens Amazon products without exposing try-on', asy
 
   assert.ok(screenStart > 0);
   assert.match(screen, /const onlineProduct = isOnlineAiStudioProduct\(product\)/);
-  assert.match(screen, /onlineProduct \? \(product\.searchLink \? 'Search Amazon' : 'View on Amazon'\)/);
+  assert.match(screen, /const tryOnEnabled = !product\.searchLink/);
+  assert.match(screen, /actionLabel=\{tryOnEnabled \?/);
   assert.match(screen, /onOpenProduct=\{\(\) => onlineProduct/);
   assert.match(screen, /: onNavigate\('product', \{ id: product\.id \}\)\}/);
-  assert.match(screen, /onTryOn=\{onlineProduct \? undefined/);
-  assert.match(source, /isOnlineAiStudioProduct\(product\) \|\| chatTryOnLoading/);
+  assert.match(screen, /onTryOn=\{tryOnEnabled \?/);
+  assert.match(source, /product\.tryOnAvailable === false \|\| product\.aiTryOnAvailable === false \|\| chatTryOnLoading/);
+  assert.match(source, /const isExternalProduct = isOnlineAiStudioProduct\(product\)/);
   assert.match(source, /const handleCardPress = onOpenProduct \|\| onShop/);
   assert.match(source, /const handleImagePress = onPreview \|\| handleCardPress/);
   assert.match(screen, /const previewUri = productImageSource\(product, tryOn\)\?\.uri/);

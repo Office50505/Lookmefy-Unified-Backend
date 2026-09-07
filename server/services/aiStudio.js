@@ -716,12 +716,17 @@ function withSourceMetadata(item = {}, fallback = '') {
     item.sourceUrl,
     item.affiliateLink
   ].filter(Boolean).join(' '));
+  const externalTryOnAvailable = source === 'web'
+    && !item.searchLink
+    && /^https:\/\//i.test(String(item.sourceUrl || item.affiliateLink || '').trim())
+    && /^https:\/\//i.test(String(item.imageUrl || item.remoteImageUrl || item.thumbnail || item.image?.url || item.image?.remoteUrl || '').trim())
+    && wearableCompatibility(item).compatible;
   return {
     ...item,
     source,
     sourceLabel: amazonResult ? 'Amazon result' : sourceLabel(source),
-    tryOnAvailable: source === 'web' ? false : item.tryOnAvailable,
-    aiTryOnAvailable: source === 'web' ? false : item.aiTryOnAvailable
+    tryOnAvailable: source === 'web' ? externalTryOnAvailable : item.tryOnAvailable,
+    aiTryOnAvailable: source === 'web' ? externalTryOnAvailable : item.aiTryOnAvailable
   };
 }
 
@@ -3209,9 +3214,7 @@ function enforceSelectedSource(plan = {}, selectedSource = '') {
       outfits: [],
       products: (plan.products || [])
         .filter((product) => productSourceType(product) === expectedSource)
-        .map((product) => selectedSource === 'online'
-          ? { ...product, tryOnAvailable: false, aiTryOnAvailable: false }
-          : product),
+        .map((product) => selectedSource === 'online' ? withSourceMetadata(product, 'web') : product),
       actions: selectedSource === 'online'
         ? (plan.actions || []).filter((action) => !/try[_ -]?on/i.test(`${action.type || ''} ${action.label || ''} ${action.prompt || ''}`))
         : plan.actions
