@@ -8139,10 +8139,17 @@ function ProductPage({ id, user, setUser, demoEcommerceMode = false }) {
     : null;
   const brand = displayBrand(product);
   const category = displayCategory(product);
+  const fitAreaLabel = product.garmentPlacement === 'bottom'
+    ? 'Bottomwear'
+    : product.garmentPlacement === 'full-body'
+    ? 'Full-body outfit'
+    : product.garmentPlacement === 'accessory'
+    ? 'Accessory'
+    : 'Topwear';
   const detailFacts = [
     ['Brand', brand],
     ['Category', category],
-    ['Fit area', product.garmentPlacement === 'bottom' ? 'Bottomwear' : 'Topwear'],
+    ['Fit area', fitAreaLabel],
     ['For', product.gender],
     !demoEcommerceMode && ['Rating', `${Number(product.rating || 0).toFixed(1)}${product.ratingCount ? ` from ${product.ratingCount} reviews` : ''}`],
     ['Price', formatMoney(product.price, product.currency)]

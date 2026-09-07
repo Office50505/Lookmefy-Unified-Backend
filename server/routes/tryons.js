@@ -2161,9 +2161,11 @@ async function runProductTryOnJob({ userId, productId, requestedModel = '', forc
     reserved = true;
     user = chargedUser;
 
-    const tryOn = forceGenerate
-      ? await replaceGeneratedTryOn({ user, product, tryOnModel: selectedModel, timer })
-      : await saveGeneratedTryOn({ user, product, tryOnModel: selectedModel, timer });
+    const generationModel = hasRequestedModel ? selectedModel : '';
+    const shouldReplaceExisting = forceGenerate || staleSareeTryOn;
+    const tryOn = shouldReplaceExisting
+      ? await replaceGeneratedTryOn({ user, product, tryOnModel: generationModel, timer })
+      : await saveGeneratedTryOn({ user, product, tryOnModel: generationModel, timer });
     timer.end({ reused: false, tokensRemaining: user.tokens });
     await recordGenerationMetric({ user: user._id, product: product._id, type: 'product_image', status: 'succeeded', provider: tryOn.provider, model: tryOn.model, providerCostUsd: tryOn.providerCostUsd, tokensCharged: chargedTokenCost(user), durationMs: Date.now() - analyticsStartedAt });
 

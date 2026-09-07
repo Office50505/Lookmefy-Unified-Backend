@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import Product from '../server/models/Product.js';
 import { normalizeGarmentPlacement } from '../server/routes/products.js';
@@ -72,4 +73,12 @@ test('saree products use saree-specific prompt and FAL image-edit routing', () =
   assert.match(prompt.prompt, /Jeans, trousers, pants/i);
   assert.equal(fitRoomClothTypeForProduct(product), 'full_set');
   assert.equal(shouldUseFalImageEditForProduct(product), true);
+});
+
+test('saree try-on generation replaces stale cached output and preserves default FAL routing', async () => {
+  const source = await readFile('server/routes/tryons.js', 'utf8');
+  assert.match(source, /const generationModel = hasRequestedModel \? selectedModel : '';/);
+  assert.match(source, /const shouldReplaceExisting = forceGenerate \|\| staleSareeTryOn;/);
+  assert.match(source, /shouldReplaceExisting\s*\?\s*await replaceGeneratedTryOn/);
+  assert.match(source, /if \(!tryOnModel && shouldUseFalImageEditForProduct\(product\)\)/);
 });
