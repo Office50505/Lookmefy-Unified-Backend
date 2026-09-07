@@ -1503,6 +1503,62 @@ async function callFalImageEdit({ user, product, garmentDataUri, prompt, timer }
   };
 }
 
+function sareeReferenceExpansionPrompt(product = {}) {
+  const descriptor = [
+    product.brand,
+    product.name,
+    product.category,
+    Array.isArray(product.colors) ? product.colors.join(', ') : product.colors,
+    Array.isArray(product.tags) ? product.tags.join(', ') : product.tags
+  ].filter(Boolean).join(' | ');
+  return `Create a single full-body saree garment reference image for a virtual try-on system.
+
+Input image is a catalogue saree photo and may be cropped to the upper body. Do not preserve the crop. Reconstruct the complete saree as a worn full-body traditional outfit from head/shoulder level to feet.
+
+Product context: ${descriptor || 'saree product'}.
+
+Use the exact visible saree fabric, color, border, motif, print, embroidery, texture, shine, and pallu styling from the input. Extend the same saree design into realistic waist pleats and a full lower-body drape to ankles/feet. Include blouse/choli relationship when visible.
+
+Output requirements:
+1. One person/mannequin wearing the complete saree, full body visible.
+2. Pallu, waist pleats, and lower-body drape must all be present.
+3. No jeans, pants, trousers, leggings, shorts, or western bottomwear.
+4. Clean ecommerce white or light neutral background.
+5. No text, labels, collage, split screen, before/after, duplicate bodies, or extra garments.`;
+}
+
+async function expandedSareeReferenceDataUri(product, timer) {
+  const original = await dataUriFromProduct(product, timer);
+  const key = `saree-expanded:${product?._id || product?.id || ''}:${product?.image?.remoteUrl || product?.image?.url || product?.image?.path || ''}`;
+  const cached = getCachedDataUri(remoteImageDataUriCache, key);
+  if (cached) {
+    timer?.mark('saree expanded reference cache hit');
+    return cached;
+  }
+
+  const endpoint = imageModel();
+  const prompt = sareeReferenceExpansionPrompt(product);
+  timer?.mark('saree reference expansion submitted', { model: endpoint });
+  const submission = await falJson(`https://queue.fal.run/${endpoint}`, {
+    method: 'POST',
+    body: JSON.stringify({
+      prompt,
+      image_urls: [original],
+      image_size: imageSize(),
+      quality: imageQuality(),
+      num_images: 1,
+      output_format: 'png'
+    })
+  });
+  const result = await waitForFalResult(submission, timer);
+  const generatedUrl = firstGeneratedImageUrl(result);
+  if (!generatedUrl) throw new Error('FAL did not return a full saree reference image');
+  const { bytes, mimetype } = await generatedBytesFromUrl(generatedUrl, timer);
+  timer?.mark('saree expanded reference downloaded', { outputKb: Math.round(bytes.length / 1024) });
+  const dataUri = `data:${mimetype || 'image/png'};base64,${bytes.toString('base64')}`;
+  return setCachedDataUri(remoteImageDataUriCache, key, dataUri);
+}
+
 async function saveUserCacheFile({ user, bytes, filename, mimetype }) {
   const userId = user._id.toString();
   return saveBuffer({
@@ -1679,7 +1735,7 @@ function isStaleSareeTryOnRecord(tryOn, product) {
     && promptKeyForProduct(product, 'full_outfit') === 'saree'
     && (tryOn?.promptKey !== 'saree'
       || tryOn?.provider !== 'fal'
-      || !/catalogue reference is cropped/i.test(prompt));
+      || !/two-step expanded full-body saree reference/i.test(prompt));
 }
 
 function customHistoryItem(tryOn) {
@@ -1810,8 +1866,9 @@ async function generateProductTryOnImage({ user, product, tryOnModel, timer }) {
   const productPromptKey = promptKeyForProduct(product, 'full_outfit');
   timer?.mark('image generator selected', { tryOnModel: selectedModel, promptKey: productPromptKey });
   if (productPromptKey === 'saree') {
-    timer?.mark('fal image edit forced for garment', { promptKey: productPromptKey });
-    return callFalImageEdit({ user, product, timer });
+    timer?.mark('fal image edit forced for saree full-body expansion', { promptKey: productPromptKey });
+    const garmentDataUri = await expandedSareeReferenceDataUri(product, timer);
+    return callFalImageEdit({ user, product, garmentDataUri, timer });
   }
   if (usePrunaProvider()) {
     return callPrunaTryOn({ user, product, timer });

@@ -75,6 +75,8 @@ Treat the saree as a COMPLETE full-body outfit, not as an upper-body cloth, scar
 
 If Image 1 is cropped, mannequin-only, catalogue-cut, or upper-body focused, still construct a complete worn saree on Image 2. Use the visible saree fabric, color, border, motif, weave, shine, and pallu design from Image 1 as the style reference, then extend that same saree fabric into realistic waist pleats and a full lower-body drape. Do not copy the crop limitation from Image 1.
 
+This prompt expects a two-step expanded full-body saree reference when the original catalogue image was cropped. Never reuse or imitate a partial upper-body saree result.
+
 Replacing the lower-body clothing is mandatory. Wrap the saree fabric around the waist and legs as a real worn saree, with visible vertical drape and pleats continuing down the full lower body. Jeans, trousers, pants, shorts, leggings, skirt waistbands, belt loops, pockets, denim texture, trouser seams, pant legs, and any existing lower-body garment must NOT remain visible.
 
 Do not preserve the person's original pants or leggings. The legs must be covered by saree fabric from waist to ankles/feet except where the reference saree naturally exposes feet or footwear below the hem.

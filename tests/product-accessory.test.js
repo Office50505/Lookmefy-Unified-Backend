@@ -87,6 +87,7 @@ test('saree products use saree-specific prompt and FAL image-edit routing', asyn
   assert.match(prompt.prompt, /Reference image 1 is the person image\. Reference image 2 is the garment reference image\./);
   assert.match(prompt.prompt, /complete traditional outfit/i);
   assert.match(prompt.prompt, /catalogue reference is cropped/i);
+  assert.match(prompt.prompt, /two-step expanded full-body saree reference/i);
   assert.match(prompt.prompt, /blouse\/choli/i);
   assert.match(prompt.prompt, /waist pleats/i);
   assert.match(prompt.prompt, /full lower-body drape/i);
@@ -101,8 +102,9 @@ test('saree try-on generation replaces stale cached output and preserves default
   const source = await readFile('server/routes/tryons.js', 'utf8');
   assert.match(source, /const productPromptKey = promptKeyForProduct\(product, 'full_outfit'\);/);
   assert.match(source, /if \(productPromptKey === 'saree'\)/);
+  assert.match(source, /expandedSareeReferenceDataUri\(product, timer\)/);
   assert.match(source, /const generationModel = isSareeTryOn \? '' : \(hasRequestedModel \? selectedModel : ''\);/);
-  assert.match(source, /catalogue reference is cropped/i);
+  assert.match(source, /two-step expanded full-body saree reference/i);
   assert.match(source, /const shouldReplaceExisting = forceGenerate \|\| staleSareeTryOn;/);
   assert.match(source, /shouldReplaceExisting\s*\?\s*await replaceGeneratedTryOn/);
   assert.match(source, /function isStaleSareeTryOnRecord/);
