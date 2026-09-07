@@ -64,8 +64,15 @@ test('garment targeting maps bottoms and full body garments to the right provide
 
 test('saree products use saree-specific prompt and FAL image-edit routing', () => {
   const product = { name: 'Kanjivaram silk saree', category: 'sarees', garmentPlacement: 'full-body' };
+  const officeSari = {
+    name: "MIRCHI FASHION Saree for Woman Chiffon Batik Printed | Lightweight Daily Wear Women's Office Sari with Blouse Piece",
+    category: 'ethnic wear',
+    garmentPlacement: 'full-body',
+    tryOnModel: 'gpt-image-2'
+  };
   const prompt = promptForProduct(product);
   assert.equal(prompt.key, 'saree');
+  assert.equal(promptKeyForProduct(officeSari), 'saree');
   assert.match(prompt.prompt, /Reference image 1 is the person image\. Reference image 2 is the garment reference image\./);
   assert.match(prompt.prompt, /complete traditional outfit/i);
   assert.match(prompt.prompt, /blouse\/choli/i);
@@ -75,12 +82,15 @@ test('saree products use saree-specific prompt and FAL image-edit routing', () =
   assert.match(prompt.prompt, /Jeans, trousers, pants/i);
   assert.equal(fitRoomClothTypeForProduct(product), 'full_set');
   assert.equal(shouldUseFalImageEditForProduct(product), true);
+  assert.equal(shouldUseFalImageEditForProduct(officeSari), true);
 });
 
 test('saree try-on generation replaces stale cached output and preserves default FAL routing', async () => {
   const source = await readFile('server/routes/tryons.js', 'utf8');
-  assert.match(source, /const generationModel = hasRequestedModel \? selectedModel : '';/);
+  assert.match(source, /const productPromptKey = promptKeyForProduct\(product, 'full_outfit'\);/);
+  assert.match(source, /if \(productPromptKey === 'saree'\)/);
+  assert.match(source, /const generationModel = isSareeTryOn \? '' : \(hasRequestedModel \? selectedModel : ''\);/);
   assert.match(source, /const shouldReplaceExisting = forceGenerate \|\| staleSareeTryOn;/);
   assert.match(source, /shouldReplaceExisting\s*\?\s*await replaceGeneratedTryOn/);
-  assert.match(source, /if \(shouldUseFalImageEditForProduct\(product\)\)/);
+  assert.match(source, /function isStaleSareeTryOnRecord/);
 });

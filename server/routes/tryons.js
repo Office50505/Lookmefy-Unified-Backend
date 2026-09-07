@@ -40,7 +40,7 @@ import {
   videoPrunaCostUsd,
   waitForPrunaPrediction
 } from '../utils/prunaClient.js';
-import { isSareeProduct, isWatchProduct, promptForKey, promptForProduct, promptKeyForProduct } from '../utils/tryOnPrompts.js';
+import { isWatchProduct, promptForKey, promptForProduct, promptKeyForProduct } from '../utils/tryOnPrompts.js';
 import { falModelCostEstimate } from '../services/providerIntegrations.js';
 
 const router = express.Router();
@@ -363,7 +363,7 @@ function tryOnModelForProduct(product = {}) {
 }
 
 function shouldUseFalImageEditForProduct(product = {}) {
-  return isSareeProduct(product);
+  return promptKeyForProduct(product, 'full_outfit') === 'saree';
 }
 
 function imageQuality() {
@@ -1672,6 +1672,12 @@ function customTryOnToClient(tryOn) {
   return new CustomTryOn(tryOn).toClient();
 }
 
+function isStaleSareeTryOnRecord(tryOn, product) {
+  return product
+    && promptKeyForProduct(product, 'full_outfit') === 'saree'
+    && (tryOn?.promptKey !== 'saree' || tryOn?.provider !== 'fal');
+}
+
 function customHistoryItem(tryOn) {
   const client = customTryOnToClient(tryOn);
   return {
@@ -1797,9 +1803,10 @@ async function isolateGeneratedImage(user, image, timer) {
 
 async function generateProductTryOnImage({ user, product, tryOnModel, timer }) {
   const selectedModel = tryOnModel || tryOnModelForProduct(product);
-  timer?.mark('image generator selected', { tryOnModel: selectedModel });
-  if (shouldUseFalImageEditForProduct(product)) {
-    timer?.mark('fal image edit forced for garment', { promptKey: promptKeyForProduct(product, 'full_outfit') });
+  const productPromptKey = promptKeyForProduct(product, 'full_outfit');
+  timer?.mark('image generator selected', { tryOnModel: selectedModel, promptKey: productPromptKey });
+  if (productPromptKey === 'saree') {
+    timer?.mark('fal image edit forced for garment', { promptKey: productPromptKey });
     return callFalImageEdit({ user, product, timer });
   }
   if (usePrunaProvider()) {
@@ -2139,13 +2146,16 @@ async function runProductTryOnJob({ userId, productId, requestedModel = '', forc
       return { status: 404, body: { message: 'Product not found' } };
     }
     const existing = await TryOn.findOne({ user: user._id, product: productId });
-    const selectedModel = hasRequestedModel ? requested : tryOnModelForProduct(product);
+    const productPromptKey = promptKeyForProduct(product, 'full_outfit');
+    const isSareeTryOn = productPromptKey === 'saree';
+    const selectedModel = isSareeTryOn ? imageModel() : (hasRequestedModel ? requested : tryOnModelForProduct(product));
     timer.mark('product loaded', {
       tryOnModel: selectedModel,
+      promptKey: productPromptKey,
       existingModel: existing?.model || ''
     });
 
-    const staleSareeTryOn = isSareeProduct(product) && (existing?.promptKey !== 'saree' || existing?.provider !== 'fal');
+    const staleSareeTryOn = isSareeTryOn && (existing?.promptKey !== 'saree' || existing?.provider !== 'fal');
     if (existing && !forceGenerate && !staleSareeTryOn) {
       timer.end({ reused: true });
       await recordGenerationMetric({ user: user._id, product: product._id, type: 'product_image', status: 'reused', provider: existing.provider, model: existing.model, durationMs: Date.now() - analyticsStartedAt });
@@ -2162,7 +2172,7 @@ async function runProductTryOnJob({ userId, productId, requestedModel = '', forc
     reserved = true;
     user = chargedUser;
 
-    const generationModel = hasRequestedModel ? selectedModel : '';
+    const generationModel = isSareeTryOn ? '' : (hasRequestedModel ? selectedModel : '');
     const shouldReplaceExisting = forceGenerate || staleSareeTryOn;
     const tryOn = shouldReplaceExisting
       ? await replaceGeneratedTryOn({ user, product, tryOnModel: generationModel, timer })
@@ -2203,7 +2213,13 @@ router.get('/', requireUser, tryOnReadLimiter, async (req, res) => {
   const filter = { user: req.user._id };
   if (ids.length) filter.product = { $in: ids };
   const tryOns = await TryOn.find(filter).sort({ createdAt: -1 }).lean();
-  res.json({ tryOns: tryOns.map(tryOnToClient) });
+  const productIds = [...new Set(tryOns.map((tryOn) => documentId(tryOn.product)).filter(Boolean))];
+  const products = productIds.length
+    ? await Product.find({ _id: { $in: productIds } }).select('name brand category garmentPlacement').lean()
+    : [];
+  const productsById = new Map(products.map((product) => [documentId(product), product]));
+  const visibleTryOns = tryOns.filter((tryOn) => !isStaleSareeTryOnRecord(tryOn, productsById.get(documentId(tryOn.product))));
+  res.json({ tryOns: visibleTryOns.map(tryOnToClient) });
 });
 
 router.get('/history', requireUser, tryOnReadLimiter, async (req, res) => {
@@ -2240,8 +2256,9 @@ router.get('/history', requireUser, tryOnReadLimiter, async (req, res) => {
     ExternalTryOn.countDocuments(userFilter)
   ]);
 
+  const visibleProductTryOns = productTryOns.filter((tryOn) => !isStaleSareeTryOnRecord(tryOn, tryOn.product));
   const items = [
-    ...productTryOns.map(productHistoryItem),
+    ...visibleProductTryOns.map(productHistoryItem),
     ...customTryOns.map(customHistoryItem),
     ...externalTryOns.map(externalHistoryItem)
   ]
