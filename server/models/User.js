@@ -34,6 +34,10 @@ function avatarPhotoUrl(user) {
   return storedPhotoUrl(user.avatarPhoto, user);
 }
 
+function isInternalUserEmail(value = '') {
+  return /@(?:fitlook\.local|phone\.lookmefy\.local)$/i.test(String(value || '').trim());
+}
+
 const userSchema = new mongoose.Schema(
   {
     name: { type: String, trim: true, required: true },
@@ -160,7 +164,7 @@ userSchema.methods.toClient = function toClient() {
   return {
     id: this._id.toString(),
     name: this.name,
-    email: this.email,
+    email: isInternalUserEmail(this.email) ? '' : this.email,
     phone: this.phone,
     phoneVerified: Boolean(this.phoneVerifiedAt),
     hasPassword: Boolean(this.passwordSetAt || this.passwordHash),

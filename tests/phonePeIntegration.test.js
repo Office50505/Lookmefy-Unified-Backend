@@ -7,6 +7,7 @@ import {
   calculatePhonePeCallbackAuthorization,
   checkoutIdempotencyKey,
   configuredRedirectUrl,
+  activateRazorpaySubscriptionNow,
   createDemoCreditPayment,
   createRazorpayPayment,
   completeRazorpayPayment,
@@ -597,6 +598,121 @@ test('Razorpay subscription authorization credits starter tokens but not monthly
     User.findOneAndUpdate = original.userFindOneAndUpdate;
     CreditEvent.findOne = original.creditEventFindOne;
     CreditEvent.create = original.creditEventCreate;
+    global.fetch = original.fetch;
+    for (const [key, value] of Object.entries(original.env)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test('Razorpay early subscription activation moves first debit without crediting tokens', async () => {
+  const original = {
+    tokenFindOne: TokenOrder.findOne,
+    tokenFindById: TokenOrder.findById,
+    tokenUpdateOne: TokenOrder.updateOne,
+    userFindById: User.findById,
+    userFindByIdAndUpdate: User.findByIdAndUpdate,
+    userFindOneAndUpdate: User.findOneAndUpdate,
+    creditEventFindOne: CreditEvent.findOne,
+    fetch: global.fetch,
+    env: {
+      RAZORPAY_ENABLED: process.env.RAZORPAY_ENABLED,
+      RAZORPAY_MODE: process.env.RAZORPAY_MODE,
+      RAZORPAY_TEST_KEY_ID: process.env.RAZORPAY_TEST_KEY_ID,
+      RAZORPAY_TEST_KEY_SECRET: process.env.RAZORPAY_TEST_KEY_SECRET,
+      RAZORPAY_BASE_URL: process.env.RAZORPAY_BASE_URL
+    }
+  };
+  let order = {
+    _id: 'order-subscription-early',
+    user: 'user1',
+    provider: 'razorpay',
+    merchantOrderId: 'FLRZP_SUB_EARLY',
+    merchantSubscriptionId: 'sub_rzp_early',
+    razorpaySubscriptionId: 'sub_rzp_early',
+    razorpayMode: 'test',
+    amount: SUBSCRIPTION_PLAN.mandate.recurringAmount,
+    dueTodayAmount: SUBSCRIPTION_PLAN.dueTodayAmount,
+    recurringAmount: SUBSCRIPTION_PLAN.mandate.recurringAmount,
+    planId: SUBSCRIPTION_PLAN.id,
+    planName: SUBSCRIPTION_PLAN.name,
+    orderType: 'subscription',
+    tokens: SUBSCRIPTION_PLAN.tokens,
+    status: 'pending',
+    creditedAt: null
+  };
+  let creditedTokens = 0;
+  let patchBody = null;
+  try {
+    process.env.RAZORPAY_ENABLED = 'true';
+    process.env.RAZORPAY_MODE = 'test';
+    process.env.RAZORPAY_TEST_KEY_ID = 'rzp_key';
+    process.env.RAZORPAY_TEST_KEY_SECRET = 'rzp_secret';
+    process.env.RAZORPAY_BASE_URL = 'https://razorpay.test/v1';
+    TokenOrder.findOne = async () => order;
+    TokenOrder.findById = async () => order;
+    TokenOrder.updateOne = async (_filter, update) => {
+      order = { ...order, ...update.$set };
+      return { modifiedCount: 1 };
+    };
+    User.findById = async () => ({ _id: 'user1', tokens: 4 + creditedTokens });
+    User.findByIdAndUpdate = async (_id, update) => ({
+      _id: 'user1',
+      tokens: 4 + creditedTokens,
+      subscription: update.$set.subscription,
+      toClient() {
+        return { id: this._id, tokens: this.tokens, subscription: this.subscription };
+      }
+    });
+    User.findOneAndUpdate = async (_filter, update) => {
+      creditedTokens += Number(update.$inc?.tokens || 0);
+      return { _id: 'user1', tokens: 4 + creditedTokens };
+    };
+    CreditEvent.findOne = async () => null;
+    global.fetch = async (url, options = {}) => {
+      assert.equal(String(url), 'https://razorpay.test/v1/subscriptions/sub_rzp_early');
+      assert.equal(options.method, 'PATCH');
+      patchBody = JSON.parse(options.body);
+      return new Response(JSON.stringify({
+        id: 'sub_rzp_early',
+        status: 'authenticated',
+        charge_at: patchBody.start_at
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    };
+
+    const result = await activateRazorpaySubscriptionNow({
+      user: {
+        _id: {
+          toString: () => 'user1'
+        },
+        subscription: {
+          provider: 'razorpay',
+          status: 'authenticated',
+          merchantSubscriptionId: 'sub_rzp_early',
+          razorpayMode: 'test'
+        }
+      }
+    });
+
+    assert.equal(patchBody.schedule_change_at, 'now');
+    assert.equal(patchBody.customer_notify, 1);
+    assert.equal(patchBody.notes.earlyActivation, 'true');
+    assert.equal(Number.isInteger(patchBody.start_at), true);
+    assert.equal(creditedTokens, 0);
+    assert.equal(result.activation.requested, true);
+    assert.equal(result.user.subscription.nextBillingAt.getTime(), order.debitScheduledAt.getTime());
+  } finally {
+    TokenOrder.findOne = original.tokenFindOne;
+    TokenOrder.findById = original.tokenFindById;
+    TokenOrder.updateOne = original.tokenUpdateOne;
+    User.findById = original.userFindById;
+    User.findByIdAndUpdate = original.userFindByIdAndUpdate;
+    User.findOneAndUpdate = original.userFindOneAndUpdate;
+    CreditEvent.findOne = original.creditEventFindOne;
     global.fetch = original.fetch;
     for (const [key, value] of Object.entries(original.env)) {
       if (value === undefined) delete process.env[key];

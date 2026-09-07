@@ -1036,6 +1036,123 @@ async function grantRazorpaySubscriptionCycleTokens({ order, subscription = {}, 
   return { user, order: cycleOrder, alreadyCredited: false };
 }
 
+function earlyActivationAllowedStatus(status = '') {
+  return ['authenticated', 'active'].includes(String(status || '').toLowerCase());
+}
+
+async function latestRazorpaySubscriptionOrderForUser(user, subscriptionId) {
+  const query = TokenOrder.findOne({
+    user: user._id,
+    provider: 'razorpay',
+    orderType: 'subscription',
+    $or: [
+      { merchantSubscriptionId: subscriptionId },
+      { razorpaySubscriptionId: subscriptionId }
+    ]
+  });
+  return typeof query?.sort === 'function' ? query.sort({ createdAt: -1 }) : query;
+}
+
+async function hasRazorpayMonthlyCreditForOrder(order) {
+  if (order?.creditedAt) return true;
+  const subscriptionId = order?.merchantSubscriptionId || order?.razorpaySubscriptionId || '';
+  const existingEvent = await CreditEvent.findOne({
+    user: order.user,
+    action: 'subscription_tokens_purchased',
+    $or: [
+      { 'metadata.parentOrderId': order.merchantOrderId },
+      { 'metadata.subscriptionId': subscriptionId }
+    ]
+  });
+  return Boolean(existingEvent);
+}
+
+async function activateRazorpaySubscriptionNow({ user }) {
+  const current = user?.subscription?.toObject?.() || user?.subscription || {};
+  const subscriptionId = String(current.merchantSubscriptionId || '').trim();
+  if (current.provider !== 'razorpay' || !subscriptionId) {
+    const error = new Error('Set up the monthly mandate before activating monthly credits.');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (!earlyActivationAllowedStatus(current.status)) {
+    const error = new Error('Your mandate is not authenticated yet. Complete the setup payment first.');
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const order = await latestRazorpaySubscriptionOrderForUser(user, subscriptionId);
+  if (!order) {
+    const error = new Error('Subscription setup order was not found. Please contact support.');
+    error.statusCode = 404;
+    throw error;
+  }
+  if (await hasRazorpayMonthlyCreditForOrder(order)) {
+    const error = new Error('Monthly credits have already been processed for this subscription cycle.');
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const credentials = razorpayCredentialsForMode(current.razorpayMode || order.razorpayMode || process.env.RAZORPAY_MODE);
+  const requestedStartAt = Math.floor(Date.now() / 1000) + 120;
+  const subscription = await razorpayFetch(`/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      start_at: requestedStartAt,
+      schedule_change_at: 'now',
+      customer_notify: 1,
+      notes: {
+        earlyActivation: 'true',
+        userId: user._id.toString(),
+        merchantOrderId: order.merchantOrderId,
+        planId: order.planId || SUBSCRIPTION_PLAN.id
+      }
+    })
+  }, credentials);
+
+  const chargeAt = razorpayTimestamp(subscription.charge_at || subscription.start_at) || new Date(requestedStartAt * 1000);
+  const providerResponse = {
+    ...(order.providerResponse && typeof order.providerResponse === 'object' ? order.providerResponse : {}),
+    earlyActivation: {
+      requestedAt: new Date().toISOString(),
+      requestedStartAt,
+      subscription
+    }
+  };
+  await TokenOrder.updateOne(
+    { _id: order._id },
+    {
+      $set: {
+        debitScheduledAt: chargeAt,
+        providerState: String(subscription.status || order.providerState || 'AUTHENTICATED').toUpperCase(),
+        providerResponse
+      }
+    }
+  );
+  const savedOrder = await TokenOrder.findById(order._id) || {
+    ...order,
+    debitScheduledAt: chargeAt,
+    providerState: String(subscription.status || order.providerState || 'AUTHENTICATED').toUpperCase(),
+    providerResponse
+  };
+  const updatedUser = await updateRazorpaySubscriptionSnapshot({
+    order: savedOrder,
+    subscription,
+    providerResponse
+  }) || await User.findById(order.user);
+
+  return {
+    user: updatedUser,
+    order: savedOrder,
+    activation: {
+      requested: true,
+      subscriptionId,
+      chargeAt,
+      requestedStartAt
+    }
+  };
+}
+
 function razorpayWebhookCredentialCandidates() {
   const byMode = ['test', 'live'].map((mode) => razorpayCredentialsForMode(mode));
   const legacy = {
@@ -2379,6 +2496,22 @@ router.get('/subscriptions/current/status', requireUser, async (req, res) => {
   res.json({ subscription: req.user.toClient().subscription });
 });
 
+router.post('/subscriptions/current/activate-now', requireUser, paymentCreateLimiter, async (req, res) => {
+  try {
+    const result = await activateRazorpaySubscriptionNow({ user: req.user });
+    const clientUser = result.user?.toClient?.() || req.user.toClient();
+    res.json({
+      subscription: clientUser.subscription,
+      user: clientUser,
+      order: result.order?.toClient?.() || result.order,
+      activation: result.activation,
+      message: 'Monthly charge requested now. 150 credits will be added after Razorpay confirms the Rs 499 payment.'
+    });
+  } catch (error) {
+    res.status(error.statusCode || 400).json({ message: readableRazorpayError(error, 'Could not activate monthly credits now') });
+  }
+});
+
 router.post('/subscriptions/current/cancel', requireUser, async (req, res) => {
   const current = req.user.subscription || {};
   if (!current.status || !['active', 'authenticated', 'trialing', 'billing_retry'].includes(String(current.status))) {
@@ -2439,6 +2572,7 @@ export {
   appleGrantableTransaction,
   appleStatusForTransaction,
   appleSubscriptionUpdateForTransaction,
+  activateRazorpaySubscriptionNow,
   createDemoCreditPayment,
   createMerchantOrderId,
   createRazorpayPayment,

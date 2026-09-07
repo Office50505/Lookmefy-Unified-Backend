@@ -61,6 +61,21 @@ test('user model accepts additive app profile and subscription fields', () => {
   assert.deepEqual(client.avatarCrop.scale, 1.2);
 });
 
+test('user client payload hides generated internal login emails', () => {
+  const user = new User({
+    name: 'Mobile Signup User',
+    email: 'profile_mtmvdp22e0n0y5@fitlook.local',
+    phone: '+919876543210',
+    username: 'mobile_signup_user',
+    passwordHash: 'hashed-password'
+  });
+
+  assert.equal(user.validateSync(), undefined);
+  const client = user.toClient();
+  assert.equal(client.email, '');
+  assert.equal(client.phone, '+919876543210');
+});
+
 test('token order model accepts app purchase compatibility fields', () => {
   const order = new TokenOrder({
     user: objectId(),

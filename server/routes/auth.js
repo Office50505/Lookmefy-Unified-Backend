@@ -782,11 +782,21 @@ function asyncRoute(handler) {
   return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
 }
 
+function isInternalAuthEmail(value = '') {
+  return /@(?:fitlook\.local|phone\.lookmefy\.local)$/i.test(String(value || '').trim());
+}
+
+function publicAccountIdentifier(user = {}, fallback = '') {
+  if (user?.phone) return user.phone;
+  if (user?.email && !isInternalAuthEmail(user.email)) return user.email;
+  return String(fallback || '').trim();
+}
+
 function accountExistsPayload(identifier, message = 'An account already exists. Please sign in.') {
   return {
     message,
     code: 'ACCOUNT_EXISTS',
-    identifier: String(identifier || '').trim()
+    identifier: isInternalAuthEmail(identifier) ? '' : String(identifier || '').trim()
   };
 }
 
@@ -798,7 +808,7 @@ router.post('/otp/send', otpRequestIpLimiter, otpRequestPhoneLimiter, otpRequest
 
   const user = await User.findOne({ phone }).select('_id email phone accountStatus bannedAt deletedAt').lean();
   if (purpose === 'signup' && user) {
-    return res.status(409).json(accountExistsPayload(user.email || user.phone || phone, 'An account already exists for this mobile number. Log in with your password, or reset it with OTP.'));
+    return res.status(409).json(accountExistsPayload(publicAccountIdentifier(user, phone), 'An account already exists for this mobile number. Log in with your password, or reset it with OTP.'));
   }
   if (['login', 'password-reset'].includes(purpose)) {
     if (!user) return res.status(404).json({ message: 'No Lookmefy account found for this phone number' });
@@ -853,7 +863,7 @@ router.post('/otp/verify', otpAuthIpLimiter, asyncRoute(async (req, res) => {
 
   if (purpose === 'signup') {
     const existing = await User.findOne({ phone }).select('email phone').lean();
-    if (existing) return res.status(409).json(accountExistsPayload(existing.email || existing.phone || phone, 'An account already exists for this mobile number. Please sign in.'));
+    if (existing) return res.status(409).json(accountExistsPayload(publicAccountIdentifier(existing, phone), 'An account already exists for this mobile number. Please sign in.'));
     return res.json({
       signupToken: signAuthActionToken({ phone, purpose, otpSession }),
       phone,
@@ -883,7 +893,7 @@ router.post('/signup/request-otp', otpRequestIpLimiter, otpRequestPhoneLimiter, 
   const phone = normalizePhone(req.body?.phone);
   if (!phone) return res.status(400).json({ message: 'Enter a valid mobile number.' });
   const existing = await User.findOne({ phone }).select('email phone').lean();
-  if (existing) return res.status(409).json(accountExistsPayload(existing.email || existing.phone || phone, 'An account already exists for this phone number. Please sign in.'));
+  if (existing) return res.status(409).json(accountExistsPayload(publicAccountIdentifier(existing, phone), 'An account already exists for this phone number. Please sign in.'));
 
   const { otpSession, otp, expiresAt } = await createOtpChallenge({
     sessions: signupOtpSessions,
@@ -983,7 +993,7 @@ router.post('/signup/complete', upload.single('bodyPhoto'), asyncRoute(async (re
       { username }
     ]
   });
-  if (existing?.email === email || existing?.phone === phone) return res.status(409).json(accountExistsPayload(existing.email || existing.phone || phone, 'An account already exists for this mobile number. Please sign in.'));
+  if (existing?.email === email || existing?.phone === phone) return res.status(409).json(accountExistsPayload(publicAccountIdentifier(existing, phone), 'An account already exists for this mobile number. Please sign in.'));
   if (existing?.username === username) return res.status(409).json({ message: 'This username is already taken' });
 
   try {
@@ -1045,7 +1055,7 @@ router.post('/signup', upload.single('bodyPhoto'), asyncRoute(async (req, res) =
     ]
   });
   if (existing?.email === email.toLowerCase()) return res.status(409).json(accountExistsPayload(existing.email, 'An account already exists for this email. Please sign in.'));
-  if (existing?.phone === phone) return res.status(409).json(accountExistsPayload(existing.email || existing.phone || phone, 'An account already exists for this phone number. Please sign in.'));
+  if (existing?.phone === phone) return res.status(409).json(accountExistsPayload(publicAccountIdentifier(existing, phone), 'An account already exists for this phone number. Please sign in.'));
   if (existing?.username === username) return res.status(409).json({ message: 'This username is already taken' });
 
   try {

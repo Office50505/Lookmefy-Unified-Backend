@@ -912,12 +912,21 @@ function authReturnPath() {
 
 function loginHrefForIdentifier(identifier = '') {
   const params = new URLSearchParams();
-  const cleanIdentifier = String(identifier || '').trim();
+  const cleanIdentifier = publicLoginIdentifier(identifier);
   const destination = authReturnPath();
   if (cleanIdentifier) params.set('identifier', cleanIdentifier);
   if (destination && destination !== '/home') params.set('return', destination);
   const query = params.toString();
   return `/login${query ? `?${query}` : ''}`;
+}
+
+function isInternalLoginIdentifier(value = '') {
+  return /@(?:fitlook\.local|phone\.lookmefy\.local)$/i.test(String(value || '').trim());
+}
+
+function publicLoginIdentifier(value = '') {
+  const clean = String(value || '').trim();
+  return isInternalLoginIdentifier(clean) ? '' : clean;
 }
 
 function isExistingAccountError(error) {
@@ -6663,6 +6672,7 @@ function ImageLightbox({ image, onClose }) {
 function TokenPage({ user, setUser, mode = 'overview' }) {
   const isTopUpPage = mode === 'topup';
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [activateNowLoading, setActivateNowLoading] = useState(false);
   const [selectedPackId, setSelectedPackId] = useState(isTopUpPage ? 'topup_50_tokens' : 'monthly_150_tokens');
   const [message, setMessage] = useState('');
   const [creditedOrder, setCreditedOrder] = useState(null);
@@ -6672,6 +6682,18 @@ function TokenPage({ user, setUser, mode = 'overview' }) {
   const returnedOrderId = params.get('merchantOrderId') || params.get('orderId') || '';
   const subscription = user?.subscription;
   const isActive = subscription?.status === 'active' && (!subscription.currentPeriodEnd || new Date(subscription.currentPeriodEnd) > new Date());
+  const subscriptionStatus = String(subscription?.status || '').toLowerCase();
+  const nextBillingAtMs = subscription?.nextBillingAt ? new Date(subscription.nextBillingAt).getTime() : 0;
+  const canActivateMonthlyNow = Boolean(
+    !isTopUpPage
+    && user
+    && Number(user.tokens || 0) <= 0
+    && subscription?.provider === 'razorpay'
+    && subscription?.merchantSubscriptionId
+    && subscriptionStatus === 'authenticated'
+    && Number.isFinite(nextBillingAtMs)
+    && nextBillingAtMs > Date.now() + (5 * 60 * 1000)
+  );
 
   useEffect(() => {
     if (!user || !returnedOrderId || verifiedOrderRef.current === returnedOrderId) return;
@@ -6807,6 +6829,22 @@ function TokenPage({ user, setUser, mode = 'overview' }) {
     }
   };
 
+  const activateMonthlyNow = async () => {
+    if (!user || activateNowLoading) return;
+    setActivateNowLoading(true);
+    setMessage('Requesting the first monthly charge from Razorpay...');
+    try {
+      const data = await api('/payments/subscriptions/current/activate-now', { method: 'POST' });
+      if (data.user) setUser(data.user);
+      setMessage(data.message || 'Monthly charge requested now. 150 credits will be added after Razorpay confirms payment.');
+      announce('Monthly charge requested.');
+    } catch (err) {
+      setMessage(err.message);
+    } finally {
+      setActivateNowLoading(false);
+    }
+  };
+
   const recurringAmount = formatMinorAmount(SUBSCRIPTION_PLAN.mandate.recurringAmount, SUBSCRIPTION_PLAN.currency);
   const dueTodayAmount = formatMinorAmount(SUBSCRIPTION_PLAN.dueTodayAmount, SUBSCRIPTION_PLAN.currency);
   const setupTokens = Number(SUBSCRIPTION_PLAN.setupTokens || 20);
@@ -6925,6 +6963,19 @@ function TokenPage({ user, setUser, mode = 'overview' }) {
                 <span className="credit-phonepe-mark">R</span><strong>Razorpay</strong><small>UPI, cards, and net banking</small><b>Selected</b>
               </button>
             </section>
+
+            {canActivateMonthlyNow && (
+              <section className="credit-early-activation" aria-label="Activate monthly credits now">
+                <div>
+                  <small>Starter credits used</small>
+                  <strong>Get 150 credits now</strong>
+                  <span>Your Rs 499 monthly charge is scheduled for {formatDate(subscription.nextBillingAt)}. Bring it forward if you need credits before then.</span>
+                </div>
+                <button type="button" onClick={activateMonthlyNow} disabled={activateNowLoading}>
+                  {activateNowLoading ? 'Requesting...' : 'Charge Rs 499 now'}
+                </button>
+              </section>
+            )}
           </div>
 
           <aside className="credit-order-summary" aria-label="Order summary">
@@ -10000,7 +10051,7 @@ function AuthPage({ mode, setUser }) {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const resetSucceeded = mode === 'login' && params.get('passwordReset') === 'success';
-    const loginIdentifier = mode === 'login' ? (params.get('identifier') || params.get('email') || params.get('phone') || '') : '';
+    const loginIdentifier = mode === 'login' ? publicLoginIdentifier(params.get('identifier') || params.get('email') || params.get('phone') || '') : '';
     setMessage(resetSucceeded ? 'Password reset successfully. Sign in with your new password.' : '');
     setCapsLock(false);
     setIsSubmitting(false);
@@ -10065,7 +10116,7 @@ function AuthPage({ mode, setUser }) {
   };
 
   const redirectExistingAccountToLogin = (error, fallbackIdentifier = phoneValue) => {
-    const identifier = error?.identifier || error?.data?.identifier || fallbackIdentifier;
+    const identifier = publicLoginIdentifier(error?.identifier || error?.data?.identifier) || publicLoginIdentifier(fallbackIdentifier);
     window.history.pushState({}, '', loginHrefForIdentifier(identifier));
     window.dispatchEvent(new PopStateEvent('popstate'));
   };

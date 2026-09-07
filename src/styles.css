@@ -20688,6 +20688,69 @@ main > section.wrap {
   font-size: 10px !important;
 }
 
+.credit-early-activation {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  border: 1px solid rgba(155, 81, 77, .22);
+  border-radius: 8px;
+  padding: clamp(18px, 2vw, 24px);
+  background: #fff8f6;
+  box-shadow: 0 18px 42px rgba(89, 56, 51, .08);
+}
+
+.credit-early-activation div {
+  display: grid;
+  gap: 6px;
+}
+
+.credit-early-activation small {
+  color: #9b514d;
+  font-family: var(--font-interface);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.credit-early-activation strong {
+  color: #292421;
+  font-family: var(--font-display);
+  font-size: clamp(24px, 2.2vw, 34px);
+  font-weight: 400;
+  line-height: 1;
+}
+
+.credit-early-activation span {
+  max-width: 560px;
+  color: #6f655f;
+  font-family: var(--font-interface);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.credit-early-activation button {
+  min-height: 48px;
+  min-width: 170px;
+  border: 1px solid #9b514d;
+  border-radius: 7px;
+  background: #9b514d;
+  color: #fff;
+  font-family: var(--font-interface);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 14px 28px rgba(155, 81, 77, .18);
+}
+
+.credit-early-activation button:disabled {
+  cursor: wait;
+  opacity: .68;
+}
+
 .credit-order-summary {
   position: sticky;
   top: 96px;
@@ -20771,6 +20834,14 @@ main > section.wrap {
 
   .credit-payment-section {
     grid-template-columns: 1fr;
+  }
+
+  .credit-early-activation {
+    grid-template-columns: 1fr;
+  }
+
+  .credit-early-activation button {
+    width: 100%;
   }
 }
 
