@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import Product from '../server/models/Product.js';
 import { normalizeGarmentPlacement } from '../server/routes/products.js';
-import { fitRoomClothTypeForProduct, fitRoomClothTypeForPromptKey, shouldUseFalImageEditForProduct } from '../server/routes/tryons.js';
+import { fitRoomClothTypeForProduct, fitRoomClothTypeForPromptKey, sareeImageQuality, shouldUseFalImageEditForProduct } from '../server/routes/tryons.js';
 import { promptForProduct, promptKeyForProduct } from '../server/utils/tryOnPrompts.js';
 
 test('product fit area accepts an explicit accessory classification', () => {
@@ -100,9 +100,12 @@ test('saree products use saree-specific prompt and FAL image-edit routing', asyn
 
 test('saree try-on generation replaces stale cached output and preserves default FAL routing', async () => {
   const source = await readFile('server/routes/tryons.js', 'utf8');
+  assert.equal(sareeImageQuality(), 'high');
   assert.match(source, /const productPromptKey = promptKeyForProduct\(product, 'full_outfit'\);/);
   assert.match(source, /if \(productPromptKey === 'saree'\)/);
   assert.match(source, /expandedSareeReferenceDataUri\(product, timer\)/);
+  assert.match(source, /quality: sareeImageQuality\(\)/);
+  assert.match(source, /tryOn\?\.quality !== sareeImageQuality\(\)/);
   assert.match(source, /const generationModel = isSareeTryOn \? '' : \(hasRequestedModel \? selectedModel : ''\);/);
   assert.match(source, /two-step expanded full-body saree reference/i);
   assert.match(source, /const shouldReplaceExisting = forceGenerate \|\| staleSareeTryOn;/);

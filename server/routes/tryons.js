@@ -370,6 +370,11 @@ function imageQuality() {
   return process.env.FAL_IMAGE_QUALITY || 'low';
 }
 
+function sareeImageQuality() {
+  const value = String(process.env.FAL_SAREE_IMAGE_QUALITY || 'high').trim().toLowerCase();
+  return new Set(['low', 'medium', 'high']).has(value) ? value : 'high';
+}
+
 function imageSize() {
   const width = Number(process.env.FAL_IMAGE_WIDTH || 1024);
   const height = Number(process.env.FAL_IMAGE_HEIGHT || 768);
@@ -1452,7 +1457,7 @@ async function callFalWanImageToImage({ user, product, garmentDataUri, prompt, t
   };
 }
 
-async function callFalImageEdit({ user, product, garmentDataUri, prompt, timer }) {
+async function callFalImageEdit({ user, product, garmentDataUri, prompt, quality, timer }) {
   const [person, garment] = await Promise.all([
     dataUriFromUpload(user.bodyPhoto, 'person', timer),
     garmentDataUri ? Promise.resolve(garmentDataUri) : dataUriFromProduct(product, timer)
@@ -1465,6 +1470,7 @@ async function callFalImageEdit({ user, product, garmentDataUri, prompt, timer }
     ? { key: promptKeyForProduct(product, 'full_outfit'), prompt }
     : promptForProduct(product, 'full_outfit');
   const finalPrompt = promptInfo.prompt || tryOnPrompt(product);
+  const selectedQuality = quality || imageQuality();
   const endpoint = imageModel();
   const submission = await falJson(`https://queue.fal.run/${endpoint}`, {
     method: 'POST',
@@ -1472,7 +1478,7 @@ async function callFalImageEdit({ user, product, garmentDataUri, prompt, timer }
       prompt: finalPrompt,
       image_urls: [person, garment],
       image_size: imageSize(),
-      quality: imageQuality(),
+      quality: selectedQuality,
       num_images: 1,
       output_format: 'png'
     })
@@ -1499,7 +1505,7 @@ async function callFalImageEdit({ user, product, garmentDataUri, prompt, timer }
     promptKey: promptInfo.key,
     provider: 'fal',
     model: endpoint,
-    quality: imageQuality()
+    quality: selectedQuality
   };
 }
 
@@ -1529,7 +1535,8 @@ Output requirements:
 
 async function expandedSareeReferenceDataUri(product, timer) {
   const original = await dataUriFromProduct(product, timer);
-  const key = `saree-expanded:${product?._id || product?.id || ''}:${product?.image?.remoteUrl || product?.image?.url || product?.image?.path || ''}`;
+  const quality = sareeImageQuality();
+  const key = `saree-expanded:${quality}:${product?._id || product?.id || ''}:${product?.image?.remoteUrl || product?.image?.url || product?.image?.path || ''}`;
   const cached = getCachedDataUri(remoteImageDataUriCache, key);
   if (cached) {
     timer?.mark('saree expanded reference cache hit');
@@ -1545,7 +1552,7 @@ async function expandedSareeReferenceDataUri(product, timer) {
       prompt,
       image_urls: [original],
       image_size: imageSize(),
-      quality: imageQuality(),
+      quality,
       num_images: 1,
       output_format: 'png'
     })
@@ -1735,6 +1742,7 @@ function isStaleSareeTryOnRecord(tryOn, product) {
     && promptKeyForProduct(product, 'full_outfit') === 'saree'
     && (tryOn?.promptKey !== 'saree'
       || tryOn?.provider !== 'fal'
+      || tryOn?.quality !== sareeImageQuality()
       || !/two-step expanded full-body saree reference/i.test(prompt));
 }
 
@@ -1868,7 +1876,7 @@ async function generateProductTryOnImage({ user, product, tryOnModel, timer }) {
   if (productPromptKey === 'saree') {
     timer?.mark('fal image edit forced for saree full-body expansion', { promptKey: productPromptKey });
     const garmentDataUri = await expandedSareeReferenceDataUri(product, timer);
-    return callFalImageEdit({ user, product, garmentDataUri, timer });
+    return callFalImageEdit({ user, product, garmentDataUri, quality: sareeImageQuality(), timer });
   }
   if (usePrunaProvider()) {
     return callPrunaTryOn({ user, product, timer });
@@ -2829,6 +2837,7 @@ export {
   fitRoomClothTypeForPromptKey,
   productHistoryItem,
   runProductTryOnJob,
+  sareeImageQuality,
   shouldUseFalImageEditForProduct,
   tryOnMediaTokenKind
 };
