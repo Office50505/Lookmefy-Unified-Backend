@@ -217,10 +217,16 @@ async function readStoredFile(file, label = 'image') {
   }
 
   if (!file.path) throw new Error(`${label} path is missing`);
-  return {
-    buffer: await fs.readFile(localPathForKey(file.path)),
-    mimetype: file.mimetype || ''
-  };
+  try {
+    return {
+      buffer: await fs.readFile(localPathForKey(file.path)),
+      mimetype: file.mimetype || ''
+    };
+  } catch (error) {
+    if (!useBunny()) throw error;
+    const remote = await readRemoteBuffer(publicUrlForKey(file.path), label);
+    return { buffer: remote.buffer, mimetype: file.mimetype || remote.mimetype };
+  }
 }
 
 async function deleteStoredFile(file) {

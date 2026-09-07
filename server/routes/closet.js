@@ -13,7 +13,7 @@ import { isolateSubjectAsset } from '../utils/backgroundRemoval.js';
 import { recordGenerationMetric } from '../utils/generationMetrics.js';
 import { createRateLimiter, rateLimitKeys } from '../utils/rateLimit.js';
 import { signMediaToken, verifyMediaToken } from '../utils/mediaTokens.js';
-import { deleteStoredFile, readStoredFile, saveBuffer } from '../utils/storage.js';
+import { deleteStoredFile, publicUrlForStoredFile, readStoredFile, saveBuffer } from '../utils/storage.js';
 import { developmentBillingBypass, isAllowedRasterImageUpload, safeFetchBuffer } from '../utils/security.js';
 
 const router = express.Router();
@@ -1005,21 +1005,29 @@ function closetMediaProxyUrl({ kind, id, userId }) {
   }
 }
 
+function directClosetMediaUrl(file) {
+  const url = publicUrlForStoredFile(file);
+  return /^https?:\/\//i.test(url || '') ? url : '';
+}
+
 function itemToClient(item) {
   const client = typeof item.toClient === 'function' ? item.toClient() : new ClosetItem(item).toClient();
+  const directImageUrl = directClosetMediaUrl(item.image);
   return {
     ...client,
-    imageUrl: closetMediaProxyUrl({ kind: 'item', id: documentId(item), userId: documentId(item.user) }) || client.imageUrl
+    imageUrl: directImageUrl || closetMediaProxyUrl({ kind: 'item', id: documentId(item), userId: documentId(item.user) }) || client.imageUrl
   };
 }
 
 function outfitToClient(outfit, items = []) {
   const itemsById = new Map(items.map((item) => [item._id.toString(), itemToClient(item)]));
   const client = typeof outfit.toClient === 'function' ? outfit.toClient(itemsById) : new ClosetOutfit(outfit).toClient(itemsById);
+  const directGarmentUrl = directClosetMediaUrl(outfit.garment);
+  const directImageUrl = directClosetMediaUrl(outfit.image);
   return {
     ...client,
-    garmentUrl: closetMediaProxyUrl({ kind: 'garment', id: documentId(outfit), userId: documentId(outfit.user) }) || client.garmentUrl,
-    imageUrl: closetMediaProxyUrl({ kind: 'outfit', id: documentId(outfit), userId: documentId(outfit.user) }) || client.imageUrl
+    garmentUrl: directGarmentUrl || closetMediaProxyUrl({ kind: 'garment', id: documentId(outfit), userId: documentId(outfit.user) }) || client.garmentUrl,
+    imageUrl: directImageUrl || closetMediaProxyUrl({ kind: 'outfit', id: documentId(outfit), userId: documentId(outfit.user) }) || client.imageUrl
   };
 }
 

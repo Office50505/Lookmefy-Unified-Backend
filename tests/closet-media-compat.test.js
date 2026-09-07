@@ -33,6 +33,33 @@ test('closet items expose signed mobile media proxy urls', () => {
   assert.equal(claims.sub, userId.toString());
 });
 
+test('closet items use direct CDN urls for Bunny-backed media', () => {
+  const previousCdn = process.env.BUNNY_CDN_BASE_URL;
+  process.env.JWT_SECRET = 'closet-media-test-secret';
+  process.env.BUNNY_CDN_BASE_URL = 'https://cdn.lookmefy.test/';
+  const userId = objectId();
+  const itemId = objectId();
+
+  try {
+    const client = itemToClient({
+      _id: itemId,
+      user: userId,
+      name: 'Silk blouse',
+      category: 'tops',
+      image: {
+        path: `uploads/users/${userId.toString()}/closet/silk-blouse.jpg`,
+        storage: 'bunny',
+        mimetype: 'image/jpeg'
+      }
+    });
+
+    assert.equal(client.imageUrl, `https://cdn.lookmefy.test/users/${userId.toString()}/closet/silk-blouse.jpg`);
+  } finally {
+    if (previousCdn === undefined) delete process.env.BUNNY_CDN_BASE_URL;
+    else process.env.BUNNY_CDN_BASE_URL = previousCdn;
+  }
+});
+
 test('closet outfits expose signed outfit and garment media proxy urls', () => {
   process.env.JWT_SECRET = 'closet-media-test-secret';
   const userId = objectId();
