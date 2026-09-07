@@ -105,6 +105,23 @@ export function razorpayEnabled(env = process.env) {
   return value ? !FALSE_ENV_VALUES.has(value) : true;
 }
 
+function razorpayPairStatus(env = process.env, mode = '') {
+  const upper = String(mode || '').trim().toUpperCase();
+  const prefix = upper ? `RAZORPAY_${upper}_` : 'RAZORPAY_';
+  const keyId = String(env[`${prefix}KEY_ID`] || '').trim();
+  const keySecret = String(env[`${prefix}KEY_SECRET`] || '').trim();
+  return {
+    keyId,
+    keySecret,
+    configured: Boolean(keyId && keySecret),
+    partial: Boolean(keyId || keySecret) && !(keyId && keySecret)
+  };
+}
+
+function razorpayAnyPairConfigured(env = process.env) {
+  return ['TEST', 'LIVE', ''].some((mode) => razorpayPairStatus(env, mode).configured);
+}
+
 function fixedOtpAllowedInProduction(env = process.env) {
   return TRUE_ENV_VALUES.has(String(env.ALLOW_FIXED_OTP_IN_PRODUCTION || '').trim().toLowerCase());
 }
@@ -231,6 +248,16 @@ export function validateServerEnv(env = process.env) {
     const missingRazorpayKeys = razorpayKeys.filter((key) => !String(env[key] || '').trim());
     errors.push(`Razorpay payments are partially configured. Missing: ${missingRazorpayKeys.join(', ')}`);
   }
+  for (const mode of ['TEST', 'LIVE']) {
+    const status = razorpayPairStatus(env, mode);
+    if (production && razorpayPaymentsEnabled && status.partial) {
+      const missing = [
+        !status.keyId ? `RAZORPAY_${mode}_KEY_ID` : '',
+        !status.keySecret ? `RAZORPAY_${mode}_KEY_SECRET` : ''
+      ].filter(Boolean);
+      errors.push(`Razorpay ${mode.toLowerCase()} payments are partially configured. Missing: ${missing.join(', ')}`);
+    }
+  }
   const appleKeys = FEATURE_ENV_GROUPS.find((group) => group.name === 'Apple in-app purchases').keys;
   const presentAppleKeys = appleKeys.filter((key) => String(env[key] || '').trim());
   if (production && appleIapEnabled && presentAppleKeys.length !== appleKeys.length) {
@@ -265,8 +292,7 @@ export function configurationReadiness(env = process.env) {
   const appleIapEnabled = featureEnabled(env, 'APPLE_IAP_ENABLED', false);
   const phonePeKeys = ['PHONEPE_CLIENT_ID', 'PHONEPE_CLIENT_SECRET', 'PHONEPE_CLIENT_VERSION', 'PHONEPE_CALLBACK_USERNAME', 'PHONEPE_CALLBACK_PASSWORD'];
   const phonePeConfigured = phonePeKeys.every((key) => Boolean(String(env[key] || '').trim()));
-  const razorpayKeys = ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET'];
-  const razorpayConfigured = razorpayKeys.every((key) => Boolean(String(env[key] || '').trim()));
+  const razorpayConfigured = razorpayAnyPairConfigured(env);
   const appleKeys = ['APPLE_IAP_KEY_ID', 'APPLE_IAP_ISSUER_ID', 'APPLE_BUNDLE_ID'];
   const appleConfigured = appleKeys.every((key) => Boolean(String(env[key] || '').trim()))
     && (Boolean(String(env.APPLE_IAP_PRIVATE_KEY || '').trim()) || Boolean(String(env.APPLE_IAP_PRIVATE_KEY_PATH || '').trim()))

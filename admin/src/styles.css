@@ -1962,6 +1962,21 @@ h1 {
   opacity: .64;
 }
 
+.razorpay-mode-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.storefront-settings-list .razorpay-mode-actions button {
+  min-height: 38px;
+  border-radius: 8px;
+}
+
+.storefront-settings-list .razorpay-mode-actions .live-mode-action {
+  background: var(--danger);
+}
+
 .settings-actions .danger-action {
   background: #fff1ee;
   color: var(--danger);

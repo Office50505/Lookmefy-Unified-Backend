@@ -662,6 +662,22 @@ function AdminApp() {
     }
   };
 
+  const toggleRazorpayMode = async (mode) => {
+    setActionBusy(true);
+    try {
+      await api('/admin/storefront-settings/razorpay-mode', {
+        method: 'PATCH',
+        body: JSON.stringify({ mode })
+      });
+      setManagementRefresh((value) => value + 1);
+      setMessage(`Razorpay ${mode} mode enabled.`);
+    } catch (error) {
+      setMessage(error.message || 'Could not update Razorpay mode.');
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
   const openProductFromSearch = (product) => {
     setInventoryPage(1);
     setFilters((current) => ({ ...current, q: product.name || '', sort: 'newest' }));
@@ -1550,17 +1566,37 @@ function AdminApp() {
                   {storefrontSettingsState.error && <StatusPanel text={storefrontSettingsState.error} />}
                   {!storefrontSettingsState.loading && !storefrontSettingsState.error && (
                     <div className="settings-list storefront-settings-list">
-                      <div><span>Demo ecommerce</span><strong>{storefrontSettingsState.data?.setting?.demoEcommerceMode ? 'Enabled' : 'Disabled'}</strong></div>
-                      <div><span>Last updated</span><strong>{formatCatalogDate(storefrontSettingsState.data?.setting?.updatedAt)}</strong></div>
-                      <button
-                        type="button"
+	                      <div><span>Demo ecommerce</span><strong>{storefrontSettingsState.data?.setting?.demoEcommerceMode ? 'Enabled' : 'Disabled'}</strong></div>
+	                      <div><span>Razorpay mode</span><strong>{storefrontSettingsState.data?.setting?.razorpayMode === 'live' ? 'Live' : 'Test'}</strong></div>
+	                      <div><span>Last updated</span><strong>{formatCatalogDate(storefrontSettingsState.data?.setting?.updatedAt)}</strong></div>
+	                      <button
+	                        type="button"
                         disabled={actionBusy}
                         onClick={() => toggleDemoMode(!storefrontSettingsState.data?.setting?.demoEcommerceMode)}
-                      >
-                        {storefrontSettingsState.data?.setting?.demoEcommerceMode ? 'Disable demo checkout' : 'Enable demo checkout'}
-                      </button>
-                    </div>
-                  )}
+	                      >
+	                        {storefrontSettingsState.data?.setting?.demoEcommerceMode ? 'Disable demo checkout' : 'Enable demo checkout'}
+	                      </button>
+	                      <div className="razorpay-mode-actions">
+	                        <button
+	                          type="button"
+	                          disabled={actionBusy || storefrontSettingsState.data?.setting?.razorpayMode === 'test'}
+	                          onClick={() => toggleRazorpayMode('test')}
+	                        >
+	                          Test mode
+	                        </button>
+	                        <button
+	                          className="live-mode-action"
+	                          type="button"
+	                          disabled={actionBusy || storefrontSettingsState.data?.setting?.razorpayMode === 'live'}
+	                          onClick={() => toggleRazorpayMode('live')}
+	                        >
+	                          Live mode
+	                        </button>
+	                      </div>
+	                      <div><span>Test subscription</span><strong>{storefrontSettingsState.data?.setting?.razorpay?.test?.subscriptions ? 'Ready' : 'Missing plan/key'}</strong></div>
+	                      <div><span>Live subscription</span><strong>{storefrontSettingsState.data?.setting?.razorpay?.live?.subscriptions ? 'Ready' : 'Missing plan/key'}</strong></div>
+	                    </div>
+	                  )}
                 </section>
               )}
               </section>

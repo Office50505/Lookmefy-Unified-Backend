@@ -138,7 +138,11 @@ app.use(cors({
   },
   credentials: true
 }));
-app.use(express.json());
+app.use(express.json({
+  verify: (req, _res, buf) => {
+    if (req.originalUrl === '/api/payments/razorpay/webhook') req.rawBody = Buffer.from(buf);
+  }
+}));
 app.use('/uploads', serveUploadedMedia());
 app.use('/api', globalApiLimiter);
 app.use('/api/auth', authRoutes);

@@ -16,7 +16,8 @@ import {
   statusFromRazorpayOrderStatus,
   statusFromPhonePeState,
   validatePhonePeCallbackAuth,
-  verifyRazorpaySignature
+  verifyRazorpaySignature,
+  verifyRazorpaySubscriptionSignature
 } from '../server/routes/payments.js';
 import TokenOrder from '../server/models/TokenOrder.js';
 import User from '../server/models/User.js';
@@ -215,6 +216,22 @@ test('Razorpay signature verification uses order id, payment id, and key secret'
   assert.equal(statusFromRazorpayOrderStatus('attempted'), 'pending');
 });
 
+test('Razorpay subscription signature verification uses payment id and subscription id', () => {
+  const signature = createHmac('sha256', 'secret').update('pay_test|sub_test').digest('hex');
+  assert.equal(verifyRazorpaySubscriptionSignature({
+    subscriptionId: 'sub_test',
+    paymentId: 'pay_test',
+    signature,
+    secret: 'secret'
+  }), true);
+  assert.equal(verifyRazorpaySubscriptionSignature({
+    subscriptionId: 'sub_test',
+    paymentId: 'pay_test',
+    signature: 'bad',
+    secret: 'secret'
+  }), false);
+});
+
 test('Razorpay checkout creates a provider order without a redirect URL', async () => {
   const original = {
     tokenFindOne: TokenOrder.findOne,
@@ -268,6 +285,77 @@ test('Razorpay checkout creates a provider order without a redirect URL', async 
     assert.equal(order.redirectUrl, '');
     assert.equal(order.status, 'pending');
     assert.equal(created.some((entry) => entry.saved && entry.provider === 'razorpay'), true);
+  } finally {
+    TokenOrder.findOne = original.tokenFindOne;
+    TokenOrder.create = original.tokenCreate;
+    global.fetch = original.fetch;
+    for (const [key, value] of Object.entries(original.env)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test('Razorpay monthly checkout creates a subscription instead of a one rupee order', async () => {
+  const original = {
+    tokenFindOne: TokenOrder.findOne,
+    tokenCreate: TokenOrder.create,
+    fetch: global.fetch,
+    env: {
+      RAZORPAY_ENABLED: process.env.RAZORPAY_ENABLED,
+      RAZORPAY_MODE: process.env.RAZORPAY_MODE,
+      RAZORPAY_TEST_KEY_ID: process.env.RAZORPAY_TEST_KEY_ID,
+      RAZORPAY_TEST_KEY_SECRET: process.env.RAZORPAY_TEST_KEY_SECRET,
+      RAZORPAY_TEST_MONTHLY_PLAN_ID: process.env.RAZORPAY_TEST_MONTHLY_PLAN_ID,
+      RAZORPAY_SUBSCRIPTIONS_ENABLED: process.env.RAZORPAY_SUBSCRIPTIONS_ENABLED,
+      RAZORPAY_BASE_URL: process.env.RAZORPAY_BASE_URL
+    }
+  };
+  const created = [];
+  try {
+    process.env.RAZORPAY_ENABLED = 'true';
+    process.env.RAZORPAY_MODE = 'test';
+    process.env.RAZORPAY_TEST_KEY_ID = 'rzp_test_key';
+    process.env.RAZORPAY_TEST_KEY_SECRET = 'rzp_test_secret';
+    process.env.RAZORPAY_TEST_MONTHLY_PLAN_ID = 'plan_test_monthly';
+    process.env.RAZORPAY_SUBSCRIPTIONS_ENABLED = 'true';
+    process.env.RAZORPAY_BASE_URL = 'https://razorpay.test/v1';
+    TokenOrder.findOne = async () => null;
+    TokenOrder.create = async (doc) => {
+      const order = {
+        _id: 'token-order-subscription-1',
+        ...doc,
+        async save() {
+          created.push({ saved: true, subscriptionId: this.merchantSubscriptionId, provider: this.provider });
+        }
+      };
+      created.push(order);
+      return order;
+    };
+    global.fetch = async (url, options = {}) => {
+      assert.equal(String(url), 'https://razorpay.test/v1/subscriptions');
+      const body = JSON.parse(options.body);
+      assert.equal(body.plan_id, 'plan_test_monthly');
+      assert.equal(body.total_count, 120);
+      assert.equal(body.notes.planId, SUBSCRIPTION_PLAN.id);
+      return new Response(JSON.stringify({ id: 'sub_rzp_1', status: 'created' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    };
+
+    const order = await createRazorpayPayment({
+      req: requestStub({ headers: { 'idempotency-key': 'razorpay-subscription-1' } }),
+      user: { _id: 'user-rzp-12345678', name: 'Test User' },
+      plan: SUBSCRIPTION_PLAN
+    });
+    assert.equal(order.provider, 'razorpay');
+    assert.equal(order.razorpayOrderId || '', '');
+    assert.equal(order.merchantSubscriptionId, 'sub_rzp_1');
+    assert.equal(order.razorpaySubscriptionId, 'sub_rzp_1');
+    assert.equal(order.amount, SUBSCRIPTION_PLAN.mandate.recurringAmount);
+    assert.equal(order.dueTodayAmount, SUBSCRIPTION_PLAN.dueTodayAmount);
+    assert.equal(created.some((entry) => entry.saved && entry.subscriptionId === 'sub_rzp_1'), true);
   } finally {
     TokenOrder.findOne = original.tokenFindOne;
     TokenOrder.create = original.tokenCreate;
@@ -376,6 +464,99 @@ test('Razorpay verification credits tokens once after signature validation', asy
     User.findOneAndUpdate = original.userFindOneAndUpdate;
     CreditEvent.findOne = original.creditEventFindOne;
     CreditEvent.create = original.creditEventCreate;
+    global.fetch = original.fetch;
+    for (const [key, value] of Object.entries(original.env)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
+test('Razorpay subscription authorization below monthly amount does not credit tokens', async () => {
+  const original = {
+    tokenFindOne: TokenOrder.findOne,
+    tokenFindById: TokenOrder.findById,
+    tokenFindByIdAndUpdate: TokenOrder.findByIdAndUpdate,
+    userFindById: User.findById,
+    userFindByIdAndUpdate: User.findByIdAndUpdate,
+    userFindOneAndUpdate: User.findOneAndUpdate,
+    fetch: global.fetch,
+    env: {
+      RAZORPAY_ENABLED: process.env.RAZORPAY_ENABLED,
+      RAZORPAY_MODE: process.env.RAZORPAY_MODE,
+      RAZORPAY_TEST_KEY_ID: process.env.RAZORPAY_TEST_KEY_ID,
+      RAZORPAY_TEST_KEY_SECRET: process.env.RAZORPAY_TEST_KEY_SECRET,
+      RAZORPAY_BASE_URL: process.env.RAZORPAY_BASE_URL
+    }
+  };
+  const signature = createHmac('sha256', 'rzp_secret').update('pay_auth_1|sub_rzp_1').digest('hex');
+  let order = {
+    _id: 'order-subscription-1',
+    user: 'user1',
+    provider: 'razorpay',
+    merchantOrderId: 'FLRZP_SUB_TEST',
+    merchantSubscriptionId: 'sub_rzp_1',
+    razorpaySubscriptionId: 'sub_rzp_1',
+    razorpayMode: 'test',
+    amount: SUBSCRIPTION_PLAN.mandate.recurringAmount,
+    dueTodayAmount: SUBSCRIPTION_PLAN.dueTodayAmount,
+    recurringAmount: SUBSCRIPTION_PLAN.mandate.recurringAmount,
+    planId: SUBSCRIPTION_PLAN.id,
+    orderType: 'subscription',
+    tokens: SUBSCRIPTION_PLAN.tokens,
+    status: 'pending',
+    creditedAt: null
+  };
+  let creditedTokens = 0;
+  try {
+    process.env.RAZORPAY_ENABLED = 'true';
+    process.env.RAZORPAY_MODE = 'test';
+    process.env.RAZORPAY_TEST_KEY_ID = 'rzp_key';
+    process.env.RAZORPAY_TEST_KEY_SECRET = 'rzp_secret';
+    process.env.RAZORPAY_BASE_URL = 'https://razorpay.test/v1';
+    TokenOrder.findOne = async () => order;
+    TokenOrder.findById = async () => order;
+    TokenOrder.findByIdAndUpdate = async (_id, update) => {
+      order = { ...order, ...update.$set };
+      return order;
+    };
+    User.findById = async () => ({ _id: 'user1', tokens: 8 + creditedTokens });
+    User.findByIdAndUpdate = async (_id, update) => ({ _id: 'user1', tokens: 8 + creditedTokens, subscription: update.$set.subscription });
+    User.findOneAndUpdate = async (_filter, update) => {
+      creditedTokens += Number(update.$inc?.tokens || 0);
+      return { _id: 'user1', tokens: 8 + creditedTokens };
+    };
+    global.fetch = async (url) => {
+      if (String(url).endsWith('/subscriptions/sub_rzp_1')) {
+        return new Response(JSON.stringify({ id: 'sub_rzp_1', status: 'authenticated' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      assert.equal(String(url), 'https://razorpay.test/v1/payments/pay_auth_1');
+      return new Response(JSON.stringify({ id: 'pay_auth_1', subscription_id: 'sub_rzp_1', amount: 100, status: 'captured' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    };
+
+    const result = await completeRazorpayPayment({
+      user: { _id: 'user1' },
+      merchantOrderId: 'FLRZP_SUB_TEST',
+      razorpaySubscriptionId: 'sub_rzp_1',
+      razorpayPaymentId: 'pay_auth_1',
+      razorpaySignature: signature
+    });
+    assert.equal(result.pendingSubscriptionCredit, true);
+    assert.equal(creditedTokens, 0);
+    assert.equal(order.creditedAt, null);
+  } finally {
+    TokenOrder.findOne = original.tokenFindOne;
+    TokenOrder.findById = original.tokenFindById;
+    TokenOrder.findByIdAndUpdate = original.tokenFindByIdAndUpdate;
+    User.findById = original.userFindById;
+    User.findByIdAndUpdate = original.userFindByIdAndUpdate;
+    User.findOneAndUpdate = original.userFindOneAndUpdate;
     global.fetch = original.fetch;
     for (const [key, value] of Object.entries(original.env)) {
       if (value === undefined) delete process.env[key];

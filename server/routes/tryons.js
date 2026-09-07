@@ -416,8 +416,14 @@ function fitRoomPollMs() {
   return Number.isFinite(value) && value > 0 ? value : 1500;
 }
 
-function fitRoomClothTypeForProduct() {
+function fitRoomClothTypeForPromptKey(promptKey = '') {
+  if (promptKey === 'lower') return 'lower';
+  if (promptKey === 'upper') return 'upper';
   return 'full_set';
+}
+
+function fitRoomClothTypeForProduct(product = {}) {
+  return fitRoomClothTypeForPromptKey(promptKeyForProduct(product, 'upper'));
 }
 
 function safeLocalPath(storedPath) {
@@ -1977,7 +1983,8 @@ async function saveGeneratedCustomTryOn({ user, garmentFile, promptKey, category
       timer
     });
   } else {
-    const clothType = fitRoomDefaultClothType();
+    const selectedPromptKey = promptKey || promptKeyForProduct(customProduct, 'full_outfit');
+    const clothType = fitRoomClothTypeForPromptKey(selectedPromptKey);
     timer?.mark('custom fitroom cloth type selected', { clothType });
     generated = await callFitRoomTryOn({ user, garmentFile, clothType, timer });
   }
@@ -2671,6 +2678,8 @@ export {
   creditEventToClient,
   customHistoryItem,
   externalHistoryItem,
+  fitRoomClothTypeForProduct,
+  fitRoomClothTypeForPromptKey,
   productHistoryItem,
   runProductTryOnJob,
   tryOnMediaTokenKind
