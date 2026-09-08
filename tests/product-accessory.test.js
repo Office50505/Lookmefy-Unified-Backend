@@ -105,10 +105,10 @@ test('saree try-on generation replaces stale cached output and uses the direct F
   assert.match(source, /const productPromptKey = promptKeyForProduct\(product, 'full_outfit'\);/);
   assert.match(source, /if \(productPromptKey === 'saree'\)/);
   assert.match(source, /callFalSareeVirtualTryOn\(\{ user, product, timer \}\)/);
-  assert.match(source, /person_image_url: person/);
-  assert.match(source, /clothing_image_url: garment/);
-  assert.match(source, /preserve_pose: true/);
-  assert.match(source, /FAL virtual try-on full-set saree route/i);
+  assert.match(source, /human_image_url: person/);
+  assert.match(source, /garment_image_url: garment/);
+  assert.match(source, /cloth_type: 'overall'/);
+  assert.match(source, /FAL CAT-VTON saree overall route/i);
   assert.match(source, /const generationModel = isSareeTryOn \? '' : \(hasRequestedModel \? selectedModel : ''\);/);
   assert.match(source, /const shouldReplaceExisting = forceGenerate \|\| staleSareeTryOn;/);
   assert.match(source, /shouldReplaceExisting\s*\?\s*await replaceGeneratedTryOn/);

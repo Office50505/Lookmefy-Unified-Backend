@@ -367,7 +367,7 @@ function shouldUseFalImageEditForProduct(product = {}) {
 }
 
 function falSareeVirtualTryOnModel() {
-  return process.env.FAL_SAREE_TRYON_MODEL || process.env.FAL_VTO_TRIAL_MODEL || 'fal-ai/image-apps-v2/virtual-try-on';
+  return process.env.FAL_SAREE_TRYON_MODEL || 'fal-ai/cat-vton';
 }
 
 function falSareeVirtualTryOnAspectRatio() {
@@ -381,6 +381,48 @@ function falSareeVirtualTryOnPollOptions(timer) {
     maxAttempts: Number(process.env.FAL_SAREE_TRYON_POLL_ATTEMPTS || process.env.FAL_VTO_POLL_ATTEMPTS || 120),
     pollMs: Number(process.env.FAL_SAREE_TRYON_POLL_MS || process.env.FAL_VTO_POLL_MS || 1500)
   };
+}
+
+function falSareeVirtualTryOnImageSize() {
+  const value = String(process.env.FAL_SAREE_TRYON_IMAGE_SIZE || 'portrait_4_3').trim();
+  return new Set(['square_hd', 'square', 'portrait_4_3', 'portrait_16_9', 'landscape_4_3', 'landscape_16_9']).has(value)
+    ? value
+    : 'portrait_4_3';
+}
+
+function falSareeVirtualTryOnPayload({ endpoint, person, garment }) {
+  if (/cat-vton/i.test(endpoint)) {
+    return {
+      human_image_url: person,
+      garment_image_url: garment,
+      cloth_type: 'overall',
+      image_size: falSareeVirtualTryOnImageSize(),
+      num_inference_steps: Number(process.env.FAL_SAREE_TRYON_STEPS || 36),
+      guidance_scale: Number(process.env.FAL_SAREE_TRYON_GUIDANCE || 3)
+    };
+  }
+
+  if (/leffa/i.test(endpoint)) {
+    return {
+      human_image_url: person,
+      garment_image_url: garment,
+      garment_type: 'dresses',
+      image_size: falSareeVirtualTryOnImageSize(),
+      num_inference_steps: Number(process.env.FAL_SAREE_TRYON_STEPS || 50),
+      guidance_scale: Number(process.env.FAL_SAREE_TRYON_GUIDANCE || 2.5),
+      enable_safety_checker: true,
+      output_format: 'png'
+    };
+  }
+
+  const aspectRatio = falSareeVirtualTryOnAspectRatio();
+  const input = {
+    person_image_url: person,
+    clothing_image_url: garment,
+    preserve_pose: true
+  };
+  if (aspectRatio) input.aspect_ratio = aspectRatio;
+  return input;
 }
 
 function imageQuality() {
@@ -1532,15 +1574,13 @@ async function callFalSareeVirtualTryOn({ user, product, timer }) {
     dataUriFromProduct(product, timer)
   ]);
   const endpoint = falSareeVirtualTryOnModel();
-  const aspectRatio = falSareeVirtualTryOnAspectRatio();
-  const input = {
-    person_image_url: person,
-    clothing_image_url: garment,
-    preserve_pose: true
-  };
-  if (aspectRatio) input.aspect_ratio = aspectRatio;
+  const input = falSareeVirtualTryOnPayload({ endpoint, person, garment });
 
-  timer?.mark('fal saree virtual try-on submitted', { model: endpoint, aspectRatio: aspectRatio?.ratio || '' });
+  timer?.mark('fal saree virtual try-on submitted', {
+    model: endpoint,
+    clothType: input.cloth_type || input.garment_type || 'auto',
+    imageSize: input.image_size || input.aspect_ratio?.ratio || ''
+  });
   const submission = await falJson(`https://queue.fal.run/${endpoint}`, {
     method: 'POST',
     body: JSON.stringify(input)
@@ -1553,11 +1593,11 @@ async function callFalSareeVirtualTryOn({ user, product, timer }) {
   return {
     bytes,
     mimetype,
-    prompt: 'FAL virtual try-on full-set saree route. Person image plus saree clothing image with preserve_pose=true.',
+    prompt: `FAL CAT-VTON saree overall route. Person image plus saree garment image with cloth_type=${input.cloth_type || input.garment_type || 'auto'}.`,
     promptKey: 'saree',
     provider: 'fal',
     model: endpoint,
-    quality: 'saree virtual try-on full outfit'
+    quality: `saree virtual try-on ${input.cloth_type || input.garment_type || 'full outfit'}`
   };
 }
 
@@ -1794,7 +1834,7 @@ function isStaleSareeTryOnRecord(tryOn, product) {
     && promptKeyForProduct(product, 'full_outfit') === 'saree'
     && (tryOn?.promptKey !== 'saree'
       || tryOn?.provider !== 'fal'
-      || !/FAL virtual try-on full-set saree route/i.test(prompt));
+      || !/FAL CAT-VTON saree overall route/i.test(prompt));
 }
 
 function customHistoryItem(tryOn) {
