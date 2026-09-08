@@ -63,6 +63,7 @@ const globalApiLimiter = createRateLimiter({
   keyGenerator: rateLimitKeys.clientIp,
   message: 'Too many requests from this network. Please pause for a few minutes and try again.',
   skip: (req) => req.path.startsWith('/health') || req.path.startsWith('/jobs')
+    || (req.method === 'POST' && req.path === '/closet/outfits/generate')
 });
 const adminMetricsLimiter = createRateLimiter({
   name: 'admin:metrics',

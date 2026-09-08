@@ -43,13 +43,7 @@ const closetChatLimiter = createRateLimiter({
   keyGenerator: rateLimitKeys.user,
   message: 'Too many stylist requests. Please slow down for a moment.'
 });
-const closetOutfitLimiter = createRateLimiter({
-  name: 'closet:outfit-generate',
-  windowMs: 10 * 60 * 1000,
-  max: 5,
-  keyGenerator: rateLimitKeys.user,
-  message: 'Too many outfit generations. Please wait before creating another look.'
-});
+
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -1343,7 +1337,7 @@ router.post('/chat', requireUser, closetChatLimiter, async (req, res) => {
   res.json({ reply: reply || fallbackStylistReply(message, items, suggestions), suggestions });
 });
 
-router.post('/outfits/generate', requireUser, closetOutfitLimiter, async (req, res) => {
+router.post('/outfits/generate', requireUser, async (req, res) => {
   const analyticsStartedAt = Date.now();
   const itemIds = [...new Set((Array.isArray(req.body?.itemIds) ? req.body.itemIds : []).map((id) => String(id || '').trim()).filter(Boolean))].slice(0, 5);
   const timer = createTimer('generate-outfit', { userId: req.user._id.toString(), itemCount: itemIds.length });
