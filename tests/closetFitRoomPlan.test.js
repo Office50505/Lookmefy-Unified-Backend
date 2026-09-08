@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { imageMimeTypeFromBytes, selectFitRoomClosetPlan } from '../server/routes/closet.js';
+import { hasCoreClosetGarment, imageMimeTypeFromBytes, selectFitRoomClosetPlan } from '../server/routes/closet.js';
 
 function closetItem(overrides = {}) {
   const id = overrides.id || `${overrides.category || 'item'}-1`;
@@ -78,6 +78,20 @@ test('selectFitRoomClosetPlan tracks extra pieces while routing through Wan', ()
   assert.equal(plan.requiresWan, true);
   assert.deepEqual(plan.renderedItemIds, ['top-1', 'bottom-1']);
   assert.deepEqual(plan.ignoredItems.map((item) => item.name), ['Loafers']);
+});
+
+test('closet generation requires a top, bottom, or full outfit foundation', () => {
+  assert.equal(hasCoreClosetGarment([
+    closetItem({ id: 'jacket-1', name: 'Cropped jacket', category: 'outerwear' })
+  ]), false);
+  assert.equal(hasCoreClosetGarment([
+    closetItem({ id: 'jacket-1', name: 'Cropped jacket', category: 'outerwear' }),
+    closetItem({ id: 'bag-1', name: 'Black bag', category: 'accessories' })
+  ]), false);
+  assert.equal(hasCoreClosetGarment([
+    closetItem({ id: 'jacket-1', name: 'Cropped jacket', category: 'outerwear' }),
+    closetItem({ id: 'top-1', name: 'White tee', category: 'tops' })
+  ]), true);
 });
 
 test('imageMimeTypeFromBytes detects WebP even when provider headers are wrong', () => {

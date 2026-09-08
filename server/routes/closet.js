@@ -145,6 +145,15 @@ function isLowerClosetItem(item) {
   return fitRoomLowerCategories.has(item?.category);
 }
 
+function isCoreClosetGarment(item) {
+  if (isFullSetClosetItem(item)) return true;
+  return ['tops', 'bottoms', 'activewear', 'ethnic'].includes(item?.category);
+}
+
+function hasCoreClosetGarment(items = []) {
+  return Array.isArray(items) && items.some(isCoreClosetGarment);
+}
+
 function closetItemId(item) {
   return item?._id?.toString?.() || item?.id || '';
 }
@@ -1352,6 +1361,10 @@ router.post('/outfits/generate', requireUser, async (req, res) => {
     if (foundItems.length !== itemIds.length) return res.status(404).json({ message: 'One or more closet items were not found.' });
     const itemsById = new Map(foundItems.map((item) => [item._id.toString(), item]));
     const items = itemIds.map((id) => itemsById.get(id)).filter(Boolean);
+    if (!hasCoreClosetGarment(items)) {
+      await recordGenerationMetric({ user: req.user._id, type: 'closet_image', status: 'rejected', provider: 'fitroom', model: 'fitroom/tryon-v2', durationMs: Date.now() - analyticsStartedAt, error: 'Add a top, bottom, or full outfit before generating a complete look.' });
+      return res.status(400).json({ message: 'Add a top, bottom, or full outfit before generating a complete look.' });
+    }
     const fitRoomPlan = selectFitRoomClosetPlan(items);
     const chargedUser = await reserveToken(req.user, timer);
     if (!chargedUser) {
@@ -1423,5 +1436,5 @@ router.patch('/outfits/:id', requireUser, async (req, res) => {
   res.json({ outfit: outfitToClient(outfit, items) });
 });
 
-export { closetMediaTokenKind, imageMimeTypeFromBytes, itemToClient, outfitToClient, selectFitRoomClosetPlan };
+export { closetMediaTokenKind, hasCoreClosetGarment, imageMimeTypeFromBytes, itemToClient, outfitToClient, selectFitRoomClosetPlan };
 export default router;

@@ -3766,6 +3766,15 @@ function isStandaloneClosetItem(item = {}) {
     || /\b(dress|gown|jumpsuit|romper|saree|sari|lehenga|kurta set|co-ord|coord|one[-\s]?piece)\b/i.test(text);
 }
 
+function isCoreClosetGarment(item = {}) {
+  if (isStandaloneClosetItem(item)) return true;
+  return ['tops', 'bottoms', 'activewear', 'ethnic'].includes(item.category);
+}
+
+function hasCoreClosetGarment(items = []) {
+  return Array.isArray(items) && items.some(isCoreClosetGarment);
+}
+
 function placementStorageKey(modelSrc = '') {
   return `fitlook:model-placement:${String(modelSrc || '').slice(0, 180)}`;
 }
@@ -4395,6 +4404,12 @@ function ClosetPage({ user, setUser }) {
       setMessage('Select closet items or choose a suggested combo first.');
       return;
     }
+    const requestedItems = ids.map((id) => closetItems.find((item) => item.id === id)).filter(Boolean);
+    if (!hasCoreClosetGarment(requestedItems)) {
+      setStagePreviewMode('model');
+      setMessage('Add a top, bottom, or full outfit before generating a complete look.');
+      return;
+    }
     generateInFlightRef.current = true;
     setGenerating(true);
     setMessage('');
@@ -4556,7 +4571,7 @@ function ClosetPage({ user, setUser }) {
     applyComboItems(cardItems);
     if (card.partial) {
       setStagePreviewMode('model');
-      setMessage(`${cardItems[0]?.name || 'Wardrobe item'} selected. Add a top, bottom, shoe, or accessory before generating a full look.`);
+      setMessage(`${cardItems[0]?.name || 'Wardrobe item'} selected. Add a top, bottom, or full outfit before generating a complete look.`);
       return;
     }
     generateOutfit(cardItems.map((item) => item.id).filter(Boolean), { title: card.title, occasion });

@@ -18,5 +18,6 @@ test('closet page surfaces non-empty wardrobe sections before empty categories',
 test('closet recommendations handle a wardrobe with only partial pieces', () => {
   assert.match(appSource, /const singlePieceRecommendations = sortedClosetItems\.slice\(0, 6\)\.map/);
   assert.match(appSource, /card\.partial/);
-  assert.match(appSource, /Add a top, bottom, shoe, or accessory before generating a full look/);
+  assert.match(appSource, /Add a top, bottom, or full outfit before generating a complete look/);
+  assert.match(appSource, /hasCoreClosetGarment\(requestedItems\)/);
 });
