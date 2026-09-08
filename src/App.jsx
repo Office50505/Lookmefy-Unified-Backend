@@ -3760,6 +3760,12 @@ function uniqueClosetItems(items = []) {
   });
 }
 
+function isStandaloneClosetItem(item = {}) {
+  const text = [item.name, item.category, ...(Array.isArray(item.tags) ? item.tags : [])].filter(Boolean).join(' ');
+  return ['dresses', 'ethnic', 'suits', 'full-outfit', 'full_outfit'].includes(item.category)
+    || /\b(dress|gown|jumpsuit|romper|saree|sari|lehenga|kurta set|co-ord|coord|one[-\s]?piece)\b/i.test(text);
+}
+
 function placementStorageKey(modelSrc = '') {
   return `fitlook:model-placement:${String(modelSrc || '').slice(0, 180)}`;
 }
@@ -4142,7 +4148,6 @@ function ClosetPage({ user, setUser }) {
   const [fullscreenImage, setFullscreenImage] = useState(null);
   const [mobileWardrobePicker, setMobileWardrobePicker] = useState(null);
   const generateInFlightRef = useRef(false);
-  const latestOutfitPreviewOpenedRef = useRef(false);
 
   const loadCloset = () => {
     if (!user) return;
@@ -4151,10 +4156,6 @@ function ClosetPage({ user, setUser }) {
       .then((data) => {
         const nextState = normalizeClosetData(data);
         setState({ ...nextState, loading: false, error: '' });
-        if (!latestOutfitPreviewOpenedRef.current && nextState.outfits[0]?.imageUrl) {
-          latestOutfitPreviewOpenedRef.current = true;
-          setStagePreviewMode('outfit');
-        }
       })
       .catch((err) => setState({ items: [], outfits: [], stats: {}, suggestions: [], loading: false, error: err.message }));
   };
@@ -4247,6 +4248,11 @@ function ClosetPage({ user, setUser }) {
     ...section,
     items: closetItems.filter((item) => section.categories.includes(item.category))
   }));
+  const orderedWardrobeSections = [...wardrobeSections].sort((a, b) => (
+    Number(b.items.length > 0) - Number(a.items.length > 0)
+    || b.items.length - a.items.length
+    || a.label.localeCompare(b.label)
+  ));
   const closetSelectionCards = [
     {
       href: '/closet/add',
@@ -4495,7 +4501,7 @@ function ClosetPage({ user, setUser }) {
     return options.length ? options[offset % options.length] : null;
   };
   const dressItems = sortedClosetItems.filter((item) => ['dresses', 'ethnic', 'suits'].includes(item.category));
-  const generatedWardrobeCombos = [
+  const candidateWardrobeCombos = [
     ...dressItems.slice(0, 6).map((dress, index) => ({
       id: `dress-look-${dress.id}-${index}`,
       title: `${occasion || 'Today'} dress pairing`,
@@ -4519,7 +4525,15 @@ function ClosetPage({ user, setUser }) {
         closetItemsForCategories(['accessories'], index)
       ])
     }))
-  ].filter((card) => card.items.length > 0);
+  ].filter((card) => card.items.length > 1 || card.items.some(isStandaloneClosetItem));
+  const singlePieceRecommendations = sortedClosetItems.slice(0, 6).map((item, index) => ({
+    id: `single-piece-${item.id}-${index}`,
+    title: item.category === 'outerwear' ? 'Layer starter' : `${item.name || 'Wardrobe piece'} starter`,
+    reason: `Use ${item.name || 'this piece'} as a starting point, then add more wardrobe items for a complete look.`,
+    items: [item],
+    partial: !isStandaloneClosetItem(item)
+  }));
+  const generatedWardrobeCombos = candidateWardrobeCombos.length ? candidateWardrobeCombos : singlePieceRecommendations;
   const recommendationCombos = closetSuggestions.length
     ? closetSuggestions
       .slice(0, 6)
@@ -4540,6 +4554,11 @@ function ClosetPage({ user, setUser }) {
       return;
     }
     applyComboItems(cardItems);
+    if (card.partial) {
+      setStagePreviewMode('model');
+      setMessage(`${cardItems[0]?.name || 'Wardrobe item'} selected. Add a top, bottom, shoe, or accessory before generating a full look.`);
+      return;
+    }
     generateOutfit(cardItems.map((item) => item.id).filter(Boolean), { title: card.title, occasion });
   };
 
@@ -4551,7 +4570,7 @@ function ClosetPage({ user, setUser }) {
   const previewAlt = showingGeneratedOutfit ? latestOutfit?.title || 'Generated wardrobe look' : 'Current wardrobe model';
   const visibleWardrobeStageMessage = message;
   const wardrobeStageMessageIsError = /error|missing|not enough|failed|could not|cannot|unable|timed out|timeout|select|upload|try again|no other/i.test(message);
-  const mobileWardrobeSections = wardrobeSections.filter((section) => ['Tops', 'Bottoms'].includes(section.label));
+  const mobileWardrobeSections = orderedWardrobeSections.filter((section) => section.items.length || ['Tops', 'Bottoms'].includes(section.label)).slice(0, 5);
   const activeMobileWardrobeSection = mobileWardrobeSections.find((section) => section.label === mobileWardrobePicker) || null;
   const wardrobeFallbackForSection = (section) => (
     section.label === 'Bottoms' ? asset('category-icons/jeans.png') : asset('category-icons/tops.png')
@@ -4579,12 +4598,12 @@ function ClosetPage({ user, setUser }) {
           </div>
 
           <div className="wardrobe-category-stack">
-            {wardrobeSections.map((section) => (
-              <section className="wardrobe-category-panel" key={section.label}>
+            {orderedWardrobeSections.map((section) => (
+              <section className={`wardrobe-category-panel ${section.items.length ? 'has-items' : 'is-empty'}`} key={section.label}>
                 <button className="wardrobe-category-toggle" type="button" onClick={() => setFilter(section.categories[0])} aria-label={`Filter ${section.label}`}>
                   <span>{section.icon}</span>
                   <strong>{section.label}</strong>
-                  <small>⌄</small>
+                  <small>{section.items.length}</small>
                 </button>
                 <div className="wardrobe-thumb-grid">
                   {section.items.length ? section.items.slice(0, 3).map((item) => (
@@ -4744,7 +4763,7 @@ function ClosetPage({ user, setUser }) {
                   <small>{card.items.length} wardrobe {card.items.length === 1 ? 'piece' : 'pieces'} · {occasion}</small>
                   <strong>{card.title}</strong>
                   {card.reason && <span className="wardrobe-recommendation-reason">{card.reason}</span>}
-                  <em>Try this look</em>
+                  <em>{card.partial ? 'Select piece' : 'Try this look'}</em>
                 </button>
               </article>
             )) : (
