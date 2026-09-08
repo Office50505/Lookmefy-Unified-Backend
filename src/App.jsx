@@ -8090,6 +8090,23 @@ function AutoPlayingTryOnVideo({ src, poster }) {
   );
 }
 
+function productTextForPlacement(product = {}) {
+  return [
+    product.name,
+    product.brand,
+    product.category,
+    product.description,
+    product.garmentPlacement,
+    Array.isArray(product.tags) ? product.tags.join(' ') : product.tags
+  ].filter(Boolean).join(' ').toLowerCase();
+}
+
+function displayGarmentPlacement(product = {}) {
+  const text = productTextForPlacement(product);
+  if (/\b(sarees?|saris?|kanjivarams?|kanchipurams?)\b/i.test(text)) return 'full-body';
+  return product.garmentPlacement || 'top';
+}
+
 function ProductPage({ id, user, setUser, demoEcommerceMode = false }) {
   const { product, loading, error } = useProduct(id);
   const related = useSimilarProducts(id, 4);
@@ -8194,11 +8211,12 @@ function ProductPage({ id, user, setUser, demoEcommerceMode = false }) {
     : null;
   const brand = displayBrand(product);
   const category = displayCategory(product);
-  const fitAreaLabel = product.garmentPlacement === 'bottom'
+  const garmentPlacement = displayGarmentPlacement(product);
+  const fitAreaLabel = garmentPlacement === 'bottom'
     ? 'Bottomwear'
-    : product.garmentPlacement === 'full-body'
+    : garmentPlacement === 'full-body'
     ? 'Full-body outfit'
-    : product.garmentPlacement === 'accessory'
+    : garmentPlacement === 'accessory'
     ? 'Accessory'
     : 'Topwear';
   const detailFacts = [
@@ -8457,7 +8475,7 @@ function ProductPage({ id, user, setUser, demoEcommerceMode = false }) {
               </details>
               <details>
                 <summary>Fit and style</summary>
-                <p>{product.garmentPlacement === 'bottom' ? 'Designed for bottomwear styling.' : 'Designed to pair seamlessly with your wardrobe.'}{product.gender ? ` Suitable for ${product.gender}.` : ''}</p>
+                <p>{garmentPlacement === 'bottom' ? 'Designed for bottomwear styling.' : garmentPlacement === 'full-body' ? 'Designed as a full outfit preview.' : 'Designed to pair seamlessly with your wardrobe.'}{product.gender ? ` Suitable for ${product.gender}.` : ''}</p>
                 <div className="product-size-assist">
                   <strong>Can’t find your size?</strong>
                   <button type="button" onClick={() => setSizeRequestOpen(true)}>Ask the Seller</button>

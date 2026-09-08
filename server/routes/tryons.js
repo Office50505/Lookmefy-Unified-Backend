@@ -358,12 +358,29 @@ function prunaVideoTrySync() {
 }
 
 function tryOnModelForProduct(product = {}) {
-  if (shouldUseFalImageEditForProduct(product)) return imageModel();
+  if (shouldUseFalImageEditForProduct(product)) return falSareeVirtualTryOnModel();
   return usePrunaProvider() ? prunaTryOnModel() : 'fitroom/tryon-v2';
 }
 
 function shouldUseFalImageEditForProduct(product = {}) {
   return promptKeyForProduct(product, 'full_outfit') === 'saree';
+}
+
+function falSareeVirtualTryOnModel() {
+  return process.env.FAL_SAREE_TRYON_MODEL || process.env.FAL_VTO_TRIAL_MODEL || 'fal-ai/image-apps-v2/virtual-try-on';
+}
+
+function falSareeVirtualTryOnAspectRatio() {
+  const value = String(process.env.FAL_SAREE_TRYON_ASPECT_RATIO || process.env.FAL_VTO_ASPECT_RATIO || '3:4').trim();
+  return ['1:1', '16:9', '9:16', '4:3', '3:4'].includes(value) ? { ratio: value } : undefined;
+}
+
+function falSareeVirtualTryOnPollOptions(timer) {
+  return {
+    ...timer,
+    maxAttempts: Number(process.env.FAL_SAREE_TRYON_POLL_ATTEMPTS || process.env.FAL_VTO_POLL_ATTEMPTS || 120),
+    pollMs: Number(process.env.FAL_SAREE_TRYON_POLL_MS || process.env.FAL_VTO_POLL_MS || 1500)
+  };
 }
 
 function imageQuality() {
@@ -1509,6 +1526,41 @@ async function callFalImageEdit({ user, product, garmentDataUri, prompt, quality
   };
 }
 
+async function callFalSareeVirtualTryOn({ user, product, timer }) {
+  const [person, garment] = await Promise.all([
+    dataUriFromUpload(user.bodyPhoto, 'person', timer),
+    dataUriFromProduct(product, timer)
+  ]);
+  const endpoint = falSareeVirtualTryOnModel();
+  const aspectRatio = falSareeVirtualTryOnAspectRatio();
+  const input = {
+    person_image_url: person,
+    clothing_image_url: garment,
+    preserve_pose: true
+  };
+  if (aspectRatio) input.aspect_ratio = aspectRatio;
+
+  timer?.mark('fal saree virtual try-on submitted', { model: endpoint, aspectRatio: aspectRatio?.ratio || '' });
+  const submission = await falJson(`https://queue.fal.run/${endpoint}`, {
+    method: 'POST',
+    body: JSON.stringify(input)
+  });
+  const result = await waitForFalResult(submission, falSareeVirtualTryOnPollOptions(timer));
+  const generatedUrl = firstGeneratedImageUrl(result);
+  if (!generatedUrl) throw new Error('FAL did not return a saree virtual try-on image');
+  const { bytes, mimetype } = await generatedBytesFromUrl(generatedUrl, timer);
+  timer?.mark('fal saree virtual try-on downloaded', { outputKb: Math.round(bytes.length / 1024) });
+  return {
+    bytes,
+    mimetype,
+    prompt: 'FAL virtual try-on full-set saree route. Person image plus saree clothing image with preserve_pose=true.',
+    promptKey: 'saree',
+    provider: 'fal',
+    model: endpoint,
+    quality: 'saree virtual try-on full outfit'
+  };
+}
+
 function sareeReferenceExpansionPrompt(product = {}) {
   const descriptor = [
     product.brand,
@@ -1742,8 +1794,7 @@ function isStaleSareeTryOnRecord(tryOn, product) {
     && promptKeyForProduct(product, 'full_outfit') === 'saree'
     && (tryOn?.promptKey !== 'saree'
       || tryOn?.provider !== 'fal'
-      || tryOn?.quality !== sareeImageQuality()
-      || !/two-step expanded full-body saree reference/i.test(prompt));
+      || !/FAL virtual try-on full-set saree route/i.test(prompt));
 }
 
 function customHistoryItem(tryOn) {
@@ -1874,9 +1925,8 @@ async function generateProductTryOnImage({ user, product, tryOnModel, timer }) {
   const productPromptKey = promptKeyForProduct(product, 'full_outfit');
   timer?.mark('image generator selected', { tryOnModel: selectedModel, promptKey: productPromptKey });
   if (productPromptKey === 'saree') {
-    timer?.mark('fal image edit forced for saree full-body expansion', { promptKey: productPromptKey });
-    const garmentDataUri = await expandedSareeReferenceDataUri(product, timer);
-    return callFalImageEdit({ user, product, garmentDataUri, quality: sareeImageQuality(), timer });
+    timer?.mark('fal virtual try-on forced for saree full outfit', { promptKey: productPromptKey });
+    return callFalSareeVirtualTryOn({ user, product, timer });
   }
   if (usePrunaProvider()) {
     return callPrunaTryOn({ user, product, timer });

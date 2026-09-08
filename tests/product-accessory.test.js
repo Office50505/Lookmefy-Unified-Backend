@@ -63,7 +63,7 @@ test('garment targeting maps bottoms and full body garments to the right provide
   assert.equal(fitRoomClothTypeForPromptKey('full_outfit'), 'full_set');
 });
 
-test('saree products use saree-specific prompt and FAL image-edit routing', async () => {
+test('saree products use saree-specific prompt and dedicated FAL routing', async () => {
   const product = { name: 'Kanjivaram silk saree', category: 'sarees', garmentPlacement: 'full-body' };
   const officeSari = {
     name: "MIRCHI FASHION Saree for Woman Chiffon Batik Printed | Lightweight Daily Wear Women's Office Sari with Blouse Piece",
@@ -88,6 +88,7 @@ test('saree products use saree-specific prompt and FAL image-edit routing', asyn
   assert.match(prompt.prompt, /complete traditional outfit/i);
   assert.match(prompt.prompt, /catalogue reference is cropped/i);
   assert.match(prompt.prompt, /two-step expanded full-body saree reference/i);
+  assert.match(prompt.prompt, /lower-body drape/i);
   assert.match(prompt.prompt, /blouse\/choli/i);
   assert.match(prompt.prompt, /waist pleats/i);
   assert.match(prompt.prompt, /full lower-body drape/i);
@@ -98,16 +99,17 @@ test('saree products use saree-specific prompt and FAL image-edit routing', asyn
   assert.equal(shouldUseFalImageEditForProduct(officeSari), true);
 });
 
-test('saree try-on generation replaces stale cached output and preserves default FAL routing', async () => {
+test('saree try-on generation replaces stale cached output and uses the direct FAL VTO route', async () => {
   const source = await readFile('server/routes/tryons.js', 'utf8');
   assert.equal(sareeImageQuality(), 'high');
   assert.match(source, /const productPromptKey = promptKeyForProduct\(product, 'full_outfit'\);/);
   assert.match(source, /if \(productPromptKey === 'saree'\)/);
-  assert.match(source, /expandedSareeReferenceDataUri\(product, timer\)/);
-  assert.match(source, /quality: sareeImageQuality\(\)/);
-  assert.match(source, /tryOn\?\.quality !== sareeImageQuality\(\)/);
+  assert.match(source, /callFalSareeVirtualTryOn\(\{ user, product, timer \}\)/);
+  assert.match(source, /person_image_url: person/);
+  assert.match(source, /clothing_image_url: garment/);
+  assert.match(source, /preserve_pose: true/);
+  assert.match(source, /FAL virtual try-on full-set saree route/i);
   assert.match(source, /const generationModel = isSareeTryOn \? '' : \(hasRequestedModel \? selectedModel : ''\);/);
-  assert.match(source, /two-step expanded full-body saree reference/i);
   assert.match(source, /const shouldReplaceExisting = forceGenerate \|\| staleSareeTryOn;/);
   assert.match(source, /shouldReplaceExisting\s*\?\s*await replaceGeneratedTryOn/);
   assert.match(source, /function isStaleSareeTryOnRecord/);
