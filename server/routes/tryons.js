@@ -1,4 +1,5 @@
 import express from 'express';
+import { prunaGarmentSelection } from '../utils/prunaTryOnInput.js';
 import fs from 'node:fs/promises';
 import multer from 'multer';
 import path from 'node:path';
@@ -968,13 +969,17 @@ async function callPrunaTryOn({ user, product = {}, garmentFile, promptKey, fall
     })
   ]);
 
-  const promptInfo = promptKey
-    ? { key: promptKey, prompt: promptForKey(promptKey, product) }
-    : promptForProduct(product, fallbackPromptKey);
-  const turbo = prunaTryOnTurbo(product);
+  const selection = prunaGarmentSelection({
+    product, garmentUrl: garmentUpload.url,
+    promptKey: promptKey || promptKeyForProduct(product, fallbackPromptKey),
+    turbo: prunaTryOnTurbo(product)
+  });
+  const promptInfo = { key: selection.key, prompt: selection.prompt };
+  const turbo = selection.turbo;
+  const garmentCount = selection.garment_images.length;
   const input = {
     person_image: personUpload.url,
-    garment_images: [garmentUpload.url],
+    garment_images: selection.garment_images,
     prompt: promptInfo.prompt,
     turbo,
     output_format: prunaOutputFormat(),
@@ -986,7 +991,7 @@ async function callPrunaTryOn({ user, product = {}, garmentFile, promptKey, fall
     model: prunaTryOnModel(),
     promptKey: promptInfo.key,
     turbo,
-    standardReason: isWatchProduct(product) ? 'watch' : ''
+    standardReason: isWatchProduct(product) ? 'watch' : garmentCount > 1 ? 'separate outfit garments' : ''
   });
 
   const prediction = await createPrunaPrediction({
@@ -1013,8 +1018,8 @@ async function callPrunaTryOn({ user, product = {}, garmentFile, promptKey, fall
     model: prunaTryOnModel(),
     quality: turbo ? 'turbo' : 'standard',
     turbo,
-    garmentCount: 1,
-    providerCostUsd: imagePrunaCostUsd({ turbo, garmentCount: 1 }),
+    garmentCount,
+    providerCostUsd: imagePrunaCostUsd({ turbo, garmentCount }),
     providerPredictionId: result.id || prediction.id || '',
     providerOutputUrl: outputUrl
   };

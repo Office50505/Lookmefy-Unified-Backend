@@ -302,6 +302,7 @@ function promptForKey(key, product = {}) {
   return [
     'Reference image 1 is the person image. Reference image 2 is the garment reference image.',
     `Product context: ${descriptor}.`,
+    garmentConstructionInstructions(key, product),
     selected
       .replace(/\bImage 1\b/g, 'the garment reference image')
       .replace(/\bimage 1\b/g, 'the garment reference image')
@@ -310,6 +311,24 @@ function promptForKey(key, product = {}) {
   ]
     .filter(Boolean)
     .join('\n\n');
+}
+
+function garmentConstructionInstructions(key, product = {}) {
+  if (!['upper', 'full_outfit'].includes(key)) return '';
+  // Use the item's identity, not styling suggestions in its description/tags.
+  const identity = [product.name, product.category].filter(Boolean).join(' ');
+  const isTshirt = /\b(t[\s\u2010-\u2015-]?shirts?|tees?)\b/i.test(identity);
+  const hasOuterwear = /\b(jackets?|coats?|blazers?|hoodies?|cardigans?)\b/i.test(identity);
+  if (!isTshirt || hasOuterwear) return '';
+  return [
+    'GARMENT CONSTRUCTION: The selected upper garment is a T-shirt. The garment reference image is authoritative for its construction; words such as suit, track suit, or set do not mean a jacket.',
+    'Replace ALL existing upper-body clothing layers on the person, including any jacket, overshirt, or undershirt, with the reference T-shirt. Do not layer the T-shirt over the original clothing or retain the original outerwear.',
+    'Keep the T-shirt as a single pullover garment with a continuous closed fabric front. Do not turn it into a jacket, cardigan, open-front shirt, or cropped top. Do not invent a zipper, front opening, hood, lapels, or an exposed undershirt.',
+    'Match the reference neckline, sleeve length, hem length, color panels, and fit exactly. Short or half sleeves must remain short or half sleeves; do not extend them to the wrists.',
+    key === 'full_outfit'
+      ? 'Transfer the matching lower garment from the reference as well. The outfit must remain the reference T-shirt and lower set, without an added outer layer.'
+      : 'Preserve the person\'s lower-body clothing unchanged.'
+  ].join('\n');
 }
 
 function promptForProduct(product = {}, fallback = 'upper') {
