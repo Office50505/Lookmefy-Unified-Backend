@@ -276,6 +276,8 @@ function isSareeProduct(product = {}) {
 }
 
 function promptKeyForProduct(product = {}, fallback = 'upper') {
+  const primary = primaryGarmentPromptKey(product);
+  if (primary) return primary;
   const text = textForProduct(product);
   if (isWatchProduct(product)) return 'watch';
   if (isSareeProduct(product)) return 'saree';
@@ -290,6 +292,41 @@ function promptKeyForProduct(product = {}, fallback = 'upper') {
   if (/\b(bags?|handbags?|purses?|totes?|backpacks?|wallets?|belts?|scarves?|jewelry|jewellery|necklaces?|rings?|earrings?|bracelets?)\b/i.test(text)) return 'accessory';
   if (product.garmentPlacement === 'bottom') return 'lower';
   return fallback;
+}
+
+// Imported categories and marketing text can mention unrelated clothing (e.g.
+// "shawl for evening dresses", "dress trousers", or a tee tagged as shorts).
+// Prefer the item named in the title before consulting that secondary context.
+function primaryGarmentPromptKey(product = {}) {
+  const title = String(product.name || '').toLowerCase()
+    .replace(/\bdress\s+(?=pants?|trousers?|shirts?|sneakers?|shoes?)\b/g, '')
+    .replace(/\b(?:short|long)[ -]sleeve(?:d|s)?\b/g, '');
+  const leading = title.split(/\||\bfor\b/)[0];
+  if (/\b(?:low|mid|high)[ -]waist\b/.test(leading) && /\bbikini\b/.test(leading)) return 'lower';
+  if (/\b(?:shirt\s+dress(?:es)?|(?:denim|jeans)\s+dresses)\b/.test(leading)) return 'full_outfit';
+  const kinds = [
+    ['watch', /\b(?:smart\s?watch(?:es)?|watches|watch)\b/],
+    ['glasses', /\b(?:sunglasses?|eyeglasses?|eyewear|spectacles?)\b/],
+    ['hat', /\b(?:caps?|hats?|beanies?)\b/],
+    ['accessory', /\b(?:pocket\s+squares?|scarfs?|scarves?|shawls?|necklaces?|earrings?|nose\s+rings?|bracelets?|handbags?|backpacks?|wallets?|belts?|pendants?)\b/],
+    ['saree', /\b(?:sarees?|saris?|kanjivarams?|kanchipurams?)\b/],
+    ['shoes', /\b(?:shoes?|sneakers?|boots?|sandals?|slippers?|loafers?)\b/],
+    ['full_outfit', /\b(?:dresses|dress|gowns?|jumpsuits?|rompers?|bodysuits?|swimsuits?|lehenga(?:s)?)\b/],
+    ['lower', /\b(?:pants?|trousers?|jeans?|shorts|skirts?|wrapskirts?|leggings?|joggers?|palazzos?|salwars?|panties|briefs?|thongs?|boxers?)\b/],
+    ['upper', /\b(?:t[\s\u2010-\u2015-]?shirts?|tees?|tops?|shirts?|blouses?|sweaters?|sweatshirts?|hoodies?|jackets?|blazers?|cardigans?|kurtas?|kurtis?|tunics?|bras?|bralettes?)\b/]
+  ];
+  const candidates = kinds.map(([key, pattern]) => ({ key, index: leading.search(pattern) }))
+    .filter(item => item.index >= 0).sort((a, b) => a.index - b.index);
+  const key = candidates[0]?.key;
+  if (!key) return '';
+  if (['upper', 'lower'].includes(key)) {
+    if (product.garmentPlacement === 'accessory') return 'accessory';
+    if (/\b(?:co[ -]?ords?|tracksuits?|kurta\s+sets?)\b/.test(title)
+      || (/\bsets?\b/.test(title) && /\b(?:pants?|trousers?|shorts|skirts?|pant(?:y|ies)|penty|pyjamas?|pajamas?|bottoms?|churidars?|palazzos?|salwars?|dupattas?|lower)\b/.test(title))
+      || /(?:\b(?:with|and)\b|&)\s+(?:matching\s+)?(?:pants?|trousers?|palazzos?|salwars?|dupattas?|pyjamas?|pajamas?)\b/.test(title)
+      || (/\b(?:kurtas?|kurtis?|salwars?)\b/.test(title) && /\bdupattas?\b/.test(title))) return 'full_outfit';
+  }
+  return key;
 }
 
 function promptForKey(key, product = {}) {
@@ -307,7 +344,8 @@ function promptForKey(key, product = {}) {
       .replace(/\bImage 1\b/g, 'the garment reference image')
       .replace(/\bimage 1\b/g, 'the garment reference image')
       .replace(/\bImage 2\b/g, 'the person image')
-      .replace(/\bimage 2\b/g, 'the person image')
+      .replace(/\bimage 2\b/g, 'the person image'),
+    'Return exactly one continuous photograph with one person, keeping the full framing of the person image. No collage, inset, close-up panel, duplicate face, double exposure, or transparent overlay.'
   ]
     .filter(Boolean)
     .join('\n\n');
@@ -339,10 +377,22 @@ function promptForProduct(product = {}, fallback = 'upper') {
   };
 }
 
+function requiresPreciseTryOnEdit(product = {}, key = promptKeyForProduct(product)) {
+  const identity = [product.name, product.category].filter(Boolean).join(' ');
+  if (key === 'glasses') return true;
+  if (key === 'accessory' && /\b(?:earrings?|handbags?|bags?|backpacks?|purses?|totes?)\b/i.test(identity)) return true;
+  if (key === 'lower' && /\b(?:wrap\s?skirts?|skirts?|bikini|panties|briefs?|thongs?|underwear)\b/i.test(identity)) return true;
+  // The simple T-shirt/trouser pair passed the two-reference VTO audit.
+  // Other coordinated outfits need whole-image editing to retain all pieces.
+  return key === 'full_outfit' && (!/\bt[\s\u2010-\u2015-]?shirts?\b/i.test(identity)
+    || /\bshorts\b/i.test(identity));
+}
+
 export {
   isSareeProduct,
   isWatchProduct,
   promptForKey,
   promptForProduct,
-  promptKeyForProduct
+  promptKeyForProduct,
+  requiresPreciseTryOnEdit
 };

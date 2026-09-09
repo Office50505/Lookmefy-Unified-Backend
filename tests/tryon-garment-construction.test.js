@@ -1,6 +1,39 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { promptForProduct, promptForKey } from '../server/utils/tryOnPrompts.js';
+import { promptForProduct, promptForKey, requiresPreciseTryOnEdit } from '../server/utils/tryOnPrompts.js';
+
+test('production selects precise editing for ethnic sets and glasses, not ordinary tees', () => {
+  assert.equal(requiresPreciseTryOnEdit({name:'Kurta with Pant and Dupatta Set'}), true);
+  assert.equal(requiresPreciseTryOnEdit({name:'Lehenga Choli with Dupatta'}), true);
+  assert.equal(requiresPreciseTryOnEdit({name:'Cat Eye Glasses', category:'eyewear'}), true);
+  assert.equal(requiresPreciseTryOnEdit({name:'T-shirt and lower set'}), false);
+  assert.equal(requiresPreciseTryOnEdit({name:'Short Kurti'}), false);
+  assert.equal(requiresPreciseTryOnEdit({name:'Gold Heart Necklace'}), false);
+  assert.equal(requiresPreciseTryOnEdit({name:'Shoulder Handbag'}), true);
+  assert.equal(requiresPreciseTryOnEdit({name:'Long Wrapskirt'}), true);
+  assert.equal(requiresPreciseTryOnEdit({name:'T-shirt and Shorts Set'}), true);
+});
+
+test('imported category and marketing keywords cannot change the named garment', () => {
+  for (const [product, expected] of [
+    [{name: 'Dream Beauty Women Square Neck Button Front Short Sleeve T-Shirt', category: 'shorts'}, 'upper'],
+    [{name: 'Men Formal Dress Trousers', category: 'pants', garmentPlacement: 'full-body'}, 'lower'],
+    [{name: 'Soft Chiffon Scarfs Shawls for Evening Dresses', category: 'dresses'}, 'accessory'],
+    [{name: 'Pocket Square for Tuxedo Jacket Suit', category: 'jackets'}, 'accessory'],
+    [{name: 'Formal Blazer | Professional Suit | Wedding', category: 'jackets', garmentPlacement: 'full-body'}, 'upper'],
+    [{name: 'Printed Kurti for Women', category: 'ethnic wear'}, 'upper'],
+    [{name: 'Shirt and matching trousers set', category: 'shirts'}, 'full_outfit'],
+    [{name: 'Gold Necklace Set', category: 'accessories'}, 'accessory']
+  ]) assert.equal(promptForProduct(product).key, expected, product.name);
+});
+
+test('compound garment names and coordinated sets keep their intended coverage', () => {
+  for (const name of ['Cotton Embroidered Shirt Dress', 'Button Down Denim Jeans Dresses', 'Kurta Churidar Suit Set', 'Thermal Top Pajama and Bottom Suit Combo Set', 'Floral Bralette and Skirt Panty Set', 'Blazer Vest & Pant 3-Piece Suit', 'Cotton Salwar Suit With Work Dupatta']) {
+    assert.equal(promptForProduct({name}).key, 'full_outfit', name);
+  }
+  assert.equal(promptForProduct({name:'Casual Dress Sneakers'}).key, 'shoes');
+  assert.equal(promptForProduct({name:'Women Low Waist Bikini',category:'innerwear'}).key, 'lower');
+});
 
 test('T-shirt and lower set keeps both garments and rejects jacket construction', () => {
   const result = promptForProduct({

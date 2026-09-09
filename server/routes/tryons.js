@@ -1,5 +1,5 @@
 import express from 'express';
-import { prunaGarmentSelection } from '../utils/prunaTryOnInput.js';
+import { prunaTryOnRequest } from '../utils/prunaTryOnInput.js';
 import fs from 'node:fs/promises';
 import multer from 'multer';
 import path from 'node:path';
@@ -36,12 +36,11 @@ import {
   downloadPrunaOutput,
   fetchPrunaOutput,
   firstPrunaGenerationUrl,
-  imagePrunaCostUsd,
   uploadPrunaFile,
   videoPrunaCostUsd,
   waitForPrunaPrediction
 } from '../utils/prunaClient.js';
-import { isWatchProduct, promptForKey, promptForProduct, promptKeyForProduct } from '../utils/tryOnPrompts.js';
+import { isWatchProduct, promptForKey, promptForProduct, promptKeyForProduct, requiresPreciseTryOnEdit } from '../utils/tryOnPrompts.js';
 import { falModelCostEstimate } from '../services/providerIntegrations.js';
 
 const router = express.Router();
@@ -360,7 +359,12 @@ function prunaVideoTrySync() {
 
 function tryOnModelForProduct(product = {}) {
   if (shouldUseFalImageEditForProduct(product)) return falSareeVirtualTryOnModel();
-  return usePrunaProvider() ? prunaTryOnModel() : 'fitroom/tryon-v2';
+  if (requiresPreciseTryOnEdit(product)) return imageModel();
+  if (usePrunaProvider()) {
+    const model = prunaTryOnRequest({ product }).model;
+    return model === 'p-image-try-on' ? prunaTryOnModel() : model;
+  }
+  return 'fitroom/tryon-v2';
 }
 
 function shouldUseFalImageEditForProduct(product = {}) {
@@ -969,33 +973,28 @@ async function callPrunaTryOn({ user, product = {}, garmentFile, promptKey, fall
     })
   ]);
 
-  const selection = prunaGarmentSelection({
-    product, garmentUrl: garmentUpload.url,
+  const personDimensions = await sharp(personPart.bytes).metadata();
+  const request = prunaTryOnRequest({
+    product, personUrl: personUpload.url, garmentUrl: garmentUpload.url,
     promptKey: promptKey || promptKeyForProduct(product, fallbackPromptKey),
-    turbo: prunaTryOnTurbo(product)
+    turbo: prunaTryOnTurbo(product),
+    outputFormat: prunaOutputFormat(), outputQuality: prunaOutputQuality(),
+    preserveInputSize: prunaPreserveInputSize(),
+    personWidth: personDimensions.width, personHeight: personDimensions.height
   });
-  const promptInfo = { key: selection.key, prompt: selection.prompt };
-  const turbo = selection.turbo;
-  const garmentCount = selection.garment_images.length;
-  const input = {
-    person_image: personUpload.url,
-    garment_images: selection.garment_images,
-    prompt: promptInfo.prompt,
-    turbo,
-    output_format: prunaOutputFormat(),
-    output_quality: prunaOutputQuality(),
-    preserve_input_size: prunaPreserveInputSize()
-  };
+  const promptInfo = { key: request.key, prompt: request.input.prompt };
+  const { turbo, garmentCount, input } = request;
+  const model = request.model === 'p-image-try-on' ? prunaTryOnModel() : request.model;
 
   timer?.mark('pruna try-on submit attempt', {
-    model: prunaTryOnModel(),
+    model,
     promptKey: promptInfo.key,
     turbo,
     standardReason: isWatchProduct(product) ? 'watch' : garmentCount > 1 ? 'separate outfit garments' : ''
   });
 
   const prediction = await createPrunaPrediction({
-    model: prunaTryOnModel(),
+    model,
     input,
     trySync: prunaImageTrySync()
   });
@@ -1015,11 +1014,11 @@ async function callPrunaTryOn({ user, product = {}, garmentFile, promptKey, fall
     prompt: promptInfo.prompt,
     promptKey: promptInfo.key,
     provider: 'pruna',
-    model: prunaTryOnModel(),
-    quality: turbo ? 'turbo' : 'standard',
+    model,
+    quality: request.model === 'p-image-edit' ? 'image-edit' : turbo ? 'turbo' : 'standard',
     turbo,
     garmentCount,
-    providerCostUsd: imagePrunaCostUsd({ turbo, garmentCount }),
+    providerCostUsd: request.providerCostUsd,
     providerPredictionId: result.id || prediction.id || '',
     providerOutputUrl: outputUrl
   };
@@ -1973,6 +1972,10 @@ async function generateProductTryOnImage({ user, product, tryOnModel, timer }) {
     timer?.mark('fal virtual try-on forced for saree full outfit', { promptKey: productPromptKey });
     return callFalSareeVirtualTryOn({ user, product, timer });
   }
+  if (requiresPreciseTryOnEdit(product, productPromptKey)) {
+    timer?.mark('precise garment image edit selected', { promptKey: productPromptKey });
+    return callFalImageEdit({ user, product, quality: 'medium', timer });
+  }
   if (usePrunaProvider()) {
     return callPrunaTryOn({ user, product, timer });
   }
@@ -2086,6 +2089,9 @@ function externalProductFromBody(value = {}) {
 }
 
 async function generateExternalTryOnImage({ user, product, timer }) {
+  if (requiresPreciseTryOnEdit(product)) {
+    return callFalImageEdit({ user, product, quality: 'medium', timer });
+  }
   if (shouldUseFalImageEditForProduct(product)) {
     timer?.mark('external fal image edit forced for garment', { promptKey: promptKeyForProduct(product, 'full_outfit') });
     return callFalImageEdit({ user, product, timer });
@@ -2205,7 +2211,14 @@ async function saveGeneratedCustomTryOn({ user, garmentFile, promptKey, category
     category: category || promptKey || garmentFile?.originalname || 'full outfit'
   };
   let generated;
-  if (usePrunaProvider()) {
+  const customPromptKey = promptKey || promptKeyForProduct(customProduct, 'full_outfit');
+  if (requiresPreciseTryOnEdit(customProduct, customPromptKey)) {
+    generated = await callFalImageEdit({
+      user, product: customProduct,
+      garmentDataUri: `data:${garmentFile.mimetype};base64,${garmentFile.buffer.toString('base64')}`,
+      prompt: promptForKey(customPromptKey, customProduct), quality: 'medium', timer
+    });
+  } else if (usePrunaProvider()) {
     const selectedPromptKey = promptKey || promptKeyForProduct(customProduct, 'full_outfit');
     generated = await callPrunaTryOn({
       user,

@@ -81,3 +81,6 @@ Thumbs.db
 **/.terraform/
 terraform.tfstate
 terraform.tfstate.*
+
+# Private local visual audit inputs and generated evidence
+output/tryon-audit/
