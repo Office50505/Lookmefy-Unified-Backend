@@ -97,7 +97,7 @@ function allowedOrigins() {
     ...defaults,
     ...(process.env.ALLOWED_ORIGINS || '').split(',')
   ]
-    .map((origin) => origin.trim())
+    .map((origin) => String(origin || '').trim())
     .filter(Boolean);
 }
 
