@@ -289,7 +289,7 @@ function promptKeyForProduct(product = {}, fallback = 'upper') {
   if (/\b(outfits?|sets?|co-?ords?|coordinated|tracksuits?|suits?|jumpsuits?|rompers?|dress(?:es)?|gowns?|lehenga|kurta\s?sets?)\b/i.test(text)) return 'full_outfit';
   if (/\b(pants?|trousers?|jeans?|denim|shorts?|skirts?|leggings?|joggers?|palazzos?|bottoms?|lower)\b/i.test(text)) return 'lower';
   if (/\b(tops?|shirts?|t-?shirts?|tees?|blouses?|sweaters?|sweatshirts?|hoodies?|jackets?|coats?|blazers?|kurtas?|bras?|bralettes?|sports?\s+bras?|lingerie|innerwear|camisoles?|bustiers?|corsets?|upper)\b/i.test(text)) return 'upper';
-  if (/\b(bags?|handbags?|purses?|totes?|backpacks?|wallets?|belts?|scarves?|jewelry|jewellery|necklaces?|rings?|earrings?|bracelets?)\b/i.test(text)) return 'accessory';
+  if (/\b(bags?|handbags?|purses?|totes?|backpacks?|wallets?|belts?|scarves?|jewelry|jewellery|necklaces?|rings?|earrings?|bracelets?|bangles?)\b/i.test(text)) return 'accessory';
   if (product.garmentPlacement === 'bottom') return 'lower';
   return fallback;
 }
@@ -308,7 +308,7 @@ function primaryGarmentPromptKey(product = {}) {
     ['watch', /\b(?:smart\s?watch(?:es)?|watches|watch)\b/],
     ['glasses', /\b(?:sunglasses?|eyeglasses?|eyewear|spectacles?)\b/],
     ['hat', /\b(?:caps?|hats?|beanies?)\b/],
-    ['accessory', /\b(?:pocket\s+squares?|scarfs?|scarves?|shawls?|necklaces?|earrings?|nose\s+rings?|bracelets?|handbags?|backpacks?|wallets?|belts?|pendants?)\b/],
+    ['accessory', /\b(?:pocket\s+squares?|scarfs?|scarves?|shawls?|necklaces?|earrings?|nose\s+rings?|bracelets?|bangles?|handbags?|backpacks?|wallets?|belts?|pendants?)\b/],
     ['saree', /\b(?:sarees?|saris?|kanjivarams?|kanchipurams?)\b/],
     ['shoes', /\b(?:shoes?|sneakers?|boots?|sandals?|slippers?|loafers?)\b/],
     ['full_outfit', /\b(?:dresses|dress|gowns?|jumpsuits?|rompers?|bodysuits?|swimsuits?|lehenga(?:s)?)\b/],
@@ -340,6 +340,7 @@ function promptForKey(key, product = {}) {
     'Reference image 1 is the person image. Reference image 2 is the garment reference image.',
     `Product context: ${descriptor}.`,
     garmentConstructionInstructions(key, product),
+    accessoryPlacementInstructions(key, product),
     selected
       .replace(/\bImage 1\b/g, 'the garment reference image')
       .replace(/\bimage 1\b/g, 'the garment reference image')
@@ -349,6 +350,18 @@ function promptForKey(key, product = {}) {
   ]
     .filter(Boolean)
     .join('\n\n');
+}
+
+function accessoryPlacementInstructions(key, product = {}) {
+  if (key !== 'accessory') return '';
+  const title = String(product.name || '').split(/\||\bfor\b/i)[0];
+  if (!/\b(?:bracelets?|bangles?)\b/i.test(title)) return '';
+  return [
+    'This product is wrist jewelry: a bracelet or bangle. Fit it around ONE visible wrist only, at the joint between the hand and forearm.',
+    'Keep its size proportional to that wrist and preserve the exact beads, chain, clasp, colors and design from the reference.',
+    'Do NOT place it around the waist, hips, neck, upper arm or ankle. Do NOT turn it into a belt, waist chain or necklace, even if the reference is a large circular product close-up or the title says hand mangalsutra.',
+    'Keep the original clothes and waist area unchanged. Preserve the existing arm and hand pose; do not enlarge the jewelry to make it more visible.'
+  ].join(' ');
 }
 
 function garmentConstructionInstructions(key, product = {}) {
