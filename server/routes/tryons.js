@@ -358,6 +358,7 @@ function prunaVideoTrySync() {
 }
 
 function tryOnModelForProduct(product = {}) {
+  if (promptKeyForProduct(product, 'full_outfit') === 'saree') return prunaTryOnModel();
   if (shouldUseFalImageEditForProduct(product)) return falSareeVirtualTryOnModel();
   if (requiresPreciseTryOnEdit(product)) return imageModel();
   if (usePrunaProvider()) {
@@ -368,7 +369,7 @@ function tryOnModelForProduct(product = {}) {
 }
 
 function shouldUseFalImageEditForProduct(product = {}) {
-  return promptKeyForProduct(product, 'full_outfit') === 'saree';
+  return false;
 }
 
 function falSareeVirtualTryOnModel() {
@@ -1969,8 +1970,8 @@ async function generateProductTryOnImage({ user, product, tryOnModel, timer }) {
   const productPromptKey = promptKeyForProduct(product, 'full_outfit');
   timer?.mark('image generator selected', { tryOnModel: selectedModel, promptKey: productPromptKey });
   if (productPromptKey === 'saree') {
-    timer?.mark('fal virtual try-on forced for saree full outfit', { promptKey: productPromptKey });
-    return callFalSareeVirtualTryOn({ user, product, timer });
+    timer?.mark('pruna saree try-on selected', { promptKey: productPromptKey });
+    return callPrunaTryOn({ user, product, promptKey: productPromptKey, fallbackPromptKey: 'full_outfit', timer });
   }
   if (requiresPreciseTryOnEdit(product, productPromptKey)) {
     timer?.mark('precise garment image edit selected', { promptKey: productPromptKey });
@@ -2089,6 +2090,11 @@ function externalProductFromBody(value = {}) {
 }
 
 async function generateExternalTryOnImage({ user, product, timer }) {
+  const productPromptKey = promptKeyForProduct(product, 'full_outfit');
+  if (productPromptKey === 'saree') {
+    timer?.mark('external pruna saree try-on selected', { promptKey: productPromptKey });
+    return callPrunaTryOn({ user, product, promptKey: productPromptKey, fallbackPromptKey: 'full_outfit', timer });
+  }
   if (requiresPreciseTryOnEdit(product)) {
     return callFalImageEdit({ user, product, quality: 'medium', timer });
   }
@@ -2325,7 +2331,7 @@ async function runProductTryOnJob({ userId, productId, requestedModel = '', forc
     const existing = await TryOn.findOne({ user: user._id, product: productId });
     const productPromptKey = promptKeyForProduct(product, 'full_outfit');
     const isSareeTryOn = productPromptKey === 'saree';
-    const selectedModel = isSareeTryOn ? imageModel() : (hasRequestedModel ? requested : tryOnModelForProduct(product));
+    const selectedModel = isSareeTryOn ? prunaTryOnModel() : (hasRequestedModel ? requested : tryOnModelForProduct(product));
     timer.mark('product loaded', {
       tryOnModel: selectedModel,
       promptKey: productPromptKey,
@@ -2349,7 +2355,7 @@ async function runProductTryOnJob({ userId, productId, requestedModel = '', forc
     reserved = true;
     user = chargedUser;
 
-    const generationModel = isSareeTryOn ? '' : (hasRequestedModel ? selectedModel : '');
+    const generationModel = isSareeTryOn ? selectedModel : (hasRequestedModel ? selectedModel : '');
     const shouldReplaceExisting = forceGenerate || staleSareeTryOn;
     const tryOn = shouldReplaceExisting
       ? await replaceGeneratedTryOn({ user, product, tryOnModel: generationModel, timer })

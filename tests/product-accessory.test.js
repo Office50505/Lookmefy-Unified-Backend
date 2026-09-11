@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import Product from '../server/models/Product.js';
 import { normalizeGarmentPlacement } from '../server/routes/products.js';
-import { fitRoomClothTypeForProduct, fitRoomClothTypeForPromptKey, sareeImageQuality, shouldUseFalImageEditForProduct } from '../server/routes/tryons.js';
+import { fitRoomClothTypeForProduct, fitRoomClothTypeForPromptKey, shouldUseFalImageEditForProduct } from '../server/routes/tryons.js';
 import { promptForProduct, promptKeyForProduct } from '../server/utils/tryOnPrompts.js';
 
 test('product fit area accepts an explicit accessory classification', () => {
@@ -63,7 +63,7 @@ test('garment targeting maps bottoms and full body garments to the right provide
   assert.equal(fitRoomClothTypeForPromptKey('full_outfit'), 'full_set');
 });
 
-test('saree products use saree-specific prompt and dedicated FAL routing', async () => {
+test('saree products use saree-specific prompt and Pruna routing', async () => {
   const product = { name: 'Kanjivaram silk saree', category: 'sarees', garmentPlacement: 'full-body' };
   const officeSari = {
     name: "MIRCHI FASHION Saree for Woman Chiffon Batik Printed | Lightweight Daily Wear Women's Office Sari with Blouse Piece",
@@ -95,21 +95,18 @@ test('saree products use saree-specific prompt and dedicated FAL routing', async
   assert.match(prompt.prompt, /Replacing the lower-body clothing is mandatory/i);
   assert.match(prompt.prompt, /Jeans, trousers, pants/i);
   assert.equal(fitRoomClothTypeForProduct(product), 'full_set');
-  assert.equal(shouldUseFalImageEditForProduct(product), true);
-  assert.equal(shouldUseFalImageEditForProduct(officeSari), true);
+  assert.equal(shouldUseFalImageEditForProduct(product), false);
+  assert.equal(shouldUseFalImageEditForProduct(officeSari), false);
 });
 
-test('saree try-on generation replaces stale cached output and uses the direct FAL VTO route', async () => {
+test('saree try-on generation replaces stale cached output and uses Pruna', async () => {
   const source = await readFile('server/routes/tryons.js', 'utf8');
-  assert.equal(sareeImageQuality(), 'high');
   assert.match(source, /const productPromptKey = promptKeyForProduct\(product, 'full_outfit'\);/);
   assert.match(source, /if \(productPromptKey === 'saree'\)/);
-  assert.match(source, /callFalSareeVirtualTryOn\(\{ user, product, timer \}\)/);
-  assert.match(source, /human_image_url: person/);
-  assert.match(source, /garment_image_url: garment/);
-  assert.match(source, /cloth_type: 'overall'/);
-  assert.match(source, /FAL CAT-VTON saree overall route/i);
-  assert.match(source, /const generationModel = isSareeTryOn \? '' : \(hasRequestedModel \? selectedModel : ''\);/);
+  assert.match(source, /pruna saree try-on selected/);
+  assert.match(source, /return callPrunaTryOn\(\{ user, product, promptKey: productPromptKey, fallbackPromptKey: 'full_outfit', timer \}\);/);
+  assert.doesNotMatch(source, /fal virtual try-on forced for saree full outfit/);
+  assert.match(source, /const generationModel = isSareeTryOn \? selectedModel : \(hasRequestedModel \? selectedModel : ''\);/);
   assert.match(source, /const shouldReplaceExisting = forceGenerate \|\| staleSareeTryOn;/);
   assert.match(source, /shouldReplaceExisting\s*\?\s*await replaceGeneratedTryOn/);
   assert.match(source, /function isStaleSareeTryOnRecord/);
