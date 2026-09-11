@@ -66,3 +66,17 @@ test('construction constraints do not override outerwear, lower-only transfers o
   }
   assert.doesNotMatch(promptForKey('lower', { name: 'T-shirt and lower set' }), /GARMENT CONSTRUCTION/);
 });
+
+
+test('bracelet and bangle references specify wrist placement rather than the waist', () => {
+  for (const name of ['Latest Trend Bracelet Bangle Style Beautiful Artificial Hand Mangalsutra for Women', 'Gold Bangle for Women']) {
+    const result = promptForProduct({name, category:'accessories', garmentPlacement:'upper'});
+    assert.equal(result.key, 'accessory');
+    assert.match(result.prompt, /ONE visible wrist only/);
+    assert.match(result.prompt, /Do NOT place it around the waist/);
+    assert.match(result.prompt, /waist area unchanged/);
+  }
+  for (const name of ['Gold Necklace', 'Leather Belt', 'Gold Watch']) {
+    assert.doesNotMatch(promptForProduct({name}).prompt, /This product is wrist jewelry/);
+  }
+});
