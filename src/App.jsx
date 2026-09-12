@@ -6,6 +6,7 @@ import { cartItemCount, cartSubtotal, readCartItems, removeCartItem, saveCartIte
 import { trackClientEvent } from './utils/analytics.js';
 import { DEFAULT_MODEL_PLACEMENT, calculateModelPlacement, normalizedPlacement } from './utils/modelPlacement.js';
 import { updateProductSeo, updateRouteSeo } from './utils/seo.js';
+import { resolveProtectedMediaUrl } from './utils/media.js';
 import {
   SUBSCRIPTION_PLAN,
   TOP_UP_PLANS,
@@ -1003,14 +1004,10 @@ function safeWardrobeImageUrl(value = '') {
 }
 
 function protectedMediaUrl(value = '') {
-  const url = typeof value === 'string' ? value.trim() : '';
-  if (!url || /^(?:data:|blob:)/i.test(url)) return url;
-  if (!url.startsWith('/uploads/')) return url;
-  const token = readMediaToken();
-  if (!token || /(?:[?&])mediaToken=/.test(url)) return API_BASE_URL ? `${API_BASE_URL}${url}` : url;
-  const separator = url.includes('?') ? '&' : '?';
-  const withToken = `${url}${separator}mediaToken=${encodeURIComponent(token)}`;
-  return API_BASE_URL ? `${API_BASE_URL}${withToken}` : withToken;
+  return resolveProtectedMediaUrl(value, {
+    apiBaseUrl: API_BASE_URL,
+    mediaToken: typeof value === 'string' && value.trim().startsWith('/uploads/') ? readMediaToken() : ''
+  });
 }
 
 function readRecentSearches() {
