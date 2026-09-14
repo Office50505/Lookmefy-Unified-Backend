@@ -145,6 +145,18 @@ function formatMoney(value, currency = 'USD') {
   }
 }
 
+function tokenOrderDisplayAmount(value, currency = 'INR') {
+  const amount = Number(value);
+  const normalizedCurrency = String(currency || 'INR').toUpperCase();
+  if (!Number.isFinite(amount)) return amount;
+  if (normalizedCurrency !== 'INR') return amount;
+  return amount >= 10000 && amount % 100 === 0 ? amount / 100 : amount;
+}
+
+function formatTokenOrderAmount(order = {}) {
+  return formatMoney(tokenOrderDisplayAmount(order.amount || 0, order.currency), order.currency || 'INR');
+}
+
 function formatNumber(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return '0';
@@ -1986,7 +1998,7 @@ function ActionInbox({ reviewItems, lowTokenUsers, paymentIssues, onOpenInventor
   const items = [
     ...reviewItems.map(({ product, flags }) => ({ id: `product-${product.id}`, kicker: 'Product fix', title: product.name, detail: flags.slice(0, 2).join(', '), onClick: onOpenInventory })),
     ...lowTokenUsers.map((user) => ({ id: `user-${user.id}`, kicker: 'Low tokens', title: user.name || user.email, detail: `${formatNumber(user.tokens || 0)} tokens left`, onClick: onOpenUsers })),
-    ...paymentIssues.map((order) => ({ id: `order-${order.id}`, kicker: `${order.status} payment`, title: order.user?.name || order.user?.email || order.merchantOrderId, detail: `${formatMoney(order.amount || 0, order.currency)} - ${formatCatalogDate(order.createdAt)}`, onClick: onOpenUsers }))
+    ...paymentIssues.map((order) => ({ id: `order-${order.id}`, kicker: `${order.status} payment`, title: order.user?.name || order.user?.email || order.merchantOrderId, detail: `${formatTokenOrderAmount(order)} - ${formatCatalogDate(order.createdAt)}`, onClick: onOpenUsers }))
   ];
   if (!items.length) return <StatusPanel text="Nothing urgent right now." />;
 
@@ -2588,7 +2600,7 @@ function RecentOrdersPanel({ operationsState, limit = 6 }) {
                 <span>{order.planName} - {formatNumber(order.tokens || 0)} tokens</span>
               </div>
               <div>
-                <b>{formatMoney(order.amount || 0, order.currency)}</b>
+                <b>{formatTokenOrderAmount(order)}</b>
                 <em>{order.status}</em>
               </div>
             </article>
