@@ -1,4 +1,4 @@
-const USER_PASSWORD_MIN_LENGTH = 12;
+const USER_PASSWORD_MIN_LENGTH = 6;
 const USER_PASSWORD_MAX_BYTES = 72;
 
 function authenticationVersion(value) {

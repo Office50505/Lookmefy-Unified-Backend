@@ -21,7 +21,9 @@ import {
 } from './AdminManagementPages.jsx';
 import { AdminRolesPage } from './AdminRolesPage.jsx';
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+const configuredApiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+const devApiBaseUrl = (import.meta.env.VITE_DEV_API_BASE_URL || '').replace(/\/$/, '');
+const API_BASE = import.meta.env.DEV ? devApiBaseUrl : configuredApiBaseUrl;
 const STORE_BASE = (import.meta.env.VITE_STORE_BASE_URL || 'http://localhost:5173').replace(/\/$/, '');
 const ADMIN_SESSION_KEY = 'fitlook_admin_session';
 const ADMIN_THEME_KEY = 'lookmefy_admin_theme';

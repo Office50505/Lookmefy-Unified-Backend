@@ -23,6 +23,7 @@ const API_TIMEOUT_MS = 25000;
 const AI_IMAGE_TIMEOUT_MS = 420000;
 const AI_VIDEO_TIMEOUT_MS = 420000;
 const PRODUCT_CACHE_TTL_MS = 30_000;
+const USER_PASSWORD_MIN_LENGTH = 6;
 const configuredApiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const devApiBaseUrl = (import.meta.env.VITE_DEV_API_BASE_URL || '').replace(/\/$/, '');
 const API_BASE_URL = import.meta.env.DEV ? devApiBaseUrl : configuredApiBaseUrl;
@@ -3189,19 +3190,42 @@ function AtelierCategoriesPage() {
         .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
     };
     const categorySections = makeCategorySections(filteredProducts);
+    const selectedCategorySections = makeCategorySections(selectedProducts);
+    const requestedAudience = productGenderForPreference(queryFilters.gender || '') || 'all';
+    const completeCategoryMap = new Map(selectedCategorySections.map((section) => [categorySlug(section.category), section]));
+    (state.facets?.categoryCounts || []).forEach((item) => {
+      const category = String(item?.category || '').trim();
+      const count = Number(item?.count || 0);
+      if (!category || count <= 0) return;
+      const key = categorySlug(category);
+      const existing = completeCategoryMap.get(key);
+      completeCategoryMap.set(key, existing
+        ? { ...existing, count }
+        : {
+            category,
+            label: categoryLabel(category),
+            count,
+            representative: null,
+            collectionVisual: collectionVisualForCategory(category, activeAudience),
+            products: []
+          });
+    });
+    const quickCategories = activeAudience === requestedAudience
+      ? [...completeCategoryMap.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+      : selectedCategorySections;
 
     return {
       audienceCards,
       fashionProductCount: fashionProducts.length,
       featuredProduct: selectedProducts[0] || null,
-      quickCategories: makeCategorySections(selectedProducts).slice(0, 20),
+      quickCategories,
       filterCategories,
       filterBrands,
       filteredProductCount: filteredProducts.length,
       categorySections,
       selectedAudience: audienceCards.find((audience) => audience.value === activeAudience) || null
     };
-  }, [activeAudience, brandFilter, categoryFilter, sortFilter, state.products]);
+  }, [activeAudience, brandFilter, categoryFilter, queryFilters.gender, sortFilter, state.facets?.categoryCounts, state.products]);
 
   useEffect(() => {
     if (!audienceInitialized.current) {
@@ -9973,8 +9997,8 @@ function ForgotPasswordPage() {
   const resetPassword = async (event) => {
     event.preventDefault();
     if (loading) return;
-    if (newPassword.length < 12) {
-      setMessage('Password must be at least 12 characters.');
+    if (newPassword.length < USER_PASSWORD_MIN_LENGTH) {
+      setMessage(`Password must be at least ${USER_PASSWORD_MIN_LENGTH} characters.`);
       setMessageTone('error');
       return;
     }
@@ -10061,8 +10085,8 @@ function ForgotPasswordPage() {
 
           {step === 'password' && (
             <form className="auth-login-form auth-reset-form" onSubmit={resetPassword} aria-busy={loading}>
-              <AuthInputField label="New password" name="newPassword" type="password" required minLength="12" maxLength="72" autoComplete="new-password" placeholder="At least 12 characters" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} />
-              <AuthInputField label="Confirm password" name="confirmPassword" type="password" required minLength="12" maxLength="72" autoComplete="new-password" placeholder="Repeat your password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} />
+              <AuthInputField label="New password" name="newPassword" type="password" required minLength={USER_PASSWORD_MIN_LENGTH} maxLength="72" autoComplete="new-password" placeholder={`At least ${USER_PASSWORD_MIN_LENGTH} characters`} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} />
+              <AuthInputField label="Confirm password" name="confirmPassword" type="password" required minLength={USER_PASSWORD_MIN_LENGTH} maxLength="72" autoComplete="new-password" placeholder="Repeat your password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} />
               <button className="signup-submit-button signup-otp-button" type="submit" disabled={loading || !newPassword || !confirmPassword}>{loading ? 'Resetting...' : 'Reset Password'}</button>
             </form>
           )}
@@ -10342,7 +10366,7 @@ function AuthPage({ mode, setUser }) {
         const cleanName = String(body.get('name') || '').trim();
         const password = String(body.get('password') || '');
         const confirmPassword = String(body.get('confirmPassword') || '');
-        if (password.length < 12) throw new Error('Password must be at least 12 characters.');
+        if (password.length < USER_PASSWORD_MIN_LENGTH) throw new Error(`Password must be at least ${USER_PASSWORD_MIN_LENGTH} characters.`);
         if (password !== confirmPassword) throw new Error('Passwords do not match.');
         const random = Math.random().toString(36).slice(2, 8);
         const suffix = `${Date.now().toString(36)}${random}`;
@@ -10438,8 +10462,8 @@ function AuthPage({ mode, setUser }) {
                   <span>Full name</span>
                   <input name="name" required autoFocus={shouldAutoFocusAuthField} value={nameValue} autoComplete="name" placeholder="Enter your name" onChange={(event) => setNameValue(event.target.value)} />
                 </label>
-                <AuthInputField className="signup-field" label="Create password" name="password" type="password" required minLength="12" maxLength="72" value={signupPassword} autoComplete="new-password" placeholder="At least 12 characters" onChange={(event) => setSignupPassword(event.target.value)} />
-                <AuthInputField className="signup-field" label="Confirm password" name="confirmPassword" type="password" required minLength="12" maxLength="72" value={signupConfirmPassword} autoComplete="new-password" placeholder="Repeat your password" onChange={(event) => setSignupConfirmPassword(event.target.value)} />
+                <AuthInputField className="signup-field" label="Create password" name="password" type="password" required minLength={USER_PASSWORD_MIN_LENGTH} maxLength="72" value={signupPassword} autoComplete="new-password" placeholder={`At least ${USER_PASSWORD_MIN_LENGTH} characters`} onChange={(event) => setSignupPassword(event.target.value)} />
+                <AuthInputField className="signup-field" label="Confirm password" name="confirmPassword" type="password" required minLength={USER_PASSWORD_MIN_LENGTH} maxLength="72" value={signupConfirmPassword} autoComplete="new-password" placeholder="Repeat your password" onChange={(event) => setSignupConfirmPassword(event.target.value)} />
               </div>
 
               <fieldset className="signup-gender-group">

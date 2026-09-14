@@ -30,7 +30,8 @@ async function withLocalTempSessions(fn) {
 }
 
 test('user password validation matches the bcrypt-safe website policy', () => {
-  assert.match(userPasswordError('short'), /at least 12/i);
+  assert.match(userPasswordError('12345'), /at least 6/i);
+  assert.equal(userPasswordError('123456'), '');
   assert.equal(userPasswordError('A-secure-password-123'), '');
   assert.match(userPasswordError('x'.repeat(73)), /at most 72 bytes/i);
   assert.match(userPasswordError('🔐'.repeat(19)), /at most 72 bytes/i);
