@@ -28,6 +28,7 @@ async function withLocalTempSessions(fn) {
   const originalFixedOtp = process.env.OTP_FIXED_CODE;
   const originalAllowProductionFixedOtp = process.env.ALLOW_FIXED_OTP_IN_PRODUCTION;
   const originalOtpRateLimitBypass = process.env.DISABLE_AUTH_OTP_RATE_LIMITS;
+  const originalRateLimitsEnabled = process.env.RATE_LIMITS_ENABLED;
   process.env.TEMP_SESSION_REQUIRE_REDIS = 'false';
   delete process.env.REDIS_URL;
   process.env.JWT_SECRET = 'otp-test-secret';
@@ -51,6 +52,8 @@ async function withLocalTempSessions(fn) {
     else process.env.ALLOW_FIXED_OTP_IN_PRODUCTION = originalAllowProductionFixedOtp;
     if (originalOtpRateLimitBypass === undefined) delete process.env.DISABLE_AUTH_OTP_RATE_LIMITS;
     else process.env.DISABLE_AUTH_OTP_RATE_LIMITS = originalOtpRateLimitBypass;
+    if (originalRateLimitsEnabled === undefined) delete process.env.RATE_LIMITS_ENABLED;
+    else process.env.RATE_LIMITS_ENABLED = originalRateLimitsEnabled;
   }
 }
 
@@ -210,6 +213,22 @@ test('OTP attempt lockout can be bypassed outside production for testing', async
   process.env.DISABLE_AUTH_OTP_RATE_LIMITS = 'true';
 
   const challenge = await createChallenge('attempt-limit-bypass', { maxAttempts: 2 });
+  const first = await verify({ ...challenge, otp: '111111' });
+  const second = await verify({ ...challenge, otp: '222222' });
+  const correctAfterLimit = await verify(challenge);
+
+  assert.equal(first.ok, false);
+  assert.equal(first.status, 400);
+  assert.equal(second.ok, false);
+  assert.equal(second.status, 400);
+  assert.equal(correctAfterLimit.ok, true);
+}));
+
+test('global rate-limit switch bypasses OTP attempt lockout', async () => withLocalTempSessions(async () => {
+  process.env.NODE_ENV = 'production';
+  process.env.RATE_LIMITS_ENABLED = 'false';
+
+  const challenge = await createChallenge('global-attempt-limit-bypass', { maxAttempts: 2 });
   const first = await verify({ ...challenge, otp: '111111' });
   const second = await verify({ ...challenge, otp: '222222' });
   const correctAfterLimit = await verify(challenge);

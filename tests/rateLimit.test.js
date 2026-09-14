@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createRateLimiter, developmentRateLimitBypass } from '../server/utils/rateLimit.js';
+import { createRateLimiter, developmentRateLimitBypass, rateLimitsEnabled } from '../server/utils/rateLimit.js';
 
 function createReq(ip = '127.0.0.1') {
   return {
@@ -43,7 +43,9 @@ function runMiddleware(middleware, req) {
 
 test('rate limiter allows requests until max and returns 429 after the limit', async () => {
   const previousRedisUrl = process.env.REDIS_URL;
+  const previousRateLimitsEnabled = process.env.RATE_LIMITS_ENABLED;
   delete process.env.REDIS_URL;
+  process.env.RATE_LIMITS_ENABLED = 'true';
   const limiter = createRateLimiter({
     name: `test:${Date.now()}`,
     windowMs: 60_000,
@@ -67,7 +69,47 @@ test('rate limiter allows requests until max and returns 429 after the limit', a
   } finally {
     if (previousRedisUrl === undefined) delete process.env.REDIS_URL;
     else process.env.REDIS_URL = previousRedisUrl;
+    if (previousRateLimitsEnabled === undefined) delete process.env.RATE_LIMITS_ENABLED;
+    else process.env.RATE_LIMITS_ENABLED = previousRateLimitsEnabled;
   }
+});
+
+test('global rate-limit switch bypasses generated middleware', async () => {
+  const previousRedisUrl = process.env.REDIS_URL;
+  const previousRateLimitsEnabled = process.env.RATE_LIMITS_ENABLED;
+  delete process.env.REDIS_URL;
+  process.env.RATE_LIMITS_ENABLED = 'false';
+  const limiter = createRateLimiter({
+    name: `test-global-bypass:${Date.now()}`,
+    windowMs: 60_000,
+    max: 1,
+    keyGenerator: (req) => `ip:${req.ip}`
+  });
+
+  try {
+    const first = await runMiddleware(limiter, createReq());
+    const second = await runMiddleware(limiter, createReq());
+    const third = await runMiddleware(limiter, createReq());
+
+    assert.equal(first.nextCalled, true);
+    assert.equal(second.nextCalled, true);
+    assert.equal(third.nextCalled, true);
+    assert.equal(third.res.statusCode, 200);
+    assert.deepEqual(third.res.headers, {});
+  } finally {
+    if (previousRedisUrl === undefined) delete process.env.REDIS_URL;
+    else process.env.REDIS_URL = previousRedisUrl;
+    if (previousRateLimitsEnabled === undefined) delete process.env.RATE_LIMITS_ENABLED;
+    else process.env.RATE_LIMITS_ENABLED = previousRateLimitsEnabled;
+  }
+});
+
+test('global rate-limit switch defaults on and accepts false values', () => {
+  assert.equal(rateLimitsEnabled({}), true);
+  assert.equal(rateLimitsEnabled({ RATE_LIMITS_ENABLED: 'true' }), true);
+  assert.equal(rateLimitsEnabled({ RATE_LIMITS_ENABLED: 'false' }), false);
+  assert.equal(rateLimitsEnabled({ RATE_LIMITS_ENABLED: 'off' }), false);
+  assert.equal(rateLimitsEnabled({ RATE_LIMITS_ENABLED: '0' }), false);
 });
 
 test('development rate-limit bypass cannot disable production protection', () => {

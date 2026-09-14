@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import mongoose from 'mongoose';
 import test from 'node:test';
+import UserSession from '../server/models/UserSession.js';
 import {
   clientSummary,
   hashSessionId,
@@ -7,6 +9,18 @@ import {
   sessionActivityIncrement,
   sessionDisplayState
 } from '../server/utils/userSessions.js';
+
+function sessionDocument(authMethod) {
+  const now = new Date();
+  return new UserSession({
+    user: new mongoose.Types.ObjectId(),
+    sessionHash: `hash-${authMethod}`,
+    authMethod,
+    loginAt: now,
+    lastSeenAt: now,
+    expiresAt: new Date(now.getTime() + 60_000)
+  });
+}
 
 test('session identifiers are stored as deterministic hashes', () => {
   const sessionId = 'session-secret-value';
@@ -41,4 +55,9 @@ test('client summaries retain only coarse browser and device information', () =>
   assert.deepEqual(clientSummary('Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 Version/17.0 Mobile Safari/604.1'), { deviceType: 'mobile', platform: 'ios', browser: 'Safari' });
   assert.deepEqual(clientSummary('Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/126.0.0.0 Mobile Safari/537.36'), { deviceType: 'mobile', platform: 'android', browser: 'Chrome' });
   assert.deepEqual(clientSummary('Mozilla/5.0 Chrome/126.0.0.0 Safari/537.36'), { deviceType: 'desktop', platform: 'unknown', browser: 'Chrome' });
+});
+
+test('session auth methods include password reset logins', () => {
+  assert.equal(sessionDocument('password-reset').validateSync(), undefined);
+  assert.match(sessionDocument('magic-link').validateSync().errors.authMethod.message, /not a valid enum value/);
 });

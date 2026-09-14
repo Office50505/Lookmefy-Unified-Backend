@@ -12,7 +12,7 @@ const userSessionSchema = new mongoose.Schema(
     sessionHash: { type: String, required: true, unique: true },
     authMethod: {
       type: String,
-      enum: ['password', 'otp', 'signup'],
+      enum: ['password', 'otp', 'signup', 'password-reset'],
       required: true
     },
     status: {

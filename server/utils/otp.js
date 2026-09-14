@@ -1,5 +1,5 @@
 import { createHmac, randomInt, timingSafeEqual } from 'node:crypto';
-import { developmentRateLimitBypass } from './rateLimit.js';
+import { developmentRateLimitBypass, rateLimitsEnabled } from './rateLimit.js';
 
 const OTP_DIGITS = 6;
 const DEFAULT_MAX_ATTEMPTS = 5;
@@ -90,7 +90,7 @@ async function cancelOtpChallenge({ sessions, currentSessions, purpose, phone, o
 
 async function rejectAttempt({ sessions, currentSessions, purpose, otpSession, session, message = 'Incorrect OTP' }) {
   const attempts = Number(session.attempts || 0) + 1;
-  if (!developmentRateLimitBypass('DISABLE_AUTH_OTP_RATE_LIMITS') && attempts >= Number(session.maxAttempts || DEFAULT_MAX_ATTEMPTS)) {
+  if (rateLimitsEnabled() && !developmentRateLimitBypass('DISABLE_AUTH_OTP_RATE_LIMITS') && attempts >= Number(session.maxAttempts || DEFAULT_MAX_ATTEMPTS)) {
     await sessions.remove(otpSession);
     await removeCurrentSession({ currentSessions, purpose, phone: session.phone });
     return { ok: false, status: 429, message: 'Too many incorrect OTP attempts. Please request a new code.' };

@@ -6,6 +6,8 @@ import { normalizeIndianMobile } from './phone.js';
 
 const localBuckets = new Map();
 let lastWarningAt = 0;
+const FALSE_ENV_VALUES = new Set(['0', 'false', 'no', 'off', 'disabled']);
+const TRUE_ENV_VALUES = new Set(['1', 'true', 'yes', 'on']);
 
 function warnOnce(message) {
   const now = Date.now();
@@ -68,7 +70,13 @@ function defaultMessage(retryAfterSeconds) {
 
 function developmentRateLimitBypass(flagName, env = process.env) {
   if (String(env.NODE_ENV || '').toLowerCase() === 'production') return false;
-  return ['1', 'true', 'yes', 'on'].includes(String(env[flagName] || '').toLowerCase());
+  return TRUE_ENV_VALUES.has(String(env[flagName] || '').trim().toLowerCase());
+}
+
+function rateLimitsEnabled(env = process.env) {
+  const value = String(env.RATE_LIMITS_ENABLED ?? '').trim().toLowerCase();
+  if (!value) return true;
+  return !FALSE_ENV_VALUES.has(value);
 }
 
 function setHeaders(res, { limit, remaining, resetAt, retryAfterSeconds }) {
@@ -90,6 +98,7 @@ function createRateLimiter(options = {}) {
 
   return async function rateLimitMiddleware(req, res, next) {
     try {
+      if (!rateLimitsEnabled()) return next();
       if (skip?.(req)) return next();
       const identity = keyGenerator(req) || `ip:${clientIp(req)}`;
       const redisKey = `${keyPrefix()}:rl:${name}:${hashIdentifier(identity)}`;
@@ -139,4 +148,4 @@ const rateLimitKeys = {
   otpSession: (req) => `otp-session:${otpSession(req) || normalizedBodyPhone(req) || clientIp(req)}`
 };
 
-export { clientIp, createRateLimiter, developmentRateLimitBypass, rateLimitKeys };
+export { clientIp, createRateLimiter, developmentRateLimitBypass, rateLimitKeys, rateLimitsEnabled };
