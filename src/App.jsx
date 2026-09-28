@@ -1632,9 +1632,7 @@ function Header({ user, setUser, authChecked = true }) {
     ['Home', '/home'],
     ['Explore', '/categories'],
     ['Wardrobe', '/closet'],
-    ['Custom Try On', '/custom-try-on'],
     ['AI Stylist', user ? '/style-bot' : '/signup'],
-    ['Download', '/download'],
     ['About', '/about']
   ];
   const exactQueryActiveHref = navLinks.find(([, href]) => {
@@ -1744,7 +1742,7 @@ function Header({ user, setUser, authChecked = true }) {
 
   return (
     <>
-      {currentPath !== '/wishlist' && currentPath !== '/tokens' && currentPath !== '/tokens/top-up' && currentPath !== '/profile' && currentPath !== '/generation-history' && <div className="announcement">
+      {currentPath !== '/home' && currentPath !== '/wishlist' && currentPath !== '/tokens' && currentPath !== '/tokens/top-up' && currentPath !== '/profile' && currentPath !== '/generation-history' && <div className="announcement">
         <span>✨</span>
         <span>{user ? <>You have {user.tokens} tokens ready for AI try-on</> : <>Set up a mandate to unlock AI try-on credits</>}</span>
         <span>✨</span>
@@ -1763,13 +1761,13 @@ function Header({ user, setUser, authChecked = true }) {
           <div className="header-search" role="search">
             <form className="search-form" action="/categories" onSubmit={rememberSearch}>
               <button className="search-submit" type="submit" aria-label="Search"><SearchIcon /></button>
-              <input ref={desktopSearchRef} name="q" type="search" list="fitlook-recent-searches" placeholder="Search curated collections..." value={desktopSearch} onChange={(event) => setDesktopSearch(event.currentTarget.value)} aria-label="Search products" aria-keyshortcuts="Control+K Meta+K" title="Search (Ctrl+K)" />
+              <input ref={desktopSearchRef} name="q" type="search" list="fitlook-recent-searches" placeholder="Search for styles, brands, or anything..." value={desktopSearch} onChange={(event) => setDesktopSearch(event.currentTarget.value)} aria-label="Search products" aria-keyshortcuts="Control+K Meta+K" title="Search (Ctrl+K)" />
               {desktopSearch && <button className="search-clear" type="button" aria-label="Clear search" onClick={clearSearch}><CloseIcon /></button>}
             </form>
           </div>
           <div className="header-actions">
             <a className="icon-button mobile-search-trigger" href="/search" aria-label="Open search"><SearchIcon /></a>
-            <a className={`header-credit-button ${!authChecked ? 'auth-pending' : ''}`} href="/tokens" aria-label={user ? `Buy credits. ${tokenLabel} available` : 'Buy credits'}><SparkleLineIcon /><span>Credits</span>{user && <strong>{user.tokens}</strong>}{!authChecked && <strong className="header-auth-skeleton" aria-hidden="true" />}</a>
+            <a className={`header-credit-button ${!authChecked ? 'auth-pending' : ''}`} href="/tokens" aria-label={user ? `Buy credits. ${tokenLabel} available` : 'Buy credits'}><SparkleLineIcon /><span>Credits</span><strong>{user ? user.tokens : 0}</strong>{!authChecked && <strong className="header-auth-skeleton" aria-hidden="true" />}</a>
             <a className="icon-button header-count-button" href="/wishlist" aria-label={`${wishlistCount} wishlist items`}><HeartIcon />{wishlistCount > 0 && <strong>{wishlistCount}</strong>}</a>
             {!authChecked ? <span className="icon-button header-auth-loading" role="status" aria-label="Checking account"><UserIcon /></span> : user ? <a className="icon-button" href="/profile" aria-label="Profile"><NavProfileAvatar user={user} /></a> : <a className="icon-button" href="/signup" aria-label="Account"><UserIcon /></a>}
             {user && <button className="text-button" onClick={logout}>Log out</button>}
@@ -2071,6 +2069,20 @@ function SocialLogo({ name }) {
       </svg>
     );
   }
+  if (name === 'pinterest') {
+    return (
+      <svg className="brand-logo-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M12.1 3.5c-4.7 0-7.1 3.1-7.1 6.4 0 2 1.1 4.4 2.9 5.1.3.1.5 0 .5-.3l.4-1.5c.1-.2 0-.4-.2-.6-.6-.7-1-1.6-1-2.6 0-2.8 2.1-5.5 5.7-5.5 3.1 0 5.2 2.1 5.2 5.1 0 3.4-1.7 5.8-4 5.8-1.3 0-2.3-1.1-2-2.4.4-1.6 1.1-3.3 1.1-4.4 0-1-.5-1.9-1.7-1.9-1.3 0-2.4 1.4-2.4 3.2 0 1.2.4 2 .4 2l-1.6 6.6c-.3 1.3 0 3.1.1 3.3.1.1.2.1.3 0 .1-.2 1.7-2.4 2-3.6l.8-3.1c.5.9 1.8 1.6 3.1 1.6 4.1 0 7-3.7 7-8.3 0-4-3.3-6.9-7.5-6.9Z" />
+      </svg>
+    );
+  }
+  if (name === 'youtube') {
+    return (
+      <svg className="brand-logo-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M21.4 7.2a2.7 2.7 0 0 0-1.9-1.9C17.8 4.8 12 4.8 12 4.8s-5.8 0-7.5.5a2.7 2.7 0 0 0-1.9 1.9A28.2 28.2 0 0 0 2.1 12c0 1.6.1 3.2.5 4.8a2.7 2.7 0 0 0 1.9 1.9c1.7.5 7.5.5 7.5.5s5.8 0 7.5-.5a2.7 2.7 0 0 0 1.9-1.9c.4-1.6.5-3.2.5-4.8s-.1-3.2-.5-4.8ZM10 15.2V8.8l5.5 3.2L10 15.2Z" />
+      </svg>
+    );
+  }
   return (
     <svg className="brand-logo-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
       <path d="M15.1 10.6 21.2 3.5h-2.9l-4.5 5.2-3.6-5.2H3.1l6.4 9.1-6.7 7.9h2.9l5.1-5.9 4.1 5.9h7.1l-6.9-9.9Zm-2.1 2.5-1.3-1.8L7.8 5.7h1.4l3.2 4.6 1.3 1.8 4.2 6.1h-1.4L13 13.1Z" />
@@ -2179,7 +2191,7 @@ const atelierHeroSlides = [
     kicker: 'Men’s Edit',
     title: <>Modern Ease<br />Daily Style</>,
     copy: 'Build refined outfits from shirts, shoes, sunglasses, caps, and essentials already in the live catalog.',
-    primaryLabel: 'Shop Men',
+    primaryLabel: 'Shop for Men',
     primaryHref: '/categories?gender=men',
     secondaryLabel: 'Open Wardrobe',
     secondaryHref: '/closet'
@@ -2807,6 +2819,511 @@ function AtelierHome({ user, demoEcommerceMode = false }) {
         )}
       </main>
     </div>
+  );
+}
+
+const referenceMaterialPatterns = [
+  ['Cotton', /\bcotton\b/i],
+  ['Linen', /\blinen\b/i],
+  ['Denim', /\bdenim\b/i],
+  ['Leather', /\b(?:genuine\s+)?leather\b/i],
+  ['Wool', /\bwool\b/i],
+  ['Silk', /\bsilk\b/i],
+  ['Satin', /\bsatin\b/i],
+  ['Knit', /\bknit(?:ted)?\b/i],
+  ['Ribbed', /\bribbed\b/i],
+  ['Polyester', /\bpolyester\b/i],
+  ['Viscose', /\bviscose\b/i],
+  ['Rayon', /\brayon\b/i],
+  ['Chiffon', /\bchiffon\b/i],
+  ['Georgette', /\bgeorgette\b/i],
+  ['Suede', /\bsuede\b/i],
+  ['Canvas', /\bcanvas\b/i],
+  ['Fleece', /\bfleece\b/i],
+  ['Jersey', /\bjersey\b/i]
+];
+
+const referenceLooks = [
+  {
+    title: 'Minimal',
+    copy: 'Clean pieces. Maximum impact.',
+    hero: 'category-women-hero.png',
+    pieces: ['category-generated/jackets.png', 'category-icons/tops.png', 'category-generated/pants.png', 'category-generated/bags.png'],
+    href: '/categories/jackets?gender=women'
+  },
+  {
+    title: 'Work',
+    copy: 'Confidence looks good on you.',
+    hero: 'trending-1.jpg',
+    pieces: ['category-icons/jackets-dark.png', 'category-generated/shirts.png', 'category-generated/pants.png', 'category-generated/bags.png'],
+    href: '/categories/shirts?gender=men'
+  },
+  {
+    title: 'Casual',
+    copy: 'Effortless style, every day.',
+    hero: 'ai-stylist-campaign.png',
+    pieces: ['category-2.jpg', 'category-generated/jeans.png', 'category-icons/shoes-section.png', 'category-icons/eyewear-section.png'],
+    href: '/categories/tops?gender=women'
+  },
+  {
+    title: 'Evening',
+    copy: 'For your bigger moments.',
+    hero: 'category-reference-hero.png',
+    pieces: ['category-generated/ethnic-wear.png', 'category-reference-accessories.png', 'category-heroes/shoes-hero.png'],
+    href: '/categories/dresses?gender=women'
+  }
+];
+
+const referencePromoSlides = [
+  {
+    id: 'women-try-on',
+    tone: 'light',
+    image: 'category-women-hero.png',
+    position: '70% 24%',
+    kicker: 'Your AI fashion assistant',
+    title: <>Wear It Before<br />You Buy It</>,
+    copy: 'Try on any outfit with AI, style smarter, and discover a more confident you.',
+    primaryLabel: 'Start Try-On',
+    primaryHref: '/custom-try-on',
+    secondaryLabel: 'Open My Wardrobe',
+    secondaryHref: '/closet',
+    note: <>Same You<br />New Possibilities</>,
+    photo: 'category-women-hero.png',
+    result: 'category-women-hero.png',
+    pieces: ['category-generated/jackets.png', 'category-icons/t-shirts-section.png', 'category-generated/ethnic-wear.png', 'category-generated/bags.png']
+  },
+  {
+    id: 'men-edit',
+    tone: 'dark',
+    image: 'category-men-hero.png',
+    position: '65% 18%',
+    kicker: 'Men’s Edit',
+    title: <>Modern Ease<br />Daily Style</>,
+    copy: 'Build refined outfits from shirts, shoes, sunglasses, caps, and essentials already in the live catalog.',
+    primaryLabel: 'Shop for Men',
+    primaryHref: '/categories?gender=men',
+    secondaryLabel: 'Open Wardrobe',
+    secondaryHref: '/closet',
+    note: <>Refined Fits<br />Daily Rotation</>,
+    photo: 'category-men-hero.png',
+    result: 'category-men-hero.png',
+    pieces: ['category-generated/shirts.png', 'category-generated/jeans.png', 'category-generated/eyewear.png', 'category-generated/watches.png']
+  },
+  {
+    id: 'ai-every-look',
+    tone: 'dark',
+    image: 'home-hero-editorial.png',
+    position: '57% 18%',
+    kicker: 'AI fashion try-on',
+    title: <>See Yourself<br />In Every Look</>,
+    copy: 'Experience the future of fashion with AI-powered virtual try-on. Upload, try, and find your perfect style.',
+    primaryLabel: 'Start AI Try-On',
+    primaryHref: '/custom-try-on',
+    secondaryLabel: 'Explore Collections',
+    secondaryHref: '/categories',
+    note: <>Upload<br />Try<br />Love It</>,
+    photo: 'category-women-hero.png',
+    result: 'home-hero-editorial.png',
+    pieces: ['category-generated/jackets.png', 'category-generated/shirts.png', 'category-generated/pants.png', 'category-icons/shoes-section.png']
+  }
+];
+
+function referenceAvailabilityLabel(status) {
+  const value = cleanDisplayText(status, '').toLowerCase();
+  if (!value || value === 'available') return 'Available';
+  if (value === 'out_of_stock') return 'Out of stock';
+  return value.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function referenceProductMaterial(product = {}) {
+  const source = [
+    product.name,
+    product.category,
+    product.description,
+    Array.isArray(product.tags) ? product.tags.join(' ') : product.tags
+  ].filter(Boolean).join(' ');
+  const found = referenceMaterialPatterns
+    .filter(([, pattern]) => pattern.test(source))
+    .map(([label]) => label);
+  return [...new Set(found)].slice(0, 2).join(', ');
+}
+
+function referenceListLabel(values = [], label) {
+  const unique = [...new Set((values || []).map((value) => cleanDisplayText(value, '')).filter(Boolean))];
+  if (!unique.length) return '';
+  const shown = unique.slice(0, 3).join(', ');
+  const suffix = unique.length > 3 ? ` +${unique.length - 3}` : '';
+  return `${label} ${shown}${suffix}`;
+}
+
+function referenceProductOptionSummary(product = {}) {
+  const material = referenceProductMaterial(product);
+  return [
+    referenceAvailabilityLabel(product.availabilityStatus),
+    referenceListLabel(product.sizes, 'Sizes'),
+    referenceListLabel(product.colors, 'Colors'),
+    material ? `Material ${material}` : ''
+  ].filter(Boolean).slice(0, 4).join(' · ');
+}
+
+function referenceProductMetaLabel(product = {}) {
+  const brand = displayBrand(product);
+  const category = displayCategory(product);
+  if (!brand || /^(?:brand unavailable|marketplace brand)$/i.test(brand)) return category;
+  return `${brand} · ${category}`;
+}
+
+function referenceProductDisplayName(product = {}) {
+  const category = displayCategory(product).replace(/s$/i, '');
+  const rawName = String(product.name || '').replace(/\s+/g, ' ').trim() || 'Catalog piece';
+  const cleaned = rawName
+    .replace(/\|\|?.*$/g, '')
+    .replace(/\[[^\]]*\]/g, '')
+    .replace(/\([^)]*(?:available|size|plus|free|pack|set|combo|color|colour|waist|length)[^)]*\)/gi, '')
+    .replace(/\b(?:for\s+women|for\s+men|for\s+girls|for\s+woman|for\s+man)\b/gi, '')
+    .replace(/\b(?:classic|trendy|fashion|casual|daily|wear|comfortable|modern|premium)\b/gi, '')
+    .replace(/\s+(?:with|and)\s+.*$/i, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  if (cleaned && cleaned.length <= 54) return cleaned;
+  const words = (cleaned || rawName).split(/\s+/).filter(Boolean);
+  const title = words.slice(0, 6).join(' ').replace(/[,\-|/]+$/g, '').trim();
+  if (title && title.length >= 10) return title;
+  return category ? `${category[0]?.toUpperCase() || ''}${category.slice(1)} edit` : 'Catalog piece';
+}
+
+function referenceIsCustomerFacingProduct(product = {}) {
+  const text = [
+    product.name,
+    product.brand,
+    product.category,
+    Array.isArray(product.tags) ? product.tags.join(' ') : product.tags
+  ].filter(Boolean).join(' ').toLowerCase();
+  return !/\b(?:load\s*test|test\s*product|dummy|placeholder|fixture)\b/.test(text);
+}
+
+function ReferenceHome() {
+  const productRailRef = useRef(null);
+  const productState = useProducts({ limit: 96 });
+  const [promoSlideIndex, setPromoSlideIndex] = useState(0);
+  const promoSlide = referencePromoSlides[promoSlideIndex] || referencePromoSlides[0];
+  const catalogProducts = useMemo(() => uniqueProducts(productState.products)
+    .filter((product) => product?.id && product?.imageUrl && referenceIsCustomerFacingProduct(product)), [productState.products]);
+  const availableCatalogCount = catalogProducts.filter((product) => product.availabilityStatus === 'available').length;
+  const materialReadyCount = catalogProducts.filter((product) => referenceProductMaterial(product)).length;
+  const curatedReferenceProducts = useMemo(() => {
+    const available = catalogProducts.filter((product) => product.availabilityStatus === 'available');
+    const pool = available.length ? available : catalogProducts;
+    const priced = pool.filter((product) => Number(product.price || 0) > 0);
+    const seenTitles = new Set();
+    return stableExploreProducts(priced.length ? priced : pool)
+      .filter((product) => {
+        const key = referenceProductDisplayName(product).toLowerCase();
+        if (!key || seenTitles.has(key)) return false;
+        seenTitles.add(key);
+        return true;
+      })
+      .slice(0, 12);
+  }, [catalogProducts]);
+  const productKicker = curatedReferenceProducts.length
+    ? `${availableCatalogCount || curatedReferenceProducts.length} available styles. ${materialReadyCount ? 'Materials shown from catalog data.' : 'Sizes and colors shown when listed.'}`
+    : productState.loading
+    ? 'Loading the live platform catalog.'
+    : 'Live catalog items will appear here.';
+  const scrollRail = (direction) => {
+    productRailRef.current?.scrollBy({ left: direction * 420, behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    if (referencePromoSlides.length < 2) return undefined;
+    const prefersReducedMotion = typeof window !== 'undefined'
+      && window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+    if (prefersReducedMotion) return undefined;
+    const timer = window.setInterval(() => {
+      setPromoSlideIndex((current) => (current + 1) % referencePromoSlides.length);
+    }, 6500);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  return (
+    <div className="reference-home">
+      <main>
+        <section className="reference-hero" data-tone={promoSlide.tone} aria-label="Lookmefy AI try-on">
+          <div className="reference-hero-slide-stack" aria-hidden="true">
+            {referencePromoSlides.map((slide, index) => (
+              <OptimizedImage
+                className={`reference-hero-bg reference-hero-bg-${slide.id} ${index === promoSlideIndex ? 'active' : ''}`}
+                src={asset(slide.image)}
+                alt=""
+                eager={index === 0}
+                key={slide.id}
+                style={{ objectPosition: slide.position }}
+              />
+            ))}
+          </div>
+          <div className="reference-hero-copy">
+            <div className="reference-hero-copy-panels">
+              {referencePromoSlides.map((slide, index) => (
+                <div
+                  className={`reference-hero-copy-panel ${index === promoSlideIndex ? 'active' : ''}`}
+                  aria-hidden={index !== promoSlideIndex}
+                  key={`${slide.id}-copy`}
+                >
+                  <span>{slide.kicker}</span>
+                  <h1>{slide.title}</h1>
+                  <p>{slide.copy}</p>
+                  <div className="reference-hero-actions">
+                    <a className="reference-button reference-button-dark" href={slide.primaryHref} tabIndex={index === promoSlideIndex ? 0 : -1}><SparkleLineIcon /> {slide.primaryLabel} <span>→</span></a>
+                    <a className="reference-button reference-button-light" href={slide.secondaryHref} tabIndex={index === promoSlideIndex ? 0 : -1}><ClosetIcon /> {slide.secondaryLabel}</a>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="reference-promo-dots" aria-label="Featured home panels">
+              {referencePromoSlides.map((slide, index) => (
+                <button
+                  className={index === promoSlideIndex ? 'active' : ''}
+                  type="button"
+                  aria-label={`Show ${slide.kicker} panel`}
+                  aria-pressed={index === promoSlideIndex}
+                  key={slide.id}
+                  onClick={() => setPromoSlideIndex(index)}
+                />
+              ))}
+            </div>
+            <dl className="reference-stats" aria-label="Lookmefy stats">
+              <div><dt>1M+</dt><dd>Looks Created</dd></div>
+              <div><dt>200K+</dt><dd>Happy Users</dd></div>
+              <div><dt>4.9★</dt><dd>App Store Rating</dd></div>
+            </dl>
+          </div>
+          <div className={`reference-hero-demo ${promoSlide.id === 'women-try-on' ? 'active' : ''}`} aria-label="AI try-on preview" aria-hidden={promoSlide.id !== 'women-try-on'}>
+            <div className="reference-hero-demo-panel active">
+              <div className="reference-photo-step">
+                <OptimizedImage src={asset(referencePromoSlides[0].photo)} alt="" />
+                <strong>1. Your Photo</strong>
+              </div>
+              <span className="reference-demo-arrow" aria-hidden="true">→</span>
+              <div className="reference-result-step">
+                <span><SparkleLineIcon /> AI Try-On</span>
+                <OptimizedImage src={asset(referencePromoSlides[0].result)} alt="" />
+                <strong>2. AI Try-On Result</strong>
+              </div>
+              <div className="reference-piece-stack" aria-label="Outfit pieces">
+                {referencePromoSlides[0].pieces.map((image) => (
+                  <a href="/categories" tabIndex={promoSlide.id === 'women-try-on' ? 0 : -1} key={`women-try-on-${image}`}><OptimizedImage src={asset(image)} alt="" /></a>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="reference-note-stack" aria-hidden="true">
+            {referencePromoSlides.map((slide, index) => (
+              <p className={`reference-handwriting ${index === promoSlideIndex ? 'active' : ''}`} key={`${slide.id}-note`}>
+                {slide.note}
+              </p>
+              ))}
+          </div>
+          <div className="reference-side-note left">Explore<br />Infinite Looks<br />With AI</div>
+          <div className="reference-side-note right">Fashion<br />That Fits Your<br />Real Life</div>
+        </section>
+
+        <section className="reference-workflow reference-section">
+          <ReferenceSectionTitle title="How Lookmefy Works" action="Three steps. A more confident you." />
+          <div className="reference-step-grid">
+            <ReferenceStep number="01" title="Upload Your Photo" copy="Add a photo of yourself to create your digital try-on experience." href="/profile#upload-photo" icon={<ReferenceIcon name="upload" />} images={['category-women-hero.png']} />
+            <ReferenceStep number="02" title="Choose Outfits" copy="Browse our curated pieces or use your own wardrobe items." href="/categories" icon={<ReferenceIcon name="plus" />} images={['category-generated/jackets.png', 'category-icons/t-shirts-section.png', 'category-generated/jeans.png']} />
+            <ReferenceStep number="03" title="Get Your AI Look" copy="Let AI create realistic try-ons and style combinations in seconds." href="/custom-try-on" icon={<ReferenceIcon name="sparkle" />} images={['category-women-hero.png', 'ai-stylist-campaign.png', 'category-reference-hero.png']} />
+          </div>
+        </section>
+
+        <section className="reference-hub reference-section">
+          <ReferenceSectionTitle title="Your Style Hub" kicker="Everything you need in one place." action="Make fashion more you →" />
+          <div className="reference-hub-grid">
+            <ReferenceHubCard title="My Wardrobe" copy="Organize your pieces and see new ways to style them." href="/closet" image="category-generated/jackets.png" icon={<ReferenceIcon name="hanger" />} />
+            <ReferenceHubCard title="Custom Try-On" copy="Try any look on you, with AI." href="/custom-try-on" image="category-women-hero.png" icon={<ReferenceIcon name="camera" />} />
+            <ReferenceHubCard title="AI Stylist" copy="Get personalized outfit recommendations." href="/style-bot" image="category-reference-bottoms.png" icon={<ReferenceIcon name="sparkle" />} />
+            <ReferenceHubCard title="Saved Looks" copy="Keep your favorite looks in one place." href="/wishlist" image="category-reference-hero.png" icon={<ReferenceIcon name="heart" />} />
+          </div>
+        </section>
+
+        <section className="reference-products reference-section">
+          <ReferenceSectionTitle title="Curated For You" kicker={productKicker} href="/categories" action="Shop all →" />
+          <div className="reference-product-shell">
+            <div className="reference-product-rail" ref={productRailRef} aria-label="Curated products">
+              {curatedReferenceProducts.map((product) => <ReferenceProductCard product={product} key={product.id} />)}
+              {productState.loading && !curatedReferenceProducts.length && <ReferenceProductStatusCard title="Loading live catalog" copy="Pulling available products, prices, colors, sizes, and material notes from the platform." />}
+              {!productState.loading && !curatedReferenceProducts.length && <ReferenceProductStatusCard title="No available catalog items" copy={productState.error || 'Add or approve products in the catalog to show real options here.'} />}
+            </div>
+            {curatedReferenceProducts.length > 5 && <button className="reference-rail-next" type="button" aria-label="More curated products" onClick={() => scrollRail(1)}>→</button>}
+          </div>
+        </section>
+
+        <section className="reference-looks reference-section">
+          <ReferenceSectionTitle title="Looks Made For You" kicker="AI styled. Real life ready." href="/categories" action="See more looks →" />
+          <div className="reference-look-grid">
+            {referenceLooks.map((look) => <ReferenceLookCard look={look} key={look.title} />)}
+          </div>
+        </section>
+
+        <section className="reference-final-cta" aria-label="Build your digital wardrobe">
+          <OptimizedImage className="reference-final-bg" src={asset('ai-stylist-campaign.png')} alt="" />
+          <div className="reference-final-copy">
+            <span>Your style journey starts here</span>
+            <h2>Build Your Digital Wardrobe</h2>
+            <p>Try on outfits, get personalized recommendations, and discover a more confident you.</p>
+            <div className="reference-hero-actions">
+              <a className="reference-button reference-button-dark" href="/custom-try-on">Start Your First Try-On <span>→</span></a>
+              <a className="reference-button reference-button-light" href="/closet"><ClosetIcon /> Create My Wardrobe</a>
+            </div>
+          </div>
+          <p className="reference-handwriting final active">More Outfits<br />A More You</p>
+          <div className="reference-final-side-note">Same You.<br />New<br />Possibilities.</div>
+        </section>
+      </main>
+    </div>
+  );
+}
+
+function ReferenceSectionTitle({ title, kicker = '', action = '', href = '' }) {
+  const actionNode = href ? <a href={href}>{action}</a> : <span>{action}</span>;
+  return (
+    <div className="reference-section-title">
+      <div><h2>{title}</h2>{kicker && <p>{kicker}</p>}</div>
+      {action && actionNode}
+    </div>
+  );
+}
+
+function ReferenceStep({ number, title, copy, href, icon, images }) {
+  return (
+    <a className="reference-step-card" href={href}>
+      <span className="reference-step-number">{number}</span>
+      <span className="reference-step-copy"><strong>{title}</strong><small>{copy}</small></span>
+      <span className="reference-step-images">
+        {images.map((image) => <OptimizedImage src={asset(image)} alt="" key={image} />)}
+        <em>{icon}</em>
+      </span>
+    </a>
+  );
+}
+
+function ReferenceHubCard({ title, copy, href, image, icon }) {
+  return (
+    <a className="reference-hub-card" href={href}>
+      <span className="reference-hub-icon">{icon}</span>
+      <span><strong>{title}</strong><small>{copy}</small><em>→</em></span>
+      <OptimizedImage src={asset(image)} alt="" />
+    </a>
+  );
+}
+
+function ReferenceProductStatusCard({ title, copy }) {
+  return (
+    <article className="reference-product-status">
+      <strong>{title}</strong>
+      <small>{copy}</small>
+    </article>
+  );
+}
+
+function ReferenceProductCard({ product }) {
+  const href = `/product/${encodeURIComponent(product.id)}`;
+  const displayName = referenceProductDisplayName(product);
+  const category = referenceProductMetaLabel(product);
+  const optionSummary = referenceProductOptionSummary(product);
+  const hasDiscount = product.compareAtPrice && product.compareAtPrice > product.price;
+  return (
+    <a className="reference-product-card reference-product-card-live" href={href}>
+      <OptimizedImage src={product.imageUrl} alt={product.name} highResolution={false} />
+      <strong title={product.name}>{displayName}</strong>
+      <small>{category}</small>
+      {optionSummary && <em className="reference-product-options">{optionSummary}</em>}
+      <span className="reference-product-price">
+        {formatMoney(product.price, product.currency)}
+        {hasDiscount && <del>{formatMoney(product.compareAtPrice, product.currency)}</del>}
+      </span>
+    </a>
+  );
+}
+
+function ReferenceLookCard({ look }) {
+  return (
+    <a className="reference-look-card" href={look.href}>
+      <OptimizedImage className="reference-look-hero" src={asset(look.hero)} alt="" />
+      <span className="reference-look-copy"><strong>{look.title}</strong><small>{look.copy}</small><em>→</em></span>
+      <span className="reference-look-pieces">
+        {look.pieces.map((piece) => <OptimizedImage src={asset(piece)} alt="" key={piece} />)}
+      </span>
+    </a>
+  );
+}
+
+function ReferenceIcon({ name }) {
+  const paths = {
+    hanger: <><path d="M12 7.4c0-1.55 1.18-2.65 2.62-2.65 1.26 0 2.28.82 2.28 2.05 0 1.12-.7 1.75-1.82 2.33L12 10.72" /><path d="M4.5 18.25 12 10.7l7.5 7.55" /><path d="M5.9 18.25h12.2" /></>,
+    camera: <><path d="M4.5 8.2h3.35l1.28-1.95h5.74l1.28 1.95h3.35v9.55h-15V8.2Z" /><circle cx="12" cy="13" r="3.15" /></>,
+    sparkle: <><path d="m12 3.75 1.45 4.8 4.8 1.45-4.8 1.45L12 16.25l-1.45-4.8-4.8-1.45 4.8-1.45L12 3.75Z" /><path d="m18.5 15.3.65 2.05 2.1.65-2.1.65-.65 2.1-.65-2.1-2.1-.65 2.1-.65.65-2.05Z" /><path d="M5.4 14.8v3.4M3.7 16.5h3.4" /></>,
+    heart: <path d="M19.25 13.95 12 21l-7.25-7.05A5.1 5.1 0 0 1 12 6.8a5.1 5.1 0 0 1 7.25 7.15Z" />,
+    upload: <><path d="M12 16.75V6.5" /><path d="m8.25 10.15 3.75-3.75 3.75 3.75" /><path d="M5.5 17.4v2.1h13v-2.1" /></>,
+    plus: <><circle cx="12" cy="12" r="8.25" /><path d="M12 8.35v7.3M8.35 12h7.3" /></>
+  };
+  return <svg className="reference-icon" viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>;
+}
+
+function ReferenceFooter() {
+  const socialLinks = [
+    { label: 'Instagram', href: 'https://instagram.com/', icon: 'instagram' },
+    { label: 'X', href: 'https://x.com/', icon: 'x' }
+  ];
+  const shopLinks = [
+    ['New in', '/categories?newArrival=true'],
+    ['Women', '/categories?gender=women'],
+    ['Men', '/categories?gender=men'],
+    ['Sale', '/categories?discounted=true']
+  ];
+  const helpLinks = [
+    ['Support', '/support'],
+    ['Returns', '/returns'],
+    ['Contact us', '/contact'],
+    ['Shipping', '/shipping']
+  ];
+  const legalLinks = [
+    ['Privacy Policy', '/privacy'],
+    ['Terms of Service', '/terms'],
+    ['Copyright', '/copyright']
+  ];
+
+  return (
+    <footer className="reference-footer">
+      <div className="reference-footer-main">
+        <section className="reference-footer-brand-column" aria-label="Lookmefy">
+          <a className="reference-footer-brand" href="/home" aria-label="Lookmefy home"><BrandLogo /></a>
+          <p>Discover personal style through curated fashion and AI-powered try-on.</p>
+          <div className="reference-footer-social" aria-label="Social links">
+            {socialLinks.map((item) => <a href={item.href} target="_blank" rel="noreferrer" aria-label={item.label} title={item.label} key={item.label}><SocialLogo name={item.icon} /></a>)}
+          </div>
+        </section>
+        <nav className="reference-footer-column" aria-label="Shop">
+          <h2>Shop</h2>
+          {shopLinks.map(([label, href]) => <a href={href} key={href}>{label}</a>)}
+        </nav>
+        <nav className="reference-footer-column" aria-label="Help">
+          <h2>Help</h2>
+          {helpLinks.map(([label, href]) => <a href={href} key={href}>{label}</a>)}
+        </nav>
+        <section className="reference-footer-column reference-footer-download" aria-label="Download our App">
+          <h2><a href="/download">Download our App</a></h2>
+          <p>Get the Lookmefy app for your daily fashion edit.</p>
+          <StoreActions context="reference-footer" className="reference-store-links" itemClassName="reference-store-link" />
+        </section>
+      </div>
+      <div className="reference-footer-bottom">
+        <span>© 2026 Lookmefy. Curated by intelligence.</span>
+        <nav aria-label="Legal">
+          {legalLinks.map(([label, href]) => <a href={href} key={href}>{label}</a>)}
+        </nav>
+      </div>
+    </footer>
   );
 }
 
@@ -4674,11 +5191,11 @@ function ClosetPage({ user, setUser }) {
               );
             })}
             <button type="button" onClick={() => applyAccessorySlot('cap', 'Cap')}>
-              <span><BagIcon /></span>
+              <span><CapIcon /></span>
               <small>Cap</small>
             </button>
             <button type="button" onClick={() => applyAccessorySlot('goggles', 'Sunglasses')}>
-              <span><EyeIcon /></span>
+              <span><SunglassesIcon /></span>
               <small>Glasses</small>
             </button>
           </div>
@@ -4735,17 +5252,17 @@ function ClosetPage({ user, setUser }) {
               <small>Model</small>
             </button>
             <button type="button" onClick={() => applyAccessorySlot('cap', 'Cap')}>
-              <span><BagIcon /></span>
+              <span><CapIcon /></span>
               <small>Cap</small>
             </button>
             <button type="button" onClick={() => applyAccessorySlot('goggles', 'Sunglasses')}>
-              <span><EyeIcon /></span>
+              <span><SunglassesIcon /></span>
               <small>Sunglasses</small>
             </button>
           </div>
 
           <div className="wardrobe-model-tools right">
-            <button type="button" onClick={undoWardrobeSelection} aria-label="Undo selection"><span>↶</span><small>Undo</small></button>
+            <button type="button" onClick={undoWardrobeSelection} aria-label="Undo selection"><span><UndoReturnIcon /></span><small>Undo</small></button>
             <button type="button" onClick={clearWardrobeSelection} aria-label="Clear selection"><span>⌫</span><small>Clear</small></button>
           </div>
 
@@ -7104,6 +7621,7 @@ function CreditSuccessModal({ order, user, onClose }) {
 function ProfilePage({ user, setUser }) {
   const fileRef = useRef(null);
   const cameraRef = useRef(null);
+  const uploadPhotoRef = useRef(null);
   const deleteTriggerRef = useRef(null);
   const [preview, setPreview] = useState('');
   const [photoFile, setPhotoFile] = useState(null);
@@ -7171,6 +7689,26 @@ function ProfilePage({ user, setUser }) {
       clearInterval(interval);
     };
   }, [user?.bodyPhotoStatus, setUser]);
+
+  useEffect(() => {
+    if (!user || typeof window === 'undefined') return undefined;
+    const scrollToUpload = () => {
+      if (!['#upload-photo', '#tryon-photo'].includes(window.location.hash)) return;
+      const target = uploadPhotoRef.current || document.getElementById('upload-photo') || document.getElementById('tryon-photo');
+      if (!target) return;
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (target instanceof HTMLElement) {
+        target.setAttribute('tabindex', '-1');
+        target.focus({ preventScroll: true });
+      }
+    };
+    const timer = window.setTimeout(scrollToUpload, 250);
+    window.addEventListener('hashchange', scrollToUpload);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('hashchange', scrollToUpload);
+    };
+  }, [user?.id]);
 
   if (!user) return <AuthPage mode="signup" setUser={setUser} />;
 
@@ -7316,7 +7854,7 @@ function ProfilePage({ user, setUser }) {
                 </div>
               )}
             </div>
-            <form className="profile-reference-photo-form" onSubmit={submitPhoto}>
+            <form className="profile-reference-photo-form" id="upload-photo" ref={uploadPhotoRef} onSubmit={submitPhoto}>
               <label className="profile-reference-upload-zone">
                 <input ref={fileRef} name="bodyPhoto" type="file" accept={BODY_PHOTO_ACCEPT} onChange={selectPhoto} />
                 <UploadCloudIcon />
@@ -10758,8 +11296,7 @@ function App() {
     const orderStatusMatch = path.match(/^\/order\/([^/]+)\/status$/);
     const categoryMatch = path.match(/^\/categories\/([^/]+)$/);
     if (requiresAuthentication(path) && !user) return <ProtectedRouteGate path={path} authChecked={authChecked} />;
-    if (path === '/') return <Home user={user} />;
-    if (path === '/home') return <AtelierHome user={user} demoEcommerceMode={demoEcommerceMode} />;
+    if (path === '/' || path === '/home') return <ReferenceHome />;
     if (path === '/categories' || path === '/explore') return <CategoriesPage key={routeKey} user={user} demoEcommerceMode={demoEcommerceMode} />;
     if (categoryMatch) return <CategoryDepartmentPage category={decodeURIComponent(categoryMatch[1])} user={user} demoEcommerceMode={demoEcommerceMode} />;
     if (path === '/search') return <SearchLandingPage key={routeKey} />;
@@ -10821,7 +11358,13 @@ function App() {
       '.about-feature',
       '.about-step',
       '.download-section',
-      '.download-feature-item'
+      '.download-feature-item',
+      '.reference-workflow',
+      '.reference-hub',
+      '.reference-products',
+      '.reference-looks',
+      '.reference-final-cta',
+      '.reference-footer'
     ].join(',');
     const sections = Array.from(document.querySelectorAll(revealSelectors));
     if (!sections.length) return undefined;
@@ -10852,7 +11395,8 @@ function App() {
   const isStandaloneAuth = ['/login', '/signup', '/forgot-password'].includes(path) && !user;
   const isConciergePage = path === '/style-bot' && Boolean(user);
   const isProductPage = /^\/product\/[^/]+$/.test(path);
-  const isOpeningPage = path === '/';
+  const isReferenceHome = path === '/' || path === '/home';
+  const isOpeningPage = false;
   const shouldHideMobileBottomNav = isOpeningPage || isStandaloneAuth || (!user && authFallbackRoutes.includes(path));
   const isWardrobeWorkspace = path === '/closet' || path === '/closet/add';
   const shouldShowOnboarding = Boolean(user && !user.hasCompletedOnboarding && !isStandaloneAuth);
@@ -10870,7 +11414,7 @@ function App() {
       {!isOnline && <div className="network-status" role="status" aria-live="polite">You are offline. Changes will resume when you reconnect.</div>}
       {toast && <Toast toast={toast} onDismiss={dismissToast} />}
       {!shouldHideMobileBottomNav && <MobileBottomNav user={user} />}
-      {!isStandaloneAuth && !isOpeningPage && !isConciergePage && <Footer />}
+      {!isStandaloneAuth && !isOpeningPage && !isConciergePage && (isReferenceHome ? <ReferenceFooter /> : <Footer />)}
       {shouldShowOnboarding && <OnboardingOverview user={user} onComplete={setUser} />}
       {replayTourOpen && user && <OnboardingOverview user={user} persist={false} onClose={() => setReplayTourOpen(false)} />}
     </>
@@ -10937,6 +11481,26 @@ function BagIcon() {
   return <svg viewBox="0 0 24 24"><path d="M6 7h12l1 14H5L6 7Z" /><path d="M9 7a3 3 0 0 1 6 0" /></svg>;
 }
 
+function CapIcon() {
+  return (
+    <svg className="wardrobe-cap-icon" viewBox="0 0 512 512" aria-hidden="true">
+      <path d="M153 270c25-83 87-143 176-160 64-12 129 0 183 33v191l-76-36c-40-19-79-37-118-55-45-20-91-11-132 6l-33 21Z" />
+      <path d="M51 331c54-45 111-59 165-39 43 16 73 59 113 88 36 26 76 31 117 14-64 55-132 63-190 23-45-31-78-82-128-93-25-5-50-2-77 7Z" />
+      <path d="M349 102c23-2 41 3 53 13l-44 1c-12-6-16-10-9-14Z" />
+      <path d="M385 125c29 55 43 112 43 169l-23-11c-2-54-16-104-43-151l23-7Z" fill="#fff" />
+      <path d="M158 267c82-34 148-37 206-12 54 23 96 47 141 68l-14 33c-49-24-94-50-144-71-51-22-108-16-173 11-47 19-89 12-123-4 35 1 67-8 107-25Z" fill="#fff" />
+    </svg>
+  );
+}
+
+function SunglassesIcon() {
+  return (
+    <svg className="wardrobe-sunglasses-icon" viewBox="0 0 512 512" aria-hidden="true">
+      <path d="M52 199h29c4-54 26-78 78-82 45-4 102-3 134 21 10 8 18 18 23 30 9-16 25-25 47-28 29-4 79-4 111 3 43 9 62 35 68 86h27c7 0 12 5 12 12v22c0 7-5 12-12 12h-24c-2 44-12 78-31 101-22 27-57 39-104 36-48-2-79-25-96-70-5-14-9-29-12-45-5-8-13-13-26-13s-21 5-26 13c-3 16-7 31-12 45-17 45-48 68-96 70-47 3-82-9-104-36-20-24-30-60-31-106H52c-7 0-12-5-12-12v-47c0-7 5-12 12-12Zm319-41c-24 3-38 17-44 39-4 17-2 53 8 83l120-85c-23-32-52-41-84-37Zm-214 0c-36 2-58 15-69 45l146 11c-11-40-34-59-77-56Zm-66 86c4 44 18 80 48 95 31 15 69 8 93-17l-141-78Zm407 3-136 75c24 26 62 33 93 18 27-14 41-48 43-93Zm-187-39h-70c8 13 12 28 13 46 13-7 31-7 44 0 1-17 5-32 13-46Z" />
+    </svg>
+  );
+}
+
 function TagIcon() {
   return <svg viewBox="0 0 24 24"><path d="M20 13 13 20a2 2 0 0 1-2.8 0L4 13.8V4h9.8L20 10.2a2 2 0 0 1 0 2.8Z" /><path d="M8 8h.01" /></svg>;
 }
@@ -10955,6 +11519,14 @@ function MenuIcon() {
 
 function ArrowLeftIcon() {
   return <svg viewBox="0 0 24 24"><path d="M19 12H5" /><path d="m12 19-7-7 7-7" /></svg>;
+}
+
+function UndoReturnIcon() {
+  return (
+    <svg className="wardrobe-undo-icon" viewBox="0 0 512 512" aria-hidden="true">
+      <path d="M203 68 55 202l148 135v-82h98c46 0 83 37 83 83s-37 83-83 83h-34v73h34c86 0 156-70 156-156s-70-156-156-156h-98V68Z" />
+    </svg>
+  );
 }
 
 function CloseIcon() {
