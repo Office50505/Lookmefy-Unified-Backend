@@ -1,8 +1,14 @@
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import { runProfileFullBodyJob } from '../server/routes/auth.js';
+import { runPhonePeProductOrderReconciliationJob } from '../server/routes/orders.js';
+import { runPhonePeTokenOrderReconciliationJob } from '../server/routes/payments.js';
 import { runProductRecategorizationJob } from '../server/routes/products.js';
 import { runProductTryOnJob } from '../server/routes/tryons.js';
+import {
+  PHONEPE_PRODUCT_ORDER_JOB,
+  PHONEPE_TOKEN_ORDER_JOB
+} from '../server/services/phonePeReconciliation.js';
 import { closeRedisClient } from '../server/utils/cache.js';
 import { closeJobQueues, queueEnabled, startWorker } from '../server/utils/jobQueue.js';
 import { appRole, mongoConnectOptions, serviceMetadata } from '../server/utils/runtime.js';
@@ -41,7 +47,13 @@ async function main() {
     startWorker('tryon', async (job) => {
       if (job.name !== 'product-generate') throw new Error(`Unknown try-on job: ${job.name}`);
       return runProductTryOnJob(job.data);
-    }, { concurrency: Number(process.env.TRYON_WORKER_CONCURRENCY || 1) })
+    }, { concurrency: Number(process.env.TRYON_WORKER_CONCURRENCY || 1) }),
+
+    startWorker('payments', async (job) => {
+      if (job.name === PHONEPE_TOKEN_ORDER_JOB) return runPhonePeTokenOrderReconciliationJob(job.data);
+      if (job.name === PHONEPE_PRODUCT_ORDER_JOB) return runPhonePeProductOrderReconciliationJob(job.data);
+      throw new Error(`Unknown payment job: ${job.name}`);
+    }, { concurrency: Number(process.env.PAYMENT_WORKER_CONCURRENCY || 1) })
   ].filter(Boolean);
 
   console.log(JSON.stringify({

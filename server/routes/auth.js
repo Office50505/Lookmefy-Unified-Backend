@@ -27,12 +27,12 @@ import { adminPasswordError, normalizeAdminName } from '../utils/adminCredential
 import { ADMIN_SECTIONS, adminToClient, normalizeAdminEmail } from '../utils/adminPermissions.js';
 import { buildAdminUserSearchFilter, buildAdminUserTokenFilter } from '../utils/adminUserSearch.js';
 import { normalizeGenderPreference } from '../utils/genderPreference.js';
-import { enqueueJob, safeJobId } from '../utils/jobQueue.js';
+import { enqueueCriticalJob, enqueueJob, safeJobId } from '../utils/jobQueue.js';
 import { signUserMediaToken, verifyUserMediaToken } from '../utils/mediaTokens.js';
 import { normalizeIndianMobile } from '../utils/phone.js';
 import { hashPassword, verifyPassword } from '../utils/passwordHashing.js';
 import { createRateLimiter, developmentRateLimitBypass, rateLimitKeys } from '../utils/rateLimit.js';
-import { deleteStoredFile, deleteStoredPrefix, publicUrlForStoredFile, readStoredFile, saveBuffer, useBunny } from '../utils/storage.js';
+import { deleteStoredFile, deleteStoredPrefix, publicUrlForStoredFile, readStoredFile, saveBuffer, storageUnavailableError, useBunny } from '../utils/storage.js';
 import {
   accountAccessError,
   accountStatusFor,
@@ -268,13 +268,7 @@ function isAllowedImageUpload(file) {
 }
 
 const upload = multer({
-  storage: multer.diskStorage({
-    destination: 'uploads/',
-    filename: (_req, file, cb) => {
-      const ext = path.extname(file.originalname || '');
-      cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
-    }
-  }),
+  storage: multer.memoryStorage(),
   limits: { fileSize: 8 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     cb(null, isAllowedImageUpload(file));
@@ -432,13 +426,11 @@ function isBodyPhotoPreparationError(error) {
 async function normalizeBodyPhotoUpload(file) {
   if (!file || (!isHeicUpload(file) && !isAvifUpload(file))) return file;
 
-  const inputPath = file.path;
-  const parsed = path.parse(file.filename);
+  const inputBuffer = file.buffer || await fs.readFile(file.path);
+  const parsed = path.parse(file.filename || file.originalname || 'profile');
   const filename = `${parsed.name}.jpg`;
-  const outputPath = path.join(path.dirname(inputPath), filename);
 
   try {
-    const inputBuffer = await fs.readFile(inputPath);
     const outputBuffer = isAvifUpload(file) || isAvifBuffer(inputBuffer)
       ? await sharp(inputBuffer).jpeg({ quality: 90 }).toBuffer()
       : Buffer.from(await heicConvert({
@@ -447,25 +439,22 @@ async function normalizeBodyPhotoUpload(file) {
         quality: 0.9
       }));
 
-    await fs.writeFile(outputPath, outputBuffer);
-    await fs.unlink(inputPath).catch(() => {});
-    const stats = await fs.stat(outputPath);
     return {
       ...file,
       filename,
-      path: outputPath,
+      buffer: outputBuffer,
+      path: '',
       mimetype: 'image/jpeg',
-      size: stats.size
+      size: outputBuffer.length
     };
   } catch (error) {
-    await fs.unlink(outputPath).catch(() => {});
     throw new Error('Could not convert the AVIF/HEIC/HEIF profile photo. Please try another image.');
   }
 }
 
 async function normalizedProfileUpload(file) {
   const normalized = await normalizeBodyPhotoUpload(file);
-  const bytes = await fs.readFile(normalized.path);
+  const bytes = normalized.buffer || await fs.readFile(normalized.path);
   const image = await normalizeRasterImageBuffer({
     buffer: bytes,
     filename: normalized.filename || file.originalname || 'profile.jpg'
@@ -522,7 +511,7 @@ async function profilePhotosFromUpload(file, { generateFullBody = true } = {}) {
     ]);
     return { avatarPhoto, bodyPhoto };
   } finally {
-    await fs.unlink(normalized.path).catch(() => {});
+    if (normalized.path) await fs.unlink(normalized.path).catch(() => {});
   }
 }
 
@@ -531,10 +520,52 @@ async function bodyPhotoFromUpload(file, { generateFullBody = true } = {}) {
   return bodyPhoto;
 }
 
-async function runProfileFullBodyJob({ userId, sourceBodyPhoto }) {
+function isProductionRuntime() {
+  return String(process.env.NODE_ENV || '').trim().toLowerCase() === 'production';
+}
+
+function remoteUrlLooksShared(value = '') {
+  if (!/^https?:\/\//i.test(String(value || ''))) return false;
   try {
-    if (debugGenerationLogs) console.log('[profile-fullbody] start', { userId: userId.toString(), source: sourceBodyPhoto.path });
-    const generated = await generateFullBodyProfilePhoto(sourceBodyPhoto);
+    return !/^\/uploads(?:\/|$)/i.test(new URL(value).pathname);
+  } catch {
+    return false;
+  }
+}
+
+function sharedSafeProfileMedia(file = {}) {
+  if (!file) return false;
+  if (file.storage === 'bunny' && (file.path || file.url || file.remoteUrl)) return true;
+  if (remoteUrlLooksShared(file.remoteUrl)) return true;
+  if (remoteUrlLooksShared(file.url) && file.storage === 'remote') return true;
+  if (remoteUrlLooksShared(file.path)) return true;
+  if (Buffer.isBuffer(file.buffer)) return !isProductionRuntime();
+  return !isProductionRuntime();
+}
+
+function profileFullBodyJobSource(sourceBodyPhoto = {}) {
+  const source = sourceBodyPhoto?.original || sourceBodyPhoto;
+  if (!sharedSafeProfileMedia(source)) {
+    throw storageUnavailableError('Profile full-body job requires shared profile media in production');
+  }
+  return {
+    filename: source.filename,
+    path: source.path,
+    url: source.url,
+    remoteUrl: source.remoteUrl,
+    storage: source.storage,
+    mimetype: source.mimetype,
+    size: source.size
+  };
+}
+
+async function runProfileFullBodyJob({ userId, sourceBodyPhoto }) {
+  let jobSourceBodyPhoto;
+  const failureSourcePath = sourceBodyPhoto?.original?.path || sourceBodyPhoto?.path;
+  try {
+    jobSourceBodyPhoto = profileFullBodyJobSource(sourceBodyPhoto);
+    if (debugGenerationLogs) console.log('[profile-fullbody] start', { userId: userId.toString(), source: jobSourceBodyPhoto.path || jobSourceBodyPhoto.url });
+    const generated = await generateFullBodyProfilePhoto(jobSourceBodyPhoto);
     const generatedBodyPhoto = {
       ...await saveBuffer({
         key: generated.filename,
@@ -545,14 +576,7 @@ async function runProfileFullBodyJob({ userId, sourceBodyPhoto }) {
       status: 'ready',
       source: 'fal-full-body',
       generatedAt: new Date(),
-      original: sourceBodyPhoto.original || {
-        filename: sourceBodyPhoto.filename,
-        path: sourceBodyPhoto.path,
-        url: sourceBodyPhoto.url,
-        storage: sourceBodyPhoto.storage,
-        mimetype: sourceBodyPhoto.mimetype,
-        size: sourceBodyPhoto.size
-      }
+      original: jobSourceBodyPhoto
     };
     const generatedAvatarPhoto = {
       filename: generatedBodyPhoto.filename,
@@ -566,14 +590,14 @@ async function runProfileFullBodyJob({ userId, sourceBodyPhoto }) {
     };
 
     const updated = await User.findOneAndUpdate(
-      { _id: userId, 'bodyPhoto.path': sourceBodyPhoto.path },
+      { _id: userId, 'bodyPhoto.path': jobSourceBodyPhoto.path },
       { $set: { bodyPhoto: generatedBodyPhoto, avatarPhoto: generatedAvatarPhoto }, $unset: { avatarCrop: '' } },
       { new: true }
     );
 
     if (updated) {
-      if (generatedBodyPhoto.original?.path !== sourceBodyPhoto.path && generatedBodyPhoto.original?.url !== sourceBodyPhoto.url) {
-        await deleteStoredFile(sourceBodyPhoto).catch(() => {});
+      if (generatedBodyPhoto.original?.path !== jobSourceBodyPhoto.path && generatedBodyPhoto.original?.url !== jobSourceBodyPhoto.url) {
+        await deleteStoredFile(jobSourceBodyPhoto).catch(() => {});
       }
       if (debugGenerationLogs) console.log('[profile-fullbody] done', { userId: userId.toString(), path: generatedBodyPhoto.path });
       return { updated: true, path: generatedBodyPhoto.path };
@@ -585,7 +609,7 @@ async function runProfileFullBodyJob({ userId, sourceBodyPhoto }) {
   } catch (error) {
     const message = readableProviderError(error, 'Could not generate full-body profile image');
     await User.findOneAndUpdate(
-      { _id: userId, 'bodyPhoto.path': sourceBodyPhoto.path },
+      { _id: userId, 'bodyPhoto.path': jobSourceBodyPhoto?.path || failureSourcePath },
       { $set: { 'bodyPhoto.status': 'failed', 'bodyPhoto.error': message } }
     );
     console.error('[profile-fullbody] failed', { userId: userId.toString(), error: message });
@@ -593,31 +617,54 @@ async function runProfileFullBodyJob({ userId, sourceBodyPhoto }) {
   }
 }
 
-async function generateFullBodyProfileInBackground(userId, sourceBodyPhoto, { enabled = true } = {}) {
+async function generateFullBodyProfileInBackground(
+  userId,
+  sourceBodyPhoto,
+  {
+    enabled = true,
+    enqueue = enqueueJob,
+    enqueueCritical = enqueueCriticalJob,
+    runLocal = runProfileFullBodyJob
+  } = {}
+) {
   if (!enabled || !shouldGenerateFullBodyProfile()) return;
+  const jobSourceBodyPhoto = profileFullBodyJobSource(sourceBodyPhoto);
 
   const queueMode = String(process.env.PROFILE_FULL_BODY_QUEUE_MODE || 'inline').toLowerCase();
-  if (['inline', 'local', 'api', 'off'].includes(queueMode)) {
+  const production = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
+  const runInApiProcess = () => {
     setImmediate(() => {
-      runProfileFullBodyJob({ userId, sourceBodyPhoto }).catch(() => {});
+      runLocal({ userId, sourceBodyPhoto: jobSourceBodyPhoto }).catch(() => {});
     });
+  };
+
+  if (!production && ['inline', 'local', 'api', 'off'].includes(queueMode)) {
+    runInApiProcess();
     return;
   }
 
-  const job = await enqueueJob('profile', 'full-body', {
-    userId: userId.toString(),
-    sourceBodyPhoto
-  }, {
-    jobId: safeJobId('profile-full-body', userId, sourceBodyPhoto.path || sourceBodyPhoto.url || Date.now())
-  }).catch((error) => {
-    console.warn('[profile-fullbody] queue unavailable, using local fallback', { error: error.message });
-    return null;
-  });
+  let job;
+  try {
+    const enqueueOperation = production ? enqueueCritical : enqueue;
+    job = await enqueueOperation('profile', 'full-body', {
+      userId: userId.toString(),
+      sourceBodyPhoto: jobSourceBodyPhoto
+    }, {
+      jobId: safeJobId('profile-full-body', userId, jobSourceBodyPhoto.path || jobSourceBodyPhoto.url || Date.now())
+    });
+  } catch (error) {
+    if (production) throw error;
+    console.warn('[profile-fullbody] queue unavailable, using non-production local fallback', { error: error.message });
+  }
 
   if (job) return;
-  setImmediate(() => {
-    runProfileFullBodyJob({ userId, sourceBodyPhoto }).catch(() => {});
-  });
+  if (production) {
+    const error = new Error('Background job queue "profile" is temporarily unavailable');
+    error.code = 'JOB_QUEUE_UNAVAILABLE';
+    error.statusCode = 503;
+    throw error;
+  }
+  runInApiProcess();
 }
 
 function sign(user, sessionId) {
@@ -2499,8 +2546,10 @@ router.post('/body-photo/generate-full-body', requireUser, profilePhotoLimiter, 
 
 export default router;
 export {
+  generateFullBodyProfileInBackground,
   phoneEmail,
   normalizeAvatarCropInput,
+  profileFullBodyJobSource,
   profileMediaFileForKind,
   requireUser,
   runProfileFullBodyJob,

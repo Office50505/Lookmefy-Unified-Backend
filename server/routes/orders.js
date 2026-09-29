@@ -11,6 +11,11 @@ import { normalizeIndianMobile } from '../utils/phone.js';
 import { availableStatusClause } from '../utils/productAvailability.js';
 import { createRateLimiter, rateLimitKeys } from '../utils/rateLimit.js';
 import { validateConfiguredHttpsUrl } from '../utils/urlValidation.js';
+import {
+  enqueuePhonePeReconciliation,
+  pendingPhonePeReconciliationError,
+  phonePeTerminalFailure
+} from '../services/phonePeReconciliation.js';
 import { requireUser } from './auth.js';
 import {
   callbackAuthorizationHeader,
@@ -191,6 +196,7 @@ async function createProductPayment(req, order) {
   order.redirectUrl = data.redirectUrl || redirectUrl;
   order.providerResponse = data;
   await order.save();
+  await enqueuePhonePeReconciliation('product-order', order.merchantOrderId);
   return order;
 }
 
@@ -238,6 +244,78 @@ async function reconcileProductOrder(order) {
   order.paymentStatus = phonePeProductStatus(state) || order.paymentStatus;
   await order.save();
   return order;
+}
+
+async function runPhonePeProductOrderReconciliationJob(
+  { merchantOrderId } = {},
+  {
+    findOrder = (id) => ProductOrder.findOne({ merchantOrderId: id }),
+    reconcile = reconcileProductOrder
+  } = {}
+) {
+  const normalizedId = String(merchantOrderId || '').trim();
+  if (!normalizedId) throw new Error('PhonePe product-order reconciliation requires merchantOrderId');
+
+  const order = await findOrder(normalizedId);
+  if (!order) return { status: 'missing' };
+  if (order.paidAt && order.paymentStatus === 'paid') {
+    return { status: 'completed', providerState: order.providerState || 'COMPLETED' };
+  }
+  if (phonePeTerminalFailure(order.providerState) || order.paymentStatus === 'failed') {
+    return { status: 'failed', providerState: order.providerState || 'FAILED' };
+  }
+
+  const reconciledOrder = await reconcile(order);
+  const providerState = String(reconciledOrder?.providerState || '').toUpperCase();
+  if (reconciledOrder?.paidAt && reconciledOrder.paymentStatus === 'paid') {
+    return { status: 'completed', providerState: providerState || 'COMPLETED' };
+  }
+  if (phonePeTerminalFailure(providerState) || reconciledOrder?.paymentStatus === 'failed') {
+    return { status: 'failed', providerState: providerState || 'FAILED' };
+  }
+
+  throw pendingPhonePeReconciliationError('product order', providerState);
+}
+
+function isPhonePeProductOrderTerminal(order) {
+  if (!order) return true;
+  if (order.paidAt && order.paymentStatus === 'paid') return true;
+  const providerState = String(order.providerState || '').toUpperCase();
+  const paymentStatus = String(order.paymentStatus || '').toLowerCase();
+  return phonePeTerminalFailure(providerState) || paymentStatus === 'failed';
+}
+
+async function findProductOrderFromCallback(req) {
+  const id = orderIdFromCallback(req);
+  if (!id) return null;
+  return ProductOrder.findOne({ $or: [{ merchantOrderId: id }, { phonePeOrderId: id }] });
+}
+
+async function handleProductPhonePeCallback(req, res, {
+  requireCallbackConfig = requirePhonePeCallbackConfig,
+  validateCallbackAuth = validatePhonePeCallbackAuth,
+  getAuthorizationHeader = callbackAuthorizationHeader,
+  findOrder = findProductOrderFromCallback,
+  enqueueReconciliation = enqueuePhonePeReconciliation
+} = {}) {
+  try {
+    requireCallbackConfig();
+    const authorization = getAuthorizationHeader(req);
+    if (!validateCallbackAuth(authorization)) return res.status(401).json({ ok: false });
+  } catch (error) {
+    return res.status(503).json({ ok: false, message: readablePhonePeError(error, 'PhonePe callback verification is not configured') });
+  }
+
+  const order = await findOrder(req);
+  if (!order || isPhonePeProductOrderTerminal(order)) return res.status(202).json({ ok: true });
+
+  try {
+    await enqueueReconciliation('product-order', order.merchantOrderId);
+    return res.status(202).json({ ok: true });
+  } catch (error) {
+    console.error('[product-order:phonepe:callback]', readablePhonePeError(error));
+    return res.status(error.statusCode || 503).json({ ok: false, message: readablePhonePeError(error) });
+  }
 }
 
 router.get('/pincode/:pincode', orderStatusLimiter, async (req, res) => {
@@ -318,24 +396,7 @@ router.get('/:id/payment-status', requireUser, orderStatusLimiter, async (req, r
 });
 
 router.post('/phonepe/callback', async (req, res) => {
-  try {
-    requirePhonePeCallbackConfig();
-    const authorization = callbackAuthorizationHeader(req);
-    if (!validatePhonePeCallbackAuth(authorization)) return res.status(401).json({ ok: false });
-  } catch (error) {
-    return res.status(503).json({ ok: false, message: readablePhonePeError(error, 'PhonePe callback verification is not configured') });
-  }
-  const id = orderIdFromCallback(req);
-  const order = id ? await ProductOrder.findOne({ $or: [{ merchantOrderId: id }, { phonePeOrderId: id }] }) : null;
-  if (!order) return res.status(202).json({ ok: true });
-  res.status(202).json({ ok: true });
-  setImmediate(async () => {
-    try {
-      await reconcileProductOrder(order);
-    } catch (error) {
-      console.error('[product-order:phonepe:callback:bg]', readablePhonePeError(error));
-    }
-  });
+  return handleProductPhonePeCallback(req, res);
 });
 
 router.get('/admin/list', requireAdmin, requireUserOperationsAdmin, orderStatusLimiter, async (req, res) => {
@@ -389,12 +450,16 @@ router.patch('/admin/:id/status', requireAdmin, requireUserOperationsAdmin, asyn
 
 export {
   createProductPayment,
+  findProductOrderFromCallback,
+  handleProductPhonePeCallback,
+  isPhonePeProductOrderTerminal,
   markDemoOrderSuccessful,
   orderAddress,
   orderContact,
   orderItems,
   phonePeProductStatus,
-  reconcileProductOrder
+  reconcileProductOrder,
+  runPhonePeProductOrderReconciliationJob
 };
 
 export default router;

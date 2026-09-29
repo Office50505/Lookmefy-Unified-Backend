@@ -56,6 +56,7 @@ const avifExtensions = new Set(['.avif']);
 const avifMimeTypes = new Set(['image/avif', 'image/x-avif']);
 const debugGenerationLogs = ['1', 'true', 'yes', 'on'].includes(String(process.env.DEBUG_GENERATION_LOGS || '').toLowerCase());
 const debugPrunaVideoLogs = ['1', 'true', 'yes', 'on'].includes(String(process.env.DEBUG_PRUNA_VIDEO_LOGS || process.env.DEBUG_GENERATION_LOGS || '').toLowerCase());
+const productionRuntime = () => String(process.env.NODE_ENV || '').trim().toLowerCase() === 'production';
 const tryOnReadLimiter = createRateLimiter({
   name: 'tryons:read',
   windowMs: 5 * 60 * 1000,
@@ -2816,20 +2817,35 @@ router.post('/:productId/video', requireUser, async (req, res) => {
     const filename = `tryon-video-${Date.now()}-${Math.round(Math.random() * 1e9)}${extensionFor(generated.mimetype)}`;
     let video;
     if (generated.deferDownload && generated.providerOutputUrl) {
-      video = {
-        filename,
-        path: '',
-        url: videoMediaUrl(existing._id),
-        storage: 'pruna-proxy',
-        mimetype: generated.mimetype || 'video/mp4',
-        size: 0,
-        providerOutputUrl: generated.providerOutputUrl,
-        storageStatus: 'saving'
-      };
-      timer.mark('video provider url ready', {
-        outputUrl: shortUrlForLog(generated.providerOutputUrl),
-        proxyUrl: video.url
-      });
+      if (productionRuntime()) {
+        const downloaded = await downloadPrunaOutput(generated.providerOutputUrl, 'video/mp4,video/*,*/*;q=0.8');
+        video = await saveUserCacheFile({
+          user: req.user,
+          bytes: downloaded.bytes,
+          filename,
+          mimetype: downloaded.mimetype?.startsWith('video/') ? downloaded.mimetype : generated.mimetype || 'video/mp4'
+        });
+        timer.mark('deferred video file saved before response', {
+          outputKb: Math.round(downloaded.bytes.length / 1024),
+          mimetype: video.mimetype,
+          path: video.path
+        });
+      } else {
+        video = {
+          filename,
+          path: '',
+          url: videoMediaUrl(existing._id),
+          storage: 'pruna-proxy',
+          mimetype: generated.mimetype || 'video/mp4',
+          size: 0,
+          providerOutputUrl: generated.providerOutputUrl,
+          storageStatus: 'saving'
+        };
+        timer.mark('video provider url ready', {
+          outputUrl: shortUrlForLog(generated.providerOutputUrl),
+          proxyUrl: video.url
+        });
+      }
     } else {
       video = await saveUserCacheFile({ user: req.user, bytes: generated.bytes, filename, mimetype: generated.mimetype });
       timer.mark('video file saved', {
@@ -2868,7 +2884,7 @@ router.post('/:productId/video', requireUser, async (req, res) => {
       cost: generated.providerCostUsd,
       storageStatus: video.storageStatus || 'stored'
     });
-    if (generated.deferDownload && generated.providerOutputUrl) {
+    if (video.storageStatus === 'saving' && generated.providerOutputUrl) {
       backgroundSavePrunaVideo({
         tryOnId: existing._id,
         user: req.user,

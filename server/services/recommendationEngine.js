@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import Product, { productToClient } from '../models/Product.js';
 import UserEvent from '../models/UserEvent.js';
 import UserPreference from '../models/UserPreference.js';
-import { createHybridCache } from '../utils/cache.js';
+import { LOCAL_SAFE_CACHE, createHybridCache } from '../utils/cache.js';
 import { buildForYouCandidatePools, mergeCandidatePools } from './recommendationCandidates.js';
 import { normalizeRecommendationClient, normalizeRecommendationSurface } from './recommendationContext.js';
 import { summarizeRecommendationDiagnostics } from './recommendationDiagnostics.js';
@@ -22,8 +22,8 @@ import {
 import { scoringConfigForContext } from './recommendationScoringConfig.js';
 
 const recommendationCacheTtlMs = Number(process.env.RECOMMENDATION_READ_CACHE_TTL_MS || 5 * 60 * 1000);
-const productPoolCache = createHybridCache('recommendations:product-pool', { ttlMs: recommendationCacheTtlMs, maxItems: 20 });
-const similarProductsCache = createHybridCache('recommendations:similar', { ttlMs: recommendationCacheTtlMs, maxItems: 300 });
+const productPoolCache = createHybridCache('recommendations:product-pool', { ttlMs: recommendationCacheTtlMs, maxItems: 20, mode: LOCAL_SAFE_CACHE });
+const similarProductsCache = createHybridCache('recommendations:similar', { ttlMs: recommendationCacheTtlMs, maxItems: 300, mode: LOCAL_SAFE_CACHE });
 const recommendationCandidatePoolSize = Math.min(1000, Math.max(100, Math.floor(Number(process.env.RECOMMENDATION_CANDIDATE_POOL_SIZE) || 400)));
 
 const catalogFilter = recommendationCatalogFilter;

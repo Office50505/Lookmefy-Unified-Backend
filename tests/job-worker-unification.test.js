@@ -15,6 +15,20 @@ test('root backend jobs are backed by BullMQ jobQueue instead of the old app Mon
   assert.match(worker, /startWorker\('profile'/);
   assert.match(worker, /startWorker\('tryon'/);
   assert.match(worker, /startWorker\('maintenance'/);
+  assert.match(worker, /startWorker\('payments'/);
+  assert.match(worker, /PHONEPE_TOKEN_ORDER_JOB/);
+  assert.match(worker, /PHONEPE_PRODUCT_ORDER_JOB/);
+});
+
+test('API startup does not own BullMQ workers', async () => {
+  const [server, roleLauncher] = await Promise.all([
+    fs.readFile('server/index.js', 'utf8'),
+    fs.readFile('scripts/start-role.js', 'utf8')
+  ]);
+
+  assert.doesNotMatch(server, /startWorker\(/);
+  assert.match(roleLauncher, /role === 'worker' \|\| role === 'scheduler'/);
+  assert.match(roleLauncher, /role === 'all'/);
 });
 
 test('job polling preserves old mobile aliases while keeping queue-specific result fields', async () => {

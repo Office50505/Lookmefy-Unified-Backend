@@ -7,6 +7,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '../..');
 
+function isProductionEnv() {
+  return String(process.env.NODE_ENV || '').trim().toLowerCase() === 'production';
+}
+
 function provider() {
   return String(process.env.STORAGE_PROVIDER || 'local').trim().toLowerCase();
 }
@@ -17,8 +21,21 @@ function useBunny() {
 
 function requiredEnv(name) {
   const value = String(process.env[name] || '').trim();
-  if (!value) throw new Error(`${name} is required for Bunny storage`);
+  if (!value) throw storageUnavailableError(`${name} is required for Bunny storage`);
   return value;
+}
+
+function storageUnavailableError(message = 'Shared file storage is temporarily unavailable') {
+  const error = new Error(message);
+  error.code = 'STORAGE_UNAVAILABLE';
+  error.statusCode = 503;
+  return error;
+}
+
+function requirePersistentStorageWritable() {
+  if (isProductionEnv() && !useBunny()) {
+    throw storageUnavailableError('Shared file storage is required in production');
+  }
 }
 
 function bunnyStorageBaseUrl() {
@@ -151,6 +168,7 @@ async function saveBuffer({ key, buffer, mimetype = 'application/octet-stream', 
   const clean = cleanKey(key || filename);
   if (!clean) throw new Error('Storage key is required');
   if (!Buffer.isBuffer(buffer)) throw new Error('Storage buffer is required');
+  requirePersistentStorageWritable();
 
   if (useBunny()) {
     requiredEnv('BUNNY_CDN_BASE_URL');
@@ -161,7 +179,7 @@ async function saveBuffer({ key, buffer, mimetype = 'application/octet-stream', 
     });
     if (!response.ok) {
       const detail = await response.text().catch(() => '');
-      throw new Error(`Bunny storage upload failed (${response.status})${detail ? `: ${detail.slice(0, 200)}` : ''}`);
+      throw storageUnavailableError(`Bunny storage upload failed (${response.status})${detail ? `: ${detail.slice(0, 200)}` : ''}`);
     }
   } else {
     const localPath = localPathForKey(clean);
@@ -250,7 +268,7 @@ async function deleteStoredFile(file) {
   if (bunnyBacked) {
     const response = await bunnyRequest(key, { method: 'DELETE' });
     if (!response.ok && response.status !== 404) {
-      throw new Error(`Bunny storage delete failed (${response.status})`);
+      throw storageUnavailableError(`Bunny storage delete failed (${response.status})`);
     }
     return;
   }
@@ -265,7 +283,7 @@ async function deleteStoredPrefix(prefix) {
   if (useBunny()) {
     const response = await bunnyRequest(`${clean}/`, { method: 'DELETE' });
     if (!response.ok && response.status !== 404) {
-      throw new Error(`Bunny storage directory delete failed (${response.status})`);
+      throw storageUnavailableError(`Bunny storage directory delete failed (${response.status})`);
     }
     return;
   }
@@ -295,6 +313,7 @@ export {
   publicUrlForStoredFile,
   readStoredFile,
   saveBuffer,
+  storageUnavailableError,
   storedFileSignature,
   useBunny
 };

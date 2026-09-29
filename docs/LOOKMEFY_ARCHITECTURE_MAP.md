@@ -52,7 +52,7 @@ There is also a `web/` Next.js app and `pruna-test-node/` test harness. They are
 | Customer storefront | `src/main.jsx` | `npm run dev` / `npm run build` | Mounts React app with `ErrorBoundary`, runtime error tracking, and `App`. |
 | Admin app | `admin/src/main.jsx` | `npm run admin:dev` / `npm run admin:build` | Mounts admin console. |
 | API server | `server/index.js` | `npm run server` | Loads `.env`, validates required env, connects MongoDB, mounts routes, starts Express. |
-| Worker | `scripts/worker.js` | `npm run worker` | Connects MongoDB, starts BullMQ workers for profile, maintenance, try-on queues. |
+| Worker | `scripts/worker.js` | `npm run worker` | Connects MongoDB, starts BullMQ workers for profile, maintenance, try-on, and payment reconciliation queues. |
 | Role launcher | `scripts/start-role.js` | `npm run start:role` | Uses `APP_ROLE` to start API, worker, scheduler, or both. |
 | Product import | `scripts/import-products.mjs` | `npm run catalog:import` | Imports Amazon/product manifest rows into MongoDB. |
 | Index creation | `scripts/create-indexes.js` | `npm run db:create-indexes` | Syncs Mongo indexes for all models. |
@@ -182,7 +182,7 @@ This is the API surface as currently mounted by `server/index.js`.
 | `POST` | `/api/payments/checkout` | User | Token checkout button | `TokenOrder.create`, PhonePe OAuth, `/checkout/v2/pay`. |
 | `POST` | `/api/payments/phonepe/subscription` | User | Subscription alias route | Same as normal checkout for monthly plan. |
 | `GET` | `/api/payments/orders/:merchantOrderId/status` | User | Return from PhonePe | PhonePe status lookup, `grantPaidTokens`. |
-| `POST` | `/api/payments/phonepe/callback` | Public callback | PhonePe callback | Acknowledge fast, background `reconcileOrder`. |
+| `POST` | `/api/payments/phonepe/callback` | Public callback | PhonePe callback | Reconcile from authoritative provider status before acknowledging success. |
 
 ### Recommendation, Image, Job, Health Routes
 
@@ -486,9 +486,11 @@ flowchart TD
   Upload --> SaveOriginal[Save body photo]
   SaveOriginal --> Check{PROFILE_FULL_BODY_GENERATION enabled?}
   Check -->|No| Ready[User bodyPhoto saved]
-  Check -->|Yes| Mode{PROFILE_FULL_BODY_QUEUE_MODE}
-  Mode -->|inline| Generate[runProfileFullBodyJob]
-  Mode -->|async| Queue[enqueue profile/full-body]
+  Check -->|Yes| Env{Production?}
+  Env -->|Yes| Queue[enqueue profile/full-body]
+  Env -->|No| Mode{PROFILE_FULL_BODY_QUEUE_MODE}
+  Mode -->|inline/local| Generate[runProfileFullBodyJob]
+  Mode -->|worker| Queue
   Queue --> Worker[worker profile queue]
   Worker --> Generate
   Generate --> FalProfile[FAL profile generation]
@@ -506,7 +508,7 @@ The profile generation path lives in `auth.js`:
 
 - Upload validation and normalization happen before user save.
 - Original upload is retained under `bodyPhoto.original`.
-- Generated profile photo can be run inline, fire-and-forget, or queued depending on `PROFILE_FULL_BODY_QUEUE_MODE`.
+- Production always queues generated profile photos durably. Development/test may run inline or use an explicitly scoped local fallback depending on `PROFILE_FULL_BODY_QUEUE_MODE`.
 
 ## 13. Closet / Wardrobe Flow
 
@@ -659,7 +661,7 @@ Relevant routes:
 - `POST /payments/checkout`: starts normal PhonePe checkout.
 - `POST /payments/phonepe/subscription`: currently also starts normal checkout for the monthly plan.
 - `GET /payments/orders/:merchantOrderId/status`: verifies status and credits tokens.
-- `POST /payments/phonepe/callback`: acknowledges callback and reconciles in background.
+- `POST /payments/phonepe/callback`: verifies the callback, refreshes authoritative PhonePe status, then acknowledges success.
 - `GET /payments/credits/history`: merges purchases and token usage history.
 
 Important current gap:
@@ -747,6 +749,7 @@ flowchart TD
   Processor -->|profile| ProfileJob[runProfileFullBodyJob]
   Processor -->|maintenance| Recategorize[runProductRecategorizationJob]
   Processor -->|tryon| TryOnJob[runProductTryOnJob]
+  Processor -->|payments| PaymentJob[run PhonePe reconciliation job]
   Inline --> Result[API response]
   TryOnJob --> Result
 ```
@@ -760,6 +763,8 @@ Worker queues:
 | `profile` | `full-body` | `runProfileFullBodyJob()` from `auth.js`. |
 | `maintenance` | `product-recategorize` | `runProductRecategorizationJob()` from `products.js`. |
 | `tryon` | `product-generate` | `runProductTryOnJob()` from `tryons.js`. |
+| `payments` | `phonepe-token-order-reconcile` | `runPhonePeTokenOrderReconciliationJob()` from `payments.js`. |
+| `payments` | `phonepe-product-order-reconcile` | `runPhonePeProductOrderReconciliationJob()` from `orders.js`. |
 
 Important env controls:
 
@@ -767,12 +772,14 @@ Important env controls:
 - `REDIS_URL`
 - `QUEUE_PREFIX`
 - `QUEUE_WORKER_CONCURRENCY`
+- `QUEUE_ENQUEUE_TIMEOUT_MS`
 - `PROFILE_FULL_BODY_QUEUE_MODE`
 - `TRYON_QUEUE_MODE`
 - `TRYON_QUEUE_WAIT_TIMEOUT_MS`
 - `PROFILE_WORKER_CONCURRENCY`
 - `MAINTENANCE_WORKER_CONCURRENCY`
 - `TRYON_WORKER_CONCURRENCY`
+- `PAYMENT_WORKER_CONCURRENCY`
 
 ## 20. Security Controls
 

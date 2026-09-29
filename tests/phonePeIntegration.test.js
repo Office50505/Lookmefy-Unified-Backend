@@ -18,6 +18,7 @@ import {
   reconcileOrder,
   recurringAmountForPlan,
   requireMandateForTopUp,
+  setLocalPaymentTransactionRunnerForTests,
   setupTokensForPlan,
   statusFromRazorpayOrderStatus,
   statusFromPhonePeState,
@@ -29,6 +30,14 @@ import TokenOrder from '../server/models/TokenOrder.js';
 import User from '../server/models/User.js';
 import CreditEvent from '../server/models/CreditEvent.js';
 import { SUBSCRIPTION_PLAN, TOP_UP_PLANS } from '../shared/pricing.js';
+
+test.beforeEach(() => {
+  setLocalPaymentTransactionRunnerForTests(async (work) => work(null));
+});
+
+test.afterEach(() => {
+  setLocalPaymentTransactionRunnerForTests(null);
+});
 
 function requestStub({ headers = {}, body = {}, query = {}, protocol = 'https', host = 'fitlook.in' } = {}) {
   return {
@@ -871,14 +880,23 @@ async function withMockedModels(callback) {
   const original = {
     tokenFindOneAndUpdate: TokenOrder.findOneAndUpdate,
     tokenFindById: TokenOrder.findById,
+    tokenUpdateOne: TokenOrder.updateOne,
     userFindById: User.findById,
     userFindOneAndUpdate: User.findOneAndUpdate,
     creditEventFindOne: CreditEvent.findOne,
     creditEventCreate: CreditEvent.create
   };
   const calls = { credits: 0, saves: 0, findById: 0 };
-  TokenOrder.findOneAndUpdate = async (_filter, update) => ({ _id: 'order1', ...update.$set });
-  TokenOrder.findById = async () => ({ _id: 'order1', status: 'completed', creditedAt: new Date() });
+  let tokenOrderCreditedAt = null;
+  TokenOrder.findOneAndUpdate = async (_filter, update) => {
+    tokenOrderCreditedAt = update.$set?.creditedAt || tokenOrderCreditedAt;
+    return { _id: 'order1', user: 'user1', tokens: 7, ...update.$set };
+  };
+  TokenOrder.findById = async () => ({ _id: 'order1', user: 'user1', tokens: 7, status: tokenOrderCreditedAt ? 'completed' : 'pending', creditedAt: tokenOrderCreditedAt });
+  TokenOrder.updateOne = async (_filter, update) => {
+    tokenOrderCreditedAt = update.$set?.creditedAt || tokenOrderCreditedAt;
+    return { modifiedCount: 1 };
+  };
   User.findById = async () => {
     calls.findById += 1;
     return { _id: 'user1', tokens: 10 };
@@ -897,6 +915,7 @@ async function withMockedModels(callback) {
   } finally {
     TokenOrder.findOneAndUpdate = original.tokenFindOneAndUpdate;
     TokenOrder.findById = original.tokenFindById;
+    TokenOrder.updateOne = original.tokenUpdateOne;
     User.findById = original.userFindById;
     User.findOneAndUpdate = original.userFindOneAndUpdate;
     CreditEvent.findOne = original.creditEventFindOne;
