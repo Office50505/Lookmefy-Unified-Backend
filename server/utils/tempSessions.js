@@ -1,5 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { getRedisClient, keyPrefix, ttlSeconds, withTimeout } from './cache.js';
+import {
+  cleanRedisError,
+  getRedisClient,
+  keyPrefix,
+  sharedStateRequiresRedis,
+  sharedStateUnavailableError,
+  ttlSeconds,
+  withTimeout
+} from './cache.js';
 import { emitStructuredLog } from './logging.js';
 
 const localStores = new Map();
@@ -24,50 +32,72 @@ function cleanExpiredLocalEntries(store) {
   }
 }
 
-function shouldRequireRedis() {
-  const explicit = String(process.env.TEMP_SESSION_REQUIRE_REDIS || '').toLowerCase();
-  if (['1', 'true', 'yes', 'on'].includes(explicit)) return true;
-  if (['0', 'false', 'no', 'off'].includes(explicit)) return false;
-  return false;
-}
-
 function createTempSessionStore(name, options = {}) {
-  const ttlMs = Number(options.ttlMs || 5 * 60 * 1000);
+  const configuredTtlMs = Number(options.ttlMs || 5 * 60 * 1000);
+  const ttlMs = Number.isFinite(configuredTtlMs) && configuredTtlMs > 0 ? configuredTtlMs : 5 * 60 * 1000;
+  const redisClientProvider = options.getRedisClient || getRedisClient;
   const store = localStore(name);
+
+  function redisRequired() {
+    return sharedStateRequiresRedis(process.env, options.requireRedis);
+  }
 
   function redisKey(id) {
     return `${keyPrefix()}:temp:${name}:${id}`;
   }
 
+  function handleRedisFailure(error, operation) {
+    warnOnce(`${name} ${operation} failed: ${cleanRedisError(error)}`);
+    if (redisRequired()) throw sharedStateUnavailableError();
+    cleanExpiredLocalEntries(store);
+  }
+
   async function redisOrFallback() {
-    const redis = await getRedisClient();
-    if (redis) return redis;
-    if (shouldRequireRedis()) {
-      throw new Error('Redis is required for temporary sessions');
+    try {
+      const redis = await redisClientProvider();
+      if (redis) return redis;
+      handleRedisFailure(new Error('Redis is unavailable'), 'access');
+    } catch (error) {
+      if (error?.code === 'SHARED_STATE_UNAVAILABLE') throw error;
+      handleRedisFailure(error, 'access');
     }
     warnOnce(`${name} using local fallback; multiple workers will not share these sessions`);
-    cleanExpiredLocalEntries(store);
     return null;
+  }
+
+  async function runRedis(operation, action) {
+    const redis = await redisOrFallback();
+    if (!redis) return { usedRedis: false, value: undefined };
+    try {
+      return { usedRedis: true, value: await withTimeout(action(redis)) };
+    } catch (error) {
+      handleRedisFailure(error, operation);
+      return { usedRedis: false, value: undefined };
+    }
   }
 
   async function create(value, id = randomUUID()) {
     const expiresAt = Date.now() + ttlMs;
     const payload = { ...value, expiresAt };
-    const redis = await redisOrFallback();
-    if (redis) {
-      await withTimeout(redis.setEx(redisKey(id), ttlSeconds(ttlMs), JSON.stringify(payload)));
-    } else {
-      store.set(id, payload);
-    }
+    const result = await runRedis('create', (redis) => redis.setEx(redisKey(id), ttlSeconds(ttlMs), JSON.stringify(payload)));
+    if (result.usedRedis) store.delete(id);
+    else store.set(id, payload);
     return { id, session: payload };
   }
 
   async function get(id) {
     if (!id) return null;
-    const redis = await redisOrFallback();
-    if (redis) {
-      const raw = await withTimeout(redis.get(redisKey(id)));
-      return raw ? JSON.parse(raw) : null;
+    const result = await runRedis('read', (redis) => redis.get(redisKey(id)));
+    if (result.usedRedis) {
+      if (!result.value) return null;
+      try {
+        const session = JSON.parse(result.value);
+        if (session?.expiresAt > Date.now()) return session;
+        await runRedis('delete expired session', (redis) => redis.del(redisKey(id)));
+        return null;
+      } catch (error) {
+        handleRedisFailure(error, 'decode');
+      }
     }
     const session = store.get(id);
     if (!session) return null;
@@ -87,12 +117,9 @@ function createTempSessionStore(name, options = {}) {
       return null;
     }
     const payload = { ...value, expiresAt };
-    const redis = await redisOrFallback();
-    if (redis) {
-      await withTimeout(redis.setEx(redisKey(id), ttlSeconds(remainingMs), JSON.stringify(payload)));
-    } else {
-      store.set(id, payload);
-    }
+    const result = await runRedis('write', (redis) => redis.setEx(redisKey(id), ttlSeconds(remainingMs), JSON.stringify(payload)));
+    if (result.usedRedis) store.delete(id);
+    else store.set(id, payload);
     return payload;
   }
 
@@ -106,22 +133,22 @@ function createTempSessionStore(name, options = {}) {
 
   async function remove(id) {
     if (!id) return;
-    const redis = await getRedisClient();
-    if (redis) {
-      await withTimeout(redis.del(redisKey(id))).catch((error) => warnOnce(error.message || `${name} delete failed`));
-      return;
-    }
+    await runRedis('delete', (redis) => redis.del(redisKey(id)));
     store.delete(id);
   }
 
   async function consume(id) {
     if (!id) return null;
-    const redis = await redisOrFallback();
-    if (redis) {
-      const raw = await withTimeout(redis.getDel(redisKey(id)));
-      if (!raw) return null;
-      const session = JSON.parse(raw);
-      return session?.expiresAt > Date.now() ? session : null;
+    const result = await runRedis('consume', (redis) => redis.getDel(redisKey(id)));
+    if (result.usedRedis) {
+      store.delete(id);
+      if (!result.value) return null;
+      try {
+        const session = JSON.parse(result.value);
+        return session?.expiresAt > Date.now() ? session : null;
+      } catch (error) {
+        handleRedisFailure(error, 'decode');
+      }
     }
     const session = store.get(id);
     store.delete(id);

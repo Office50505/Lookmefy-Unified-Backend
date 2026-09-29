@@ -16,6 +16,10 @@ let lastRedisStatus = {
   disabledUntil: null
 };
 
+const LOCAL_SAFE_CACHE = 'local-safe';
+const SHARED_REQUIRED_CACHE = 'shared-required';
+const TRUE_ENV_VALUES = new Set(['1', 'true', 'yes', 'on']);
+
 function warnRedis(message) {
   const now = Date.now();
   if (now - lastRedisWarningAt < 30_000) return;
@@ -85,12 +89,13 @@ function redisConnectionStatus() {
 }
 
 function withTimeout(promise, timeoutMs = redisTimeoutMs()) {
+  let timeout;
   return Promise.race([
     promise,
     new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Redis cache timeout')), timeoutMs);
+      timeout = setTimeout(() => reject(new Error('Redis cache timeout')), timeoutMs);
     })
-  ]);
+  ]).finally(() => clearTimeout(timeout));
 }
 
 function destroyRedisClientQuietly(client) {
@@ -181,6 +186,20 @@ function stableHash(value) {
   return createHash('sha256').update(String(value)).digest('hex').slice(0, 32);
 }
 
+function sharedStateRequiresRedis(env = process.env, explicit) {
+  if (String(env.NODE_ENV || '').trim().toLowerCase() === 'production') return true;
+  if (explicit !== undefined) return Boolean(explicit);
+  return TRUE_ENV_VALUES.has(String(env.TEMP_SESSION_REQUIRE_REDIS || '').trim().toLowerCase());
+}
+
+function sharedStateUnavailableError() {
+  const error = new Error('Shared application state is temporarily unavailable. Please try again.');
+  error.name = 'SharedStateUnavailableError';
+  error.code = 'SHARED_STATE_UNAVAILABLE';
+  error.statusCode = 503;
+  return error;
+}
+
 function ttlSeconds(ttlMs) {
   const parsed = Number(ttlMs);
   if (!Number.isFinite(parsed) || parsed <= 0) return 30;
@@ -206,9 +225,35 @@ function setLocalCacheEntry(cache, key, value, ttlMs, maxItems) {
 function createHybridCache(name, options = {}) {
   const localCache = new Map();
   const inFlightLoads = new Map();
-  const ttlMs = Number(options.ttlMs || 30_000);
-  const maxItems = Number(options.maxItems || 150);
+  const configuredTtlMs = Number(options.ttlMs || 30_000);
+  const configuredMaxItems = Number(options.maxItems || 150);
+  const ttlMs = Number.isFinite(configuredTtlMs) && configuredTtlMs > 0 ? configuredTtlMs : 30_000;
+  const maxItems = Number.isFinite(configuredMaxItems) && configuredMaxItems > 0 ? Math.floor(configuredMaxItems) : 150;
+  const mode = options.mode === SHARED_REQUIRED_CACHE ? SHARED_REQUIRED_CACHE : LOCAL_SAFE_CACHE;
+  const redisClientProvider = options.getRedisClient || getRedisClient;
   let localVersion = 0;
+
+  function redisRequired() {
+    return mode === SHARED_REQUIRED_CACHE && sharedStateRequiresRedis(process.env, options.requireRedis);
+  }
+
+  function handleRedisFailure(error, operation) {
+    const detail = cleanRedisError(error || `${operation} requires Redis`);
+    warnRedis(`${name} ${operation} failed: ${detail}`);
+    if (redisRequired()) throw sharedStateUnavailableError();
+  }
+
+  async function redisFor(operation) {
+    try {
+      const redis = await redisClientProvider();
+      if (redis) return redis;
+      handleRedisFailure(new Error('Redis is unavailable'), operation);
+    } catch (error) {
+      if (error?.code === 'SHARED_STATE_UNAVAILABLE') throw error;
+      handleRedisFailure(error, operation);
+    }
+    return null;
+  }
 
   function namespace() {
     return `${keyPrefix()}:${name}`;
@@ -219,12 +264,12 @@ function createHybridCache(name, options = {}) {
   }
 
   async function currentVersion() {
-    const redis = await getRedisClient();
+    const redis = await redisFor('version read');
     if (!redis) return localVersion;
     try {
       return (await withTimeout(redis.get(versionKey()))) || '0';
     } catch (error) {
-      warnRedis(error.message || 'Redis cache version unavailable');
+      handleRedisFailure(error, 'version read');
       return localVersion;
     }
   }
@@ -234,29 +279,33 @@ function createHybridCache(name, options = {}) {
   }
 
   async function getByRedisKey(redisKey) {
-    const redis = await getRedisClient();
+    const redis = await redisFor('read');
     if (redis) {
       try {
         const cached = await withTimeout(redis.get(redisKey));
-        if (cached) return JSON.parse(cached);
+        if (cached !== null) return JSON.parse(cached);
+        if (mode === SHARED_REQUIRED_CACHE) return null;
       } catch (error) {
-        warnRedis(error.message || 'Redis cache read failed');
+        handleRedisFailure(error, 'read');
       }
     }
     return getLocalCacheEntry(localCache, redisKey);
   }
 
   async function setByRedisKey(redisKey, value) {
-    setLocalCacheEntry(localCache, redisKey, value, ttlMs, maxItems);
-    const redis = await getRedisClient();
+    const serialized = JSON.stringify(value);
+    if (serialized === undefined) throw new TypeError('Cache values must be JSON serializable');
+    const redis = await redisFor('write');
     if (redis) {
       try {
-        await withTimeout(redis.setEx(redisKey, ttlSeconds(ttlMs), JSON.stringify(value)));
+        await withTimeout(redis.setEx(redisKey, ttlSeconds(ttlMs), serialized));
+        setLocalCacheEntry(localCache, redisKey, value, ttlMs, maxItems);
+        return value;
       } catch (error) {
-        warnRedis(error.message || 'Redis cache write failed');
+        handleRedisFailure(error, 'write');
       }
     }
-    return value;
+    return setLocalCacheEntry(localCache, redisKey, value, ttlMs, maxItems);
   }
 
   async function get(key) {
@@ -265,6 +314,21 @@ function createHybridCache(name, options = {}) {
 
   async function set(key, value) {
     return setByRedisKey(await redisKeyFor(key), value);
+  }
+
+  async function remove(key) {
+    const redisKey = await redisKeyFor(key);
+    const redis = await redisFor('delete');
+    if (redis) {
+      try {
+        await withTimeout(redis.del(redisKey));
+        localCache.delete(redisKey);
+        return;
+      } catch (error) {
+        handleRedisFailure(error, 'delete');
+      }
+    }
+    localCache.delete(redisKey);
   }
 
   async function remember(key, loader) {
@@ -284,23 +348,25 @@ function createHybridCache(name, options = {}) {
   }
 
   async function clear() {
-    localCache.clear();
-    inFlightLoads.clear();
-    localVersion += 1;
-    const redis = await getRedisClient();
+    const redis = await redisFor('invalidation');
     if (redis) {
       try {
         await withTimeout(redis.incr(versionKey()));
       } catch (error) {
-        warnRedis(error.message || 'Redis cache invalidation failed');
+        handleRedisFailure(error, 'invalidation');
       }
     }
+    localCache.clear();
+    inFlightLoads.clear();
+    localVersion += 1;
   }
 
-  return { get, set, remember, clear };
+  return { get, set, remember, remove, clear };
 }
 
 export {
+  LOCAL_SAFE_CACHE,
+  SHARED_REQUIRED_CACHE,
   cleanRedisError,
   closeRedisClient,
   createHybridCache,
@@ -308,6 +374,8 @@ export {
   keyPrefix,
   redisConnectionStatus,
   redisTargetLabel,
+  sharedStateRequiresRedis,
+  sharedStateUnavailableError,
   ttlSeconds,
   withTimeout
 };

@@ -18,8 +18,8 @@ import jobRoutes from './routes/jobs.js';
 import adminRoutes from './routes/admin.js';
 import { requireAdmin, requireAdminSection } from './utils/adminAccess.js';
 import { ADMIN_SECTIONS } from './utils/adminPermissions.js';
-import { closeRedisClient, getRedisClient } from './utils/cache.js';
-import { closeJobQueues, queueEnabled } from './utils/jobQueue.js';
+import { closeRedisClient } from './utils/cache.js';
+import { closeJobQueues } from './utils/jobQueue.js';
 import { configureMongoSlowQueryLogging, flushRequestMetrics, observabilitySnapshot, prometheusMetrics, requestLogger, startRequestMetricFlush } from './utils/observability.js';
 import { createRateLimiter, rateLimitKeys } from './utils/rateLimit.js';
 import { redactSensitiveText, requestPath } from './utils/logSanitization.js';
@@ -28,10 +28,10 @@ import { requestContext } from './utils/requestContext.js';
 import { ipBlocklistMiddleware } from './utils/ipBlocklist.js';
 import { securityFilterMiddleware } from './utils/securityFilters.js';
 import { appRole, mongoConnectOptions, serviceMetadata } from './utils/runtime.js';
-import { configurationReadiness, validateServerEnv } from './utils/envValidation.js';
+import { validateServerEnv } from './utils/envValidation.js';
 import { securityHeaders, serveUploadedMedia } from './utils/security.js';
 import { recordSystemIncident } from './utils/systemIncidents.js';
-import { isProductionEnv } from './utils/urlValidation.js';
+import { createReadinessHandler } from './utils/readiness.js';
 
 dotenv.config();
 
@@ -47,6 +47,11 @@ const rootDir = path.resolve(__dirname, '..');
 const service = serviceMetadata('api');
 let server = null;
 let shuttingDown = false;
+const readinessHandler = createReadinessHandler({
+  role: appRole('api'),
+  shuttingDown: () => shuttingDown,
+  metadata: service
+});
 
 function trustProxySetting() {
   const value = String(process.env.TRUST_PROXY || 'true').toLowerCase();
@@ -62,7 +67,7 @@ const globalApiLimiter = createRateLimiter({
   max: Number(process.env.RATE_LIMIT_GLOBAL_MAX || 3000),
   keyGenerator: rateLimitKeys.clientIp,
   message: 'Too many requests from this network. Please pause for a few minutes and try again.',
-  skip: (req) => req.path.startsWith('/health') || req.path.startsWith('/jobs')
+  skip: (req) => req.path.startsWith('/health') || req.path === '/ready' || req.path.startsWith('/jobs')
     || (req.method === 'POST' && req.path === '/closet/outfits/generate')
 });
 const adminMetricsLimiter = createRateLimiter({
@@ -167,31 +172,8 @@ app.get('/api/health/live', (_req, res) => {
   res.json({ ok: true, live: true, shuttingDown, ...service });
 });
 
-app.get('/api/health/ready', async (_req, res) => {
-  const mongo = mongoose.connection.readyState === 1;
-  let redis = true;
-  const redisRequired = isProductionEnv()
-    || ['1', 'true', 'yes', 'on'].includes(String(process.env.TEMP_SESSION_REQUIRE_REDIS || '').toLowerCase());
-  if (redisRequired) {
-    redis = Boolean(process.env.REDIS_URL && await getRedisClient());
-  }
-  const ready = !shuttingDown && mongo && redis;
-  const config = configurationReadiness();
-  res.status(ready ? 200 : 503).json({
-    ok: ready,
-    ready,
-    database: mongo ? 'ready' : 'not_ready',
-    redis: redis ? 'ready' : 'not_ready',
-    queue: queueEnabled() ? 'ready' : 'disabled',
-    otpProvider: config.otpProvider,
-    otpProviderType: config.otpProviderType,
-    phonePe: config.phonePe,
-    razorpay: config.razorpay,
-    appleIap: config.appleIap,
-    shuttingDown,
-    ...service
-  });
-});
+app.get('/api/health/ready', readinessHandler);
+app.get('/api/ready', readinessHandler);
 
 app.get('/api/admin/metrics', requireAdmin, requireSystemAdmin, adminMetricsLimiter, async (_req, res, next) => {
   try {

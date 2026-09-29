@@ -26,6 +26,7 @@ import {
 } from '../utils/accessoryTaxonomy.js';
 import { safeFetchText } from '../utils/security.js';
 import { wearableCompatibility } from '../utils/wearable.js';
+import { SHARED_REQUIRED_CACHE, createHybridCache } from '../utils/cache.js';
 import { catalogSearchProviderName, searchSerpApiAmazon } from './catalogSearchProvider.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -191,7 +192,6 @@ const eventProfiles = {
   }
 };
 
-const conversations = new Map();
 let knowledgeCache = null;
 
 function envFlag(name, fallback = true) {
@@ -2260,38 +2260,63 @@ async function loadContext(user, { scope = 'all' } = {}) {
   };
 }
 
-function pruneConversations() {
-  const now = Date.now();
-  for (const [key, conversation] of conversations) {
-    if (now - Number(conversation.updatedAt || 0) > conversationTtlMs) conversations.delete(key);
+function createAiConversationStore(options = {}) {
+  const cache = createHybridCache('ai:conversation', {
+    ttlMs: options.ttlMs || conversationTtlMs,
+    maxItems: options.maxItems || 1000,
+    mode: SHARED_REQUIRED_CACHE,
+    getRedisClient: options.getRedisClient,
+    requireRedis: options.requireRedis
+  });
+
+  function cacheKey(userId, conversationId) {
+    return `${userId || 'guest'}:${conversationId}`;
   }
-  if (conversations.size <= 1000) return;
-  const sorted = [...conversations.entries()].sort((a, b) => Number(a[1].updatedAt || 0) - Number(b[1].updatedAt || 0));
-  sorted.slice(0, conversations.size - 1000).forEach(([key]) => conversations.delete(key));
+
+  async function getOrCreate({ userId, conversationId = '', history = [] } = {}) {
+    const id = cleanText(conversationId, 80) || `studio-${randomUUID()}`;
+    const key = cacheKey(userId, id);
+    let conversation = await cache.get(key);
+    if (!conversation) {
+      conversation = {
+        id,
+        key,
+        turns: Array.isArray(history) ? history.slice(-8).map((turn) => ({
+          role: turn.role === 'assistant' ? 'assistant' : 'user',
+          text: cleanText(turn.text || turn.content || '', 600)
+        })).filter((turn) => turn.text) : [],
+        currentOutfit: null,
+        lastVisible: null,
+        pendingProductChoice: null,
+        language: '',
+        updatedAt: Date.now()
+      };
+    }
+    conversation.key = key;
+    conversation.updatedAt = Date.now();
+    return conversation;
+  }
+
+  async function save(conversation) {
+    if (!conversation?.key) throw new Error('AI conversation key is missing');
+    conversation.updatedAt = Date.now();
+    await cache.set(conversation.key, conversation);
+    return conversation;
+  }
+
+  async function remove({ userId, conversationId } = {}) {
+    const id = cleanText(conversationId, 80);
+    if (!id) return;
+    await cache.remove(cacheKey(userId, id));
+  }
+
+  return { getOrCreate, save, remove };
 }
 
-function nextConversation({ userId, conversationId = '', history = [] } = {}) {
-  pruneConversations();
-  const id = cleanText(conversationId, 80) || `studio-${randomUUID()}`;
-  const key = `${userId || 'guest'}:${id}`;
-  if (!conversations.has(key)) {
-    conversations.set(key, {
-      id,
-      key,
-      turns: Array.isArray(history) ? history.slice(-8).map((turn) => ({
-        role: turn.role === 'assistant' ? 'assistant' : 'user',
-        text: cleanText(turn.text || turn.content || '', 600)
-      })).filter((turn) => turn.text) : [],
-      currentOutfit: null,
-      lastVisible: null,
-      pendingProductChoice: null,
-      language: '',
-      updatedAt: Date.now()
-    });
-  }
-  const conversation = conversations.get(key);
-  conversation.updatedAt = Date.now();
-  return conversation;
+const aiConversationStore = createAiConversationStore();
+
+async function nextConversation(options = {}) {
+  return aiConversationStore.getOrCreate(options);
 }
 
 function detectProductChoice(message = '', conversation = {}) {
@@ -3232,7 +3257,7 @@ async function orchestrateAiStudio({ user, message, conversationId = '', history
   }
 
   const profile = userProfile(user);
-  const conversation = nextConversation({ userId: profile.id, conversationId, history });
+  const conversation = await nextConversation({ userId: profile.id, conversationId, history });
   const languagePreference = detectLanguagePreference(prompt);
   if (languagePreference) conversation.language = languagePreference;
   else if (!conversation.language && messageLooksHinglish(prompt)) conversation.language = 'hinglish';
@@ -3241,7 +3266,7 @@ async function orchestrateAiStudio({ user, message, conversationId = '', history
   if (sourcePlan) {
     const plan = annotateVisibleSources(sourcePlan);
     conversation.turns.push({ role: 'user', text: prompt }, { role: 'assistant', text: plan.reply, mode: plan.mode, intent: plan.intent });
-    conversation.updatedAt = Date.now();
+    await aiConversationStore.save(conversation);
     return {
       conversationId: conversation.id,
       dryRun: true,
@@ -3415,7 +3440,7 @@ async function orchestrateAiStudio({ user, message, conversationId = '', history
   if (intent === 'product_search_confirmed' || pendingChoice === 'both') conversation.pendingProductChoice = null;
   conversation.turns.push({ role: 'user', text: prompt }, { role: 'assistant', text: plan.reply, mode: plan.mode, intent: plan.intent });
   conversation.turns = conversation.turns.slice(-16);
-  conversation.updatedAt = Date.now();
+  await aiConversationStore.save(conversation);
 
   const allProducts = uniqueById([
     ...(plan.products || []),
@@ -3459,6 +3484,7 @@ export {
   aiStudioQueryTerms,
   aiStudioSuggestions,
   buildProductSearchQuery,
+  createAiConversationStore,
   eventProfileForMessage,
   extractFilters as extractAiStudioFilters,
   freshSourceChoiceIntent,

@@ -11,11 +11,12 @@ import {
   verifyOtpChallenge
 } from '../server/utils/otp.js';
 import { createTempSessionStore } from '../server/utils/tempSessions.js';
+import { createFakeRedisServer } from './fakeRedis.js';
 
-function testStores(name, ttlMs = 1_000) {
+function testStores(name, ttlMs = 1_000, storeOptions = {}) {
   return {
-    sessions: createTempSessionStore(`test:${name}:challenge:${Date.now()}:${Math.random()}`, { ttlMs }),
-    currentSessions: createTempSessionStore(`test:${name}:current:${Date.now()}:${Math.random()}`, { ttlMs })
+    sessions: createTempSessionStore(`test:${name}:challenge:${Date.now()}:${Math.random()}`, { ttlMs, ...storeOptions }),
+    currentSessions: createTempSessionStore(`test:${name}:current:${Date.now()}:${Math.random()}`, { ttlMs, ...storeOptions })
   };
 }
 
@@ -58,7 +59,7 @@ async function withLocalTempSessions(fn) {
 }
 
 async function createChallenge(name, overrides = {}) {
-  const stores = testStores(name, overrides.ttlMs);
+  const stores = testStores(name, overrides.ttlMs, overrides.storeOptions);
   const phone = overrides.phone || '+919876543210';
   const challenge = await createOtpChallenge({
     ...stores,
@@ -227,8 +228,15 @@ test('OTP attempt lockout can be bypassed outside production for testing', async
 test('global rate-limit switch bypasses OTP attempt lockout', async () => withLocalTempSessions(async () => {
   process.env.NODE_ENV = 'production';
   process.env.RATE_LIMITS_ENABLED = 'false';
+  const redis = createFakeRedisServer();
 
-  const challenge = await createChallenge('global-attempt-limit-bypass', { maxAttempts: 2 });
+  const challenge = await createChallenge('global-attempt-limit-bypass', {
+    maxAttempts: 2,
+    storeOptions: {
+      requireRedis: true,
+      getRedisClient: async () => redis.createClient()
+    }
+  });
   const first = await verify({ ...challenge, otp: '111111' });
   const second = await verify({ ...challenge, otp: '222222' });
   const correctAfterLimit = await verify(challenge);

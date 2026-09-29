@@ -86,6 +86,44 @@ function getQueueEvents(name) {
   return queueEvents.get(name);
 }
 
+function jobQueueUnavailableError(queueName, cause) {
+  const error = new Error(`Background job queue "${queueName}" is temporarily unavailable`);
+  error.code = 'JOB_QUEUE_UNAVAILABLE';
+  error.statusCode = 503;
+  if (cause) error.cause = cause;
+  return error;
+}
+
+async function enqueueCriticalJob(queueName, jobName, data = {}, options = {}) {
+  const queue = getQueue(queueName);
+  if (!queue) throw jobQueueUnavailableError(queueName);
+
+  const configuredTimeoutMs = Number(process.env.QUEUE_ENQUEUE_TIMEOUT_MS || 5000);
+  const timeoutMs = Number.isFinite(configuredTimeoutMs) ? Math.max(250, configuredTimeoutMs) : 5000;
+  let timeout;
+  try {
+    return await Promise.race([
+      queue.add(jobName, data, options),
+      new Promise((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(`Queue enqueue timed out after ${timeoutMs}ms`)), timeoutMs);
+        timeout.unref?.();
+      })
+    ]);
+  } catch (cause) {
+    emitStructuredLog({
+      level: 'error',
+      event: 'critical_job_enqueue_failed',
+      ...serviceMetadata('api'),
+      queue: queueName,
+      jobName,
+      error: cause?.message || String(cause)
+    });
+    throw jobQueueUnavailableError(queueName, cause);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function enqueueJob(queueName, jobName, data = {}, options = {}) {
   const queue = getQueue(queueName);
   if (!queue) return null;
@@ -166,4 +204,16 @@ async function closeJobQueues() {
   await Promise.allSettled(closers);
 }
 
-export { closeJobQueues, enabled as queueEnabled, enqueueJob, enqueueJobAndWait, getJobStatus, getQueue, getQueueEvents, safeJobId, startWorker };
+export {
+  closeJobQueues,
+  enabled as queueEnabled,
+  enqueueCriticalJob,
+  enqueueJob,
+  enqueueJobAndWait,
+  getJobStatus,
+  getQueue,
+  getQueueEvents,
+  jobQueueUnavailableError,
+  safeJobId,
+  startWorker
+};

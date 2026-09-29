@@ -36,6 +36,11 @@ import {
 } from '../utils/appleStoreKit.js';
 import { phonePeEnabled, razorpayEnabled } from '../utils/envValidation.js';
 import { isProductionEnv, validateConfiguredHttpsUrl } from '../utils/urlValidation.js';
+import {
+  enqueuePhonePeReconciliation,
+  pendingPhonePeReconciliationError,
+  phonePeTerminalFailure
+} from '../services/phonePeReconciliation.js';
 
 const router = express.Router();
 const disableDemoCheckoutRateLimit = () => ['1', 'true', 'yes'].includes(String(process.env.DISABLE_DEMO_CHECKOUT_RATE_LIMIT || '').trim().toLowerCase());
@@ -91,32 +96,6 @@ function phonePeAuthUrl() {
     return given;
   }
   return isSandbox() ? preprod : prod;
-}
-
-function startShortPolling(merchantOrderId) {
-  const attempts = Number(process.env.PHONEPE_SHORT_POLL_ATTEMPTS || 6);
-  const intervalMs = Number(process.env.PHONEPE_SHORT_POLL_MS || 5000);
-  let tries = 0;
-  const id = setInterval(async () => {
-    tries += 1;
-    try {
-      const order = await TokenOrder.findOne({ merchantOrderId });
-      if (!order) {
-        if (tries >= attempts) clearInterval(id);
-        return;
-      }
-      const result = await reconcileOrder(order);
-      const state = String(result.order?.providerState || '').toUpperCase();
-      if (state === 'COMPLETED' || result.order?.creditedAt) {
-        clearInterval(id);
-        return;
-      }
-      if (tries >= attempts) clearInterval(id);
-    } catch (err) {
-      console.error('[phonepe:shortpoll]', merchantOrderId, readablePhonePeError(err));
-      if (tries >= attempts) clearInterval(id);
-    }
-  }, intervalMs);
 }
 
 function clientOrigin(req) {
@@ -433,7 +412,7 @@ function createMerchantOrderId(userId) {
   return `FL_${Date.now()}_${userPart}_${random}`.slice(0, 63);
 }
 
-async function createPhonePePayment({ req, user, plan = SUBSCRIPTION_PLAN }) {
+async function createPhonePePayment({ req, user, plan = SUBSCRIPTION_PLAN, enqueueReconciliation = enqueuePhonePeReconciliation }) {
   requirePhonePeConfig();
   const idempotencyKey = checkoutIdempotencyKey(req);
   if (idempotencyKey) {
@@ -443,6 +422,9 @@ async function createPhonePePayment({ req, user, plan = SUBSCRIPTION_PLAN }) {
         const error = new Error('Previous checkout attempt failed. Please start checkout again.');
         error.statusCode = 409;
         throw error;
+      }
+      if (!isPhonePeTokenOrderTerminal(existingOrder)) {
+        await enqueueReconciliation('token-order', existingOrder.merchantOrderId);
       }
       return existingOrder;
     }
@@ -476,6 +458,9 @@ async function createPhonePePayment({ req, user, plan = SUBSCRIPTION_PLAN }) {
           const conflict = new Error('Previous checkout attempt failed. Please start checkout again.');
           conflict.statusCode = 409;
           throw conflict;
+        }
+        if (!isPhonePeTokenOrderTerminal(existingOrder)) {
+          await enqueueReconciliation('token-order', existingOrder.merchantOrderId);
         }
         return existingOrder;
       }
@@ -513,13 +498,6 @@ async function createPhonePePayment({ req, user, plan = SUBSCRIPTION_PLAN }) {
     order.redirectUrl = data.redirectUrl || redirectUrl;
     order.providerResponse = data;
     await order.save();
-    // Start a short-polling fallback in case callbacks are delayed/missed
-    try {
-      startShortPolling(merchantOrderId);
-    } catch (e) {
-      console.error('[phonepe] failed to start short polling', readablePhonePeError(e));
-    }
-    return order;
   } catch (error) {
     order.status = 'failed';
     order.providerState = 'CREATE_FAILED';
@@ -527,6 +505,9 @@ async function createPhonePePayment({ req, user, plan = SUBSCRIPTION_PLAN }) {
     await order.save();
     throw error;
   }
+
+  await enqueueReconciliation('token-order', merchantOrderId);
+  return order;
 }
 
 function createRazorpayReceipt(userId) {
@@ -807,6 +788,85 @@ function capturedPayment(payment = {}) {
   return ['captured', 'authorized'].includes(String(payment.status || '').toLowerCase());
 }
 
+function isMongoDuplicateKeyError(error) {
+  return error?.code === 11000 || error?.code === 11001;
+}
+
+async function findExpectedCreditEvent(fulfillmentKey) {
+  if (!fulfillmentKey) return null;
+  return CreditEvent.findOne({ fulfillmentKey });
+}
+
+function queryWithSession(query, session) {
+  if (session && query && typeof query.session === 'function') return query.session(session);
+  return query;
+}
+
+async function findUserByIdWithSession(userId, session) {
+  return queryWithSession(User.findById(userId), session);
+}
+
+async function findTokenOrderByIdWithSession(orderId, session) {
+  return queryWithSession(TokenOrder.findById(orderId), session);
+}
+
+function paymentTransactionUnavailableError(cause) {
+  const error = new Error('Payment transaction dependency is unavailable. Please retry.');
+  error.code = 'PAYMENT_TRANSACTION_UNAVAILABLE';
+  error.statusCode = 503;
+  if (cause) error.cause = cause;
+  return error;
+}
+
+let injectedLocalPaymentTransactionRunner = null;
+
+function setLocalPaymentTransactionRunnerForTests(runner) {
+  if (isProductionEnv()) {
+    throw new Error('Test payment transaction runner cannot be installed in production.');
+  }
+  injectedLocalPaymentTransactionRunner = typeof runner === 'function' ? runner : null;
+}
+
+async function runLocalPaymentTransaction(work, {
+  transactionRunner = injectedLocalPaymentTransactionRunner,
+  allowNonTransactionalForTests = false,
+  connectionReadyState = () => mongoose.connection.readyState,
+  startSession = () => mongoose.startSession()
+} = {}) {
+  if (transactionRunner) {
+    return transactionRunner(work);
+  }
+
+  if (allowNonTransactionalForTests) {
+    if (isProductionEnv()) throw paymentTransactionUnavailableError();
+    return work(null);
+  }
+
+  if (connectionReadyState() !== 1) {
+    throw paymentTransactionUnavailableError();
+  }
+
+  let session;
+  try {
+    session = await startSession();
+  } catch (error) {
+    throw paymentTransactionUnavailableError(error);
+  }
+  if (!session || typeof session.withTransaction !== 'function' || typeof session.endSession !== 'function') {
+    throw paymentTransactionUnavailableError();
+  }
+
+  try {
+    let result;
+    await session.withTransaction(async () => {
+      result = await work(session);
+    });
+    return result;
+  } finally {
+    await session.endSession();
+  }
+}
+
 function paymentCoversMandateSetupAmount(payment = {}, order = {}) {
   const paidAmount = Number(payment.amount || 0);
   const requiredAmount = Number(order.dueTodayAmount || SUBSCRIPTION_PLAN.mandate?.setupAmount || 0);
@@ -817,6 +877,24 @@ function paymentCoversSubscriptionAmount(payment = {}, order = {}) {
   const paidAmount = Number(payment.amount || 0);
   const requiredAmount = Number(order.recurringAmount || SUBSCRIPTION_PLAN.mandate?.recurringAmount || 0);
   return paidAmount > 0 && requiredAmount > 0 && paidAmount >= requiredAmount;
+}
+
+function razorpayCycleOrderMatchesFulfillment(cycleOrder, {
+  order,
+  subscriptionId,
+  invoiceId,
+  paymentId
+} = {}) {
+  if (!cycleOrder) return true;
+  const orderSubscriptionId = String(cycleOrder.merchantSubscriptionId || cycleOrder.razorpaySubscriptionId || '').trim();
+  if (orderSubscriptionId && orderSubscriptionId !== String(subscriptionId || '').trim()) return false;
+  const orderInvoiceId = String(cycleOrder.razorpayInvoiceId || '').trim();
+  if (invoiceId && orderInvoiceId && orderInvoiceId !== String(invoiceId).trim()) return false;
+  const orderPaymentId = String(cycleOrder.razorpayPaymentId || '').trim();
+  if (paymentId && orderPaymentId && orderPaymentId !== String(paymentId).trim()) return false;
+  const parentOrderId = String(cycleOrder.parentOrderId || '').trim();
+  if (order?.merchantOrderId && parentOrderId && parentOrderId !== String(order.merchantOrderId).trim()) return false;
+  return true;
 }
 
 async function updateRazorpaySubscriptionSnapshot({ order, subscription = {}, payment = {}, providerResponse = {} }) {
@@ -891,45 +969,63 @@ async function grantRazorpayMandateSetupTokens({ order, subscription = {}, payme
       lastOrderId: paymentId
     }
   };
-  await TokenOrder.updateOne(
-    { _id: order._id },
-    {
-      $set: {
-        status: 'pending',
-        providerState: String(subscription.status || payment.status || 'authenticated').toUpperCase(),
-        razorpayPaymentId: paymentId || order.razorpayPaymentId,
-        providerResponse
-      }
-    }
-  );
+  const fulfillmentKey = `razorpay_mandate_setup:user:${order.user}`;
+  try {
+    return await runLocalPaymentTransaction(async (session) => {
+      await TokenOrder.updateOne(
+        { _id: order._id },
+        {
+          $set: {
+            status: 'pending',
+            providerState: String(subscription.status || payment.status || 'authenticated').toUpperCase(),
+            razorpayPaymentId: paymentId || order.razorpayPaymentId,
+            providerResponse
+          }
+        },
+        { session }
+      );
 
-  const result = await creditUser({
-    userId: order.user,
-    action: 'razorpay_mandate_setup_tokens_purchased',
-    tokens: setupTokens,
-    source: 'razorpay',
-    sourceId: paymentId,
-    fulfillmentKey: `razorpay_mandate_setup:user:${order.user}`,
-    userSet,
-    metadata: {
-      orderId: order._id,
-      merchantOrderId: order.merchantOrderId,
-      subscriptionId,
-      paymentId,
-      setupAmount: Number(order.dueTodayAmount || SUBSCRIPTION_PLAN.mandate?.setupAmount || 0),
-      monthlyAmount: Number(order.recurringAmount || SUBSCRIPTION_PLAN.mandate?.recurringAmount || 0),
-      setupTokens,
-      monthlyTokens: Number(order.tokens || SUBSCRIPTION_PLAN.tokens || 0),
-      providerResponse
-    }
-  });
-  return {
-    user: result.user,
-    order: await TokenOrder.findById(order._id) || order,
-    alreadyCredited: Boolean(result.alreadyRecorded),
-    setupCredited: !result.alreadyRecorded,
-    setupTokens
-  };
+      const result = await creditUser({
+        userId: order.user,
+        action: 'razorpay_mandate_setup_tokens_purchased',
+        tokens: setupTokens,
+        source: 'razorpay',
+        sourceId: paymentId,
+        fulfillmentKey,
+        userSet,
+        metadata: {
+          orderId: order._id,
+          merchantOrderId: order.merchantOrderId,
+          subscriptionId,
+          paymentId,
+          setupAmount: Number(order.dueTodayAmount || SUBSCRIPTION_PLAN.mandate?.setupAmount || 0),
+          monthlyAmount: Number(order.recurringAmount || SUBSCRIPTION_PLAN.mandate?.recurringAmount || 0),
+          setupTokens,
+          monthlyTokens: Number(order.tokens || SUBSCRIPTION_PLAN.tokens || 0),
+          providerResponse
+        },
+        session
+      });
+      return {
+        user: result.user,
+        order: await findTokenOrderByIdWithSession(order._id, session) || order,
+        alreadyCredited: Boolean(result.alreadyRecorded),
+        setupCredited: !result.alreadyRecorded,
+        setupTokens
+      };
+    });
+  } catch (error) {
+    if (!isMongoDuplicateKeyError(error)) throw error;
+    const expectedEvent = await findExpectedCreditEvent(fulfillmentKey);
+    if (!expectedEvent) throw error;
+    return {
+      user: await User.findById(order.user),
+      order: await TokenOrder.findById(order._id) || order,
+      alreadyCredited: true,
+      setupCredited: false,
+      setupTokens
+    };
+  }
 }
 
 async function grantRazorpaySubscriptionCycleTokens({ order, subscription = {}, payment = {}, invoice = {}, providerResponse = {} }) {
@@ -942,98 +1038,133 @@ async function grantRazorpaySubscriptionCycleTokens({ order, subscription = {}, 
     error.statusCode = 400;
     throw error;
   }
-  const fulfillmentKey = `razorpay_subscription:${subscriptionId}:${sourceId}`;
-  const existingEvent = await CreditEvent.findOne({ fulfillmentKey }).lean();
-  if (existingEvent) return { user: await User.findById(order.user), order, alreadyCredited: true };
-
   const now = new Date();
   const periodStart = razorpayTimestamp(invoice.period_start || subscription.current_start) || now;
   const periodEnd = razorpayTimestamp(invoice.period_end || subscription.current_end) || addMonths(periodStart, 1);
   const cycleHash = createHash('sha256').update(`${subscriptionId}:${sourceId}`).digest('hex').slice(0, 18);
   const merchantOrderId = `RZPSUB_${cycleHash}`;
-  let cycleOrder = await TokenOrder.findOne({ merchantOrderId });
-  if (!cycleOrder) {
-    cycleOrder = await TokenOrder.create({
-      user: order.user,
-      merchantOrderId,
-      provider: 'razorpay',
-      merchantSubscriptionId: subscriptionId,
-      razorpaySubscriptionId: subscriptionId,
-      razorpayInvoiceId: invoiceId,
-      razorpayPaymentId: paymentId,
-      razorpayMode: order.razorpayMode || 'test',
-      planId: order.planId || SUBSCRIPTION_PLAN.id,
-      planName: order.planName || SUBSCRIPTION_PLAN.name,
-      orderType: order.creditedAt ? 'subscription_renewal' : 'subscription',
-      purchaseType: order.creditedAt ? 'subscription_renewal' : 'subscription_setup',
-      amount: Number(order.recurringAmount || SUBSCRIPTION_PLAN.mandate?.recurringAmount || 0),
-      dueTodayAmount: Number(payment.amount || order.recurringAmount || SUBSCRIPTION_PLAN.mandate?.recurringAmount || 0),
-      recurringAmount: Number(order.recurringAmount || SUBSCRIPTION_PLAN.mandate?.recurringAmount || 0),
-      billingFrequency: order.billingFrequency || SUBSCRIPTION_PLAN.mandate?.frequency || 'Monthly',
-      currency: order.currency || SUBSCRIPTION_PLAN.currency,
-      tokens: Number(order.tokens || SUBSCRIPTION_PLAN.tokens || 0),
-      parentOrderId: order.merchantOrderId,
-      status: 'completed',
-      providerState: 'COMPLETED',
-      creditedAt: now,
-      currentPeriodStart: periodStart,
-      currentPeriodEnd: periodEnd,
-      providerResponse
+  const fulfillmentKey = `razorpay_subscription:${subscriptionId}:${sourceId}`;
+
+  try {
+    return await runLocalPaymentTransaction(async (session) => {
+      const existingEventQuery = CreditEvent.findOne({ fulfillmentKey });
+      const existingEvent = await queryWithSession(existingEventQuery, session);
+      if (existingEvent) {
+        return {
+          user: await findUserByIdWithSession(order.user, session),
+          order: await queryWithSession(TokenOrder.findOne({ merchantOrderId }), session) || order,
+          alreadyCredited: true
+        };
+      }
+
+      let cycleOrder = await queryWithSession(TokenOrder.findOne({ merchantOrderId }), session);
+      if (!cycleOrder) {
+        const cycleOrderPayload = {
+          user: order.user,
+          merchantOrderId,
+          provider: 'razorpay',
+          merchantSubscriptionId: subscriptionId,
+          razorpaySubscriptionId: subscriptionId,
+          razorpayInvoiceId: invoiceId,
+          razorpayPaymentId: paymentId,
+          razorpayMode: order.razorpayMode || 'test',
+          planId: order.planId || SUBSCRIPTION_PLAN.id,
+          planName: order.planName || SUBSCRIPTION_PLAN.name,
+          orderType: order.creditedAt ? 'subscription_renewal' : 'subscription',
+          purchaseType: order.creditedAt ? 'subscription_renewal' : 'subscription_setup',
+          amount: Number(order.recurringAmount || SUBSCRIPTION_PLAN.mandate?.recurringAmount || 0),
+          dueTodayAmount: Number(payment.amount || order.recurringAmount || SUBSCRIPTION_PLAN.mandate?.recurringAmount || 0),
+          recurringAmount: Number(order.recurringAmount || SUBSCRIPTION_PLAN.mandate?.recurringAmount || 0),
+          billingFrequency: order.billingFrequency || SUBSCRIPTION_PLAN.mandate?.frequency || 'Monthly',
+          currency: order.currency || SUBSCRIPTION_PLAN.currency,
+          tokens: Number(order.tokens || SUBSCRIPTION_PLAN.tokens || 0),
+          parentOrderId: order.merchantOrderId,
+          status: 'completed',
+          providerState: 'COMPLETED',
+          creditedAt: now,
+          currentPeriodStart: periodStart,
+          currentPeriodEnd: periodEnd,
+          providerResponse
+        };
+        if (session) {
+          const [createdCycleOrder] = await TokenOrder.create([cycleOrderPayload], { session });
+          cycleOrder = createdCycleOrder;
+        } else {
+          cycleOrder = await TokenOrder.create(cycleOrderPayload);
+        }
+      }
+
+      await TokenOrder.updateOne(
+        { _id: order._id },
+        {
+          $set: {
+            status: 'completed',
+            providerState: 'COMPLETED',
+            razorpayPaymentId: paymentId || order.razorpayPaymentId,
+            razorpayInvoiceId: invoiceId || order.razorpayInvoiceId,
+            creditedAt: order.creditedAt || now,
+            currentPeriodStart: periodStart,
+            currentPeriodEnd: periodEnd,
+            providerResponse
+          }
+        },
+        { session }
+      );
+
+      const ledgerResult = await creditUser({
+        userId: order.user,
+        action: 'subscription_tokens_purchased',
+        tokens: Number(order.tokens || SUBSCRIPTION_PLAN.tokens || 0),
+        source: 'razorpay',
+        sourceId,
+        fulfillmentKey,
+        userSet: {
+          subscription: {
+            planId: order.planId || SUBSCRIPTION_PLAN.id,
+            status: 'active',
+            provider: 'razorpay',
+            merchantSubscriptionId: subscriptionId,
+            razorpayMode: order.razorpayMode || 'test',
+            amount: Number(order.recurringAmount || SUBSCRIPTION_PLAN.mandate?.recurringAmount || 0),
+            currency: order.currency || SUBSCRIPTION_PLAN.currency,
+            tokensPerMonth: Number(order.tokens || SUBSCRIPTION_PLAN.tokens || 0),
+            currentPeriodStart: periodStart,
+            currentPeriodEnd: periodEnd,
+            nextBillingAt: periodEnd,
+            willAutoRenew: true,
+            billingRetry: false,
+            lastOrderId: cycleOrder.merchantOrderId
+          }
+        },
+        metadata: {
+          orderId: cycleOrder._id,
+          merchantOrderId: cycleOrder.merchantOrderId,
+          parentOrderId: order.merchantOrderId,
+          subscriptionId,
+          sourceId,
+          planId: order.planId,
+          orderType: 'subscription',
+          providerState: 'COMPLETED',
+          providerResponse
+        },
+        session
+      });
+      return { user: ledgerResult.user, order: cycleOrder, alreadyCredited: Boolean(ledgerResult.alreadyRecorded) };
     });
+  } catch (error) {
+    if (!isMongoDuplicateKeyError(error)) throw error;
+    const expectedEvent = await findExpectedCreditEvent(fulfillmentKey);
+    if (!expectedEvent) throw error;
+    const cycleOrder = await TokenOrder.findOne({ merchantOrderId });
+    if (!razorpayCycleOrderMatchesFulfillment(cycleOrder, { order, subscriptionId, invoiceId, paymentId })) {
+      throw error;
+    }
+    return {
+      user: await User.findById(order.user),
+      order: cycleOrder || order,
+      alreadyCredited: true
+    };
   }
-
-  await TokenOrder.updateOne(
-    { _id: order._id },
-    {
-      $set: {
-        status: 'completed',
-        providerState: 'COMPLETED',
-        razorpayPaymentId: paymentId || order.razorpayPaymentId,
-        razorpayInvoiceId: invoiceId || order.razorpayInvoiceId,
-        creditedAt: order.creditedAt || now,
-        currentPeriodStart: periodStart,
-        currentPeriodEnd: periodEnd,
-        providerResponse
-      }
-    }
-  );
-
-  const user = await creditUser({
-    userId: order.user,
-    action: 'subscription_tokens_purchased',
-    tokens: Number(order.tokens || SUBSCRIPTION_PLAN.tokens || 0),
-    source: 'razorpay',
-    sourceId,
-    fulfillmentKey,
-    userSet: {
-      subscription: {
-        planId: order.planId || SUBSCRIPTION_PLAN.id,
-        status: 'active',
-        provider: 'razorpay',
-        merchantSubscriptionId: subscriptionId,
-        razorpayMode: order.razorpayMode || 'test',
-        amount: Number(order.recurringAmount || SUBSCRIPTION_PLAN.mandate?.recurringAmount || 0),
-        currency: order.currency || SUBSCRIPTION_PLAN.currency,
-        tokensPerMonth: Number(order.tokens || SUBSCRIPTION_PLAN.tokens || 0),
-        currentPeriodStart: periodStart,
-        currentPeriodEnd: periodEnd,
-        nextBillingAt: periodEnd,
-        willAutoRenew: true,
-        billingRetry: false,
-        lastOrderId: cycleOrder.merchantOrderId
-      }
-    },
-    metadata: {
-      orderId: cycleOrder._id,
-      merchantOrderId: cycleOrder.merchantOrderId,
-      parentOrderId: order.merchantOrderId,
-      planId: order.planId,
-      orderType: 'subscription',
-      providerState: 'COMPLETED',
-      providerResponse
-    }
-  });
-  return { user, order: cycleOrder, alreadyCredited: false };
 }
 
 function earlyActivationAllowedStatus(status = '') {
@@ -1538,64 +1669,94 @@ async function grantPaidTokens(order, providerResponse) {
   const now = new Date();
   const isSubscription = order.orderType === 'subscription' || order.planId === SUBSCRIPTION_PLAN.id;
   const currentPeriodEnd = isSubscription ? addMonths(now, 1) : null;
-  const orderSet = {
-    status: 'completed',
-    providerState: 'COMPLETED',
-    providerResponse,
-    creditedAt: now
-  };
-  if (isSubscription) {
-    orderSet.currentPeriodStart = now;
-    orderSet.currentPeriodEnd = currentPeriodEnd;
-  }
-  const creditedOrder = await TokenOrder.findOneAndUpdate(
-    { _id: order._id, creditedAt: null },
-    { $set: orderSet },
-    { new: true }
-  );
-  if (!creditedOrder) return User.findById(order.user);
+  const fulfillmentKey = `token_order:${order._id}`;
 
-  const ledgerOrder = {
-    user: creditedOrder.user || order.user,
-    tokens: creditedOrder.tokens ?? order.tokens,
-    planId: creditedOrder.planId || order.planId,
-    orderType: creditedOrder.orderType || order.orderType,
-    merchantOrderId: creditedOrder.merchantOrderId || order.merchantOrderId,
-    provider: creditedOrder.provider || order.provider,
-    providerState: creditedOrder.providerState || order.providerState,
-    razorpayPaymentId: creditedOrder.razorpayPaymentId || order.razorpayPaymentId,
-    phonePeOrderId: creditedOrder.phonePeOrderId || order.phonePeOrderId
-  };
-  const userSet = {};
-  if (isSubscription) {
-    userSet.subscription = {
-      planId: ledgerOrder.planId,
-      status: 'active',
-      tokensPerMonth: ledgerOrder.tokens,
-      currentPeriodStart: now,
-      currentPeriodEnd,
-      lastOrderId: ledgerOrder.merchantOrderId
-    };
-  }
+  try {
+    const result = await runLocalPaymentTransaction(async (session) => {
+      const currentOrder = await findTokenOrderByIdWithSession(order._id, session) || order;
+      if (currentOrder.creditedAt) {
+        return { user: await findUserByIdWithSession(currentOrder.user || order.user, session), alreadyCredited: true };
+      }
 
-  const ledgerResult = await creditUser({
-    userId: ledgerOrder.user,
-    action: isSubscription ? 'subscription_tokens_purchased' : 'topup_tokens_purchased',
-    tokens: ledgerOrder.tokens,
-    source: ledgerOrder.provider || 'payment',
-    sourceId: ledgerOrder.razorpayPaymentId || ledgerOrder.phonePeOrderId || ledgerOrder.merchantOrderId,
-    fulfillmentKey: `token_order:${creditedOrder._id}`,
-    userSet,
-    metadata: {
-      orderId: creditedOrder._id,
-      merchantOrderId: ledgerOrder.merchantOrderId,
-      planId: ledgerOrder.planId,
-      orderType: ledgerOrder.orderType,
-      providerState: ledgerOrder.providerState,
-      providerResponse
-    }
-  });
-  return ledgerResult.user;
+      const ledgerOrder = {
+        user: currentOrder.user || order.user,
+        tokens: currentOrder.tokens ?? order.tokens,
+        planId: currentOrder.planId || order.planId,
+        orderType: currentOrder.orderType || order.orderType,
+        merchantOrderId: currentOrder.merchantOrderId || order.merchantOrderId,
+        provider: currentOrder.provider || order.provider,
+        providerState: 'COMPLETED',
+        razorpayPaymentId: currentOrder.razorpayPaymentId || order.razorpayPaymentId,
+        phonePeOrderId: currentOrder.phonePeOrderId || order.phonePeOrderId
+      };
+      const userSet = {};
+      if (isSubscription) {
+        userSet.subscription = {
+          planId: ledgerOrder.planId,
+          status: 'active',
+          tokensPerMonth: ledgerOrder.tokens,
+          currentPeriodStart: now,
+          currentPeriodEnd,
+          lastOrderId: ledgerOrder.merchantOrderId
+        };
+      }
+
+      const ledgerResult = await creditUser({
+        userId: ledgerOrder.user,
+        action: isSubscription ? 'subscription_tokens_purchased' : 'topup_tokens_purchased',
+        tokens: ledgerOrder.tokens,
+        source: ledgerOrder.provider || 'payment',
+        sourceId: ledgerOrder.razorpayPaymentId || ledgerOrder.phonePeOrderId || ledgerOrder.merchantOrderId,
+        fulfillmentKey,
+        userSet,
+        metadata: {
+          orderId: currentOrder._id || order._id,
+          merchantOrderId: ledgerOrder.merchantOrderId,
+          planId: ledgerOrder.planId,
+          orderType: ledgerOrder.orderType,
+          providerState: ledgerOrder.providerState,
+          providerResponse
+        },
+        session
+      });
+
+      const orderSet = {
+        status: 'completed',
+        providerState: 'COMPLETED',
+        providerResponse,
+        creditedAt: now
+      };
+      if (isSubscription) {
+        orderSet.currentPeriodStart = now;
+        orderSet.currentPeriodEnd = currentPeriodEnd;
+      }
+      await TokenOrder.findOneAndUpdate(
+        { _id: currentOrder._id || order._id, creditedAt: null },
+        { $set: orderSet },
+        { new: true, session }
+      );
+      return { user: ledgerResult.user, alreadyCredited: Boolean(ledgerResult.alreadyRecorded) };
+    });
+    return result.user;
+  } catch (error) {
+    if (!isMongoDuplicateKeyError(error)) throw error;
+    const expectedEvent = await findExpectedCreditEvent(fulfillmentKey);
+    if (!expectedEvent) throw error;
+    const recoveredOrder = await TokenOrder.findOneAndUpdate(
+      { _id: order._id, creditedAt: null },
+      {
+        $set: {
+          status: 'completed',
+          providerState: 'COMPLETED',
+          providerResponse,
+          creditedAt: now,
+          ...(isSubscription ? { currentPeriodStart: now, currentPeriodEnd } : {})
+        }
+      },
+      { new: true }
+    );
+    return User.findById(recoveredOrder?.user || order.user);
+  }
 }
 
 async function reconcileOrder(order) {
@@ -1617,6 +1778,34 @@ async function reconcileOrder(order) {
   order.status = statusFromPhonePeState(state) || order.status;
   await order.save();
   return { order, user: await User.findById(order.user) };
+}
+
+async function runPhonePeTokenOrderReconciliationJob(
+  { merchantOrderId } = {},
+  {
+    findOrder = (id) => TokenOrder.findOne({ merchantOrderId: id }),
+    reconcile = reconcileOrder
+  } = {}
+) {
+  const normalizedId = String(merchantOrderId || '').trim();
+  if (!normalizedId) throw new Error('PhonePe token-order reconciliation requires merchantOrderId');
+
+  const order = await findOrder(normalizedId);
+  if (!order) return { status: 'missing' };
+  if (order.creditedAt) return { status: 'completed', providerState: order.providerState || 'COMPLETED' };
+  if (phonePeTerminalFailure(order.providerState) || order.status === 'failed') {
+    return { status: 'failed', providerState: order.providerState || 'FAILED' };
+  }
+
+  const result = await reconcile(order);
+  const reconciledOrder = result?.order || order;
+  const providerState = String(reconciledOrder.providerState || '').toUpperCase();
+  if (reconciledOrder.creditedAt) return { status: 'completed', providerState: providerState || 'COMPLETED' };
+  if (phonePeTerminalFailure(providerState) || reconciledOrder.status === 'failed') {
+    return { status: 'failed', providerState: providerState || 'FAILED' };
+  }
+
+  throw pendingPhonePeReconciliationError('token order', providerState);
 }
 
 function orderIdFromCallback(req) {
@@ -1662,6 +1851,42 @@ async function findOrderFromCallback(req) {
       { razorpayPaymentId: id }
     ]
   });
+}
+
+function isPhonePeTokenOrderTerminal(order) {
+  if (!order) return true;
+  if (order.creditedAt) return true;
+  const providerState = String(order.providerState || '').toUpperCase();
+  const status = String(order.status || '').toLowerCase();
+  return phonePeTerminalFailure(providerState) || status === 'failed';
+}
+
+async function handlePhonePeCallback(req, res, {
+  requireCallbackConfig = requirePhonePeCallbackConfig,
+  validateCallbackAuth = validatePhonePeCallbackAuth,
+  getAuthorizationHeader = callbackAuthorizationHeader,
+  findOrder = findOrderFromCallback,
+  enqueueReconciliation = enqueuePhonePeReconciliation
+} = {}) {
+  try {
+    requireCallbackConfig();
+    if (!validateCallbackAuth(getAuthorizationHeader(req))) {
+      return res.status(401).json({ ok: false });
+    }
+  } catch (error) {
+    return res.status(503).json({ ok: false, message: readablePhonePeError(error, 'PhonePe callback verification is not configured') });
+  }
+
+  const order = await findOrder(req);
+  if (!order || isPhonePeTokenOrderTerminal(order)) return res.status(202).json({ ok: true });
+
+  try {
+    await enqueueReconciliation('token-order', order.merchantOrderId);
+    return res.status(202).json({ ok: true });
+  } catch (error) {
+    console.error('[phonepe:callback]', readablePhonePeError(error));
+    return res.status(error.statusCode || 503).json({ ok: false, message: readablePhonePeError(error) });
+  }
 }
 
 function appleDate(value) {
@@ -1924,6 +2149,20 @@ async function grantAppleCreditsOnce({ record, user, productConfig, transaction,
       grantedCredits = ledgerResult.alreadyRecorded ? 0 : productConfig.credits;
     });
     return { grantedCredits, user: updatedUser || await User.findById(user._id) };
+  } catch (error) {
+    if (!isMongoDuplicateKeyError(error)) throw error;
+    const existingRecord = await AppleTransaction.findOne({
+      transactionId: transaction.transactionId,
+      fulfillmentKey: record.fulfillmentKey
+    });
+    if (!existingRecord) throw error;
+    const fallbackUser = await User.findById(user._id);
+    return {
+      grantedCredits: 0,
+      user: fallbackUser,
+      record: existingRecord || record,
+      alreadyCredited: true
+    };
   } finally {
     await session.endSession();
   }
@@ -2536,27 +2775,7 @@ router.post('/subscriptions/current/cancel', requireUser, async (req, res) => {
 });
 
 router.post('/phonepe/callback', async (req, res) => {
-  try {
-    requirePhonePeCallbackConfig();
-    if (!validatePhonePeCallbackAuth(callbackAuthorizationHeader(req))) {
-      return res.status(401).json({ ok: false });
-    }
-  } catch (error) {
-    return res.status(503).json({ ok: false, message: readablePhonePeError(error, 'PhonePe callback verification is not configured') });
-  }
-
-  const order = await findOrderFromCallback(req);
-  if (!order) return res.status(202).json({ ok: true });
-
-  // Acknowledge quickly and reconcile asynchronously to keep callback latency low
-  res.status(202).json({ ok: true });
-  setImmediate(async () => {
-    try {
-      await reconcileOrder(order);
-    } catch (error) {
-      console.error('[phonepe:callback:bg]', readablePhonePeError(error));
-    }
-  });
+  return handlePhonePeCallback(req, res);
 });
 
 export {
@@ -2575,13 +2794,17 @@ export {
   activateRazorpaySubscriptionNow,
   createDemoCreditPayment,
   createMerchantOrderId,
+  createPhonePePayment,
   createRazorpayPayment,
   createRazorpaySubscriptionPayment,
   findOrderFromCallback,
+  grantAppleCreditsOnce,
   grantPaidTokens,
   grantRazorpayMandateSetupTokens,
   grantRazorpaySubscriptionCycleTokens,
+  handlePhonePeCallback,
   hasMandateForTopUp,
+  isPhonePeTokenOrderTerminal,
   mandateSetupAmountForPlan,
   orderIdFromCallback,
   phonePeFetch,
@@ -2592,6 +2815,8 @@ export {
   readableRazorpayError,
   reconcileOrder,
   reconcileRazorpayOrder,
+  runPhonePeTokenOrderReconciliationJob,
+  runLocalPaymentTransaction,
   readablePhonePeError,
   recurringAmountForPlan,
   requireMandateForTopUp,
@@ -2599,6 +2824,7 @@ export {
   requirePhonePeConfig,
   requireRazorpayConfig,
   setupTokensForPlan,
+  setLocalPaymentTransactionRunnerForTests,
   statusFromRazorpayOrderStatus,
   statusFromPhonePeState,
   validatePhonePeCallbackAuth,

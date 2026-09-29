@@ -10,7 +10,7 @@ import UserEvent from '../models/UserEvent.js';
 import { requireUser } from './auth.js';
 import { clearRecommendationCaches } from './recommendations.js';
 import { inferTryOnModel, normalizeTryOnModel } from '../utils/tryOnModel.js';
-import { createHybridCache } from '../utils/cache.js';
+import { LOCAL_SAFE_CACHE, createHybridCache } from '../utils/cache.js';
 import { createRateLimiter, rateLimitKeys } from '../utils/rateLimit.js';
 import { wearableCompatibility } from '../utils/wearable.js';
 import { genderCompatibility, genderedSearchQuery, genderPreferenceForQuery } from '../utils/genderPreference.js';
@@ -40,8 +40,8 @@ import { accessoryIdentityPattern } from '../utils/accessoryTaxonomy.js';
 const router = express.Router();
 const requireUserOperationsAdmin = requireAdminSection(ADMIN_SECTIONS.USER_OPERATIONS);
 const readCacheTtlMs = Number(process.env.PRODUCT_READ_CACHE_TTL_MS || 5 * 60 * 1000);
-const productListCache = createHybridCache('products:list', { ttlMs: readCacheTtlMs, maxItems: 150 });
-const productDetailCache = createHybridCache('products:detail', { ttlMs: readCacheTtlMs, maxItems: 300 });
+const productListCache = createHybridCache('products:list', { ttlMs: readCacheTtlMs, maxItems: 150, mode: LOCAL_SAFE_CACHE });
+const productDetailCache = createHybridCache('products:detail', { ttlMs: readCacheTtlMs, maxItems: 300, mode: LOCAL_SAFE_CACHE });
 const productReadLimiter = createRateLimiter({
   name: 'products:read',
   windowMs: 5 * 60 * 1000,
@@ -1920,17 +1920,21 @@ router.post('/', requireAdmin, requireUserOperationsAdmin, adminProductWriteLimi
 
   let image;
   if (req.file) {
-    const normalized = await normalizeRasterImageBuffer({
-      buffer: await fs.readFile(req.file.path),
-      filename: req.file.filename
-    });
-    image = await saveBuffer({
-      key: normalized.filename,
-      buffer: normalized.buffer,
-      mimetype: normalized.mimetype,
-      filename: normalized.filename
-    });
-    if (useBunny() || normalized.filename !== req.file.filename) await fs.unlink(req.file.path).catch(() => {});
+    let normalized;
+    try {
+      normalized = await normalizeRasterImageBuffer({
+        buffer: await fs.readFile(req.file.path),
+        filename: req.file.filename
+      });
+      image = await saveBuffer({
+        key: normalized.filename,
+        buffer: normalized.buffer,
+        mimetype: normalized.mimetype,
+        filename: normalized.filename
+      });
+    } finally {
+      if (useBunny() || normalized?.filename !== req.file.filename) await fs.unlink(req.file.path).catch(() => {});
+    }
   } else if (req.body.remoteImageUrl) {
     try {
       image = await cachedRemoteProductImage(req.body.remoteImageUrl);

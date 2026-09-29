@@ -1,5 +1,6 @@
 import { isProductionEnv, validateConfiguredHttpsUrl } from './urlValidation.js';
 import { passwordHashingConfig } from './passwordHashing.js';
+import { mongoConnectConfig } from './runtime.js';
 
 const REQUIRED_SERVER_ENV = ['MONGODB_URI', 'JWT_SECRET'];
 
@@ -183,6 +184,12 @@ export function validateServerEnv(env = process.env) {
     const missingFeatureKeys = group.keys.filter((key) => !String(env[key] || '').trim());
     return [`${group.name} is partially configured. Missing: ${missingFeatureKeys.join(', ')}`];
   });
+  const mongoRuntimeIssues = mongoConnectConfig(env).issues;
+  if (mongoRuntimeIssues.length) {
+    const message = `MongoDB connection configuration is invalid: ${mongoRuntimeIssues.join(' ')}`;
+    if (production) errors.push(message);
+    else warnings.push(message);
+  }
   if (otpProvider && !['disabled', 'mock', 'msg91', 'webhook'].includes(otpProvider)) {
     warnings.push(`OTP delivery provider "${otpProvider}" is unsupported.`);
   }
