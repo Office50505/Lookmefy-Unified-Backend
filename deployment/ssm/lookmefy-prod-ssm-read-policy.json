@@ -1,0 +1,14 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadProductionParametersByPath",
+      "Effect": "Allow",
+      "Action": "ssm:GetParametersByPath",
+      "Resource": [
+        "arn:aws:ssm:ap-south-1:443845328552:parameter/lookmefy/prod",
+        "arn:aws:ssm:ap-south-1:443845328552:parameter/lookmefy/prod/*"
+      ]
+    }
+  ]
+}
