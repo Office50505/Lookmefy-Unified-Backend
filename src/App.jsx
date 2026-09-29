@@ -16,6 +16,8 @@ import {
 } from '../shared/pricing.js';
 
 const asset = (name) => `/assets/${name}`;
+const CHATBOT_ICON_SRC = asset('lookmefy-chatbot-icon.png');
+const STYLE_BOT_CHAT_STORAGE_PREFIX = 'lookmefy_ai_stylist_chat_v1';
 const MAX_BODY_PHOTO_BYTES = 8 * 1024 * 1024;
 const TARGET_BODY_PHOTO_BYTES = 6.5 * 1024 * 1024;
 const BODY_PHOTO_ACCEPT = 'image/*,.avif,.heic,.heif,image/avif,image/heic,image/heif';
@@ -34,6 +36,7 @@ const APP_STORE_URL = safeExternalStoreUrl(import.meta.env.VITE_APP_STORE_URL);
 const PLAY_STORE_URL = safeExternalStoreUrl(import.meta.env.VITE_PLAY_STORE_URL);
 const productListCache = new Map();
 const productDetailLocalCache = new Map();
+const PRODUCT_DETAIL_SNAPSHOT_PREFIX = 'lookmefy_product_detail_snapshot_v1';
 const EMPTY_PRODUCT_FACETS = { brands: [], categories: [], categoryCounts: [] };
 const INDIA_STATES = [
   'Andaman and Nicobar Islands',
@@ -1377,6 +1380,44 @@ function useSimilarProducts(id, limit = 4) {
   return state;
 }
 
+function useRelatedCatalogProducts(product, limit = 8) {
+  const productId = product?.id || '';
+  const category = product?.category || '';
+  const gender = product?.gender || '';
+  const [state, setState] = useState({ products: [], loading: false, error: '' });
+
+  useEffect(() => {
+    if (!productId) {
+      setState({ products: [], loading: false, error: '' });
+      return undefined;
+    }
+
+    let alive = true;
+    const controller = new AbortController();
+    const search = new URLSearchParams({ limit: String(limit), sort: 'newest' });
+    if (category) search.set('category', category);
+    if (gender) search.set('gender', gender);
+    setState((current) => ({ ...current, loading: true, error: '' }));
+
+    api(`/products?${search.toString()}`, { signal: controller.signal })
+      .then((data) => {
+        if (!alive) return;
+        const normalized = normalizeProductListResponse(data);
+        setState({ products: normalized.products || [], loading: false, error: '' });
+      })
+      .catch((error) => {
+        if (alive && error.name !== 'AbortError') setState({ products: [], loading: false, error: error.message });
+      });
+
+    return () => {
+      alive = false;
+      controller.abort();
+    };
+  }, [productId, category, gender, limit]);
+
+  return state;
+}
+
 function useProduct(id) {
   const [state, setState] = useState({ product: null, loading: true, error: '' });
 
@@ -1387,13 +1428,19 @@ function useProduct(id) {
     }
     let alive = true;
     const controller = new AbortController();
-    setState({ product: null, loading: true, error: '' });
+    const cachedProduct = readProductDetailSnapshot(id);
+    setState({ product: cachedProduct || null, loading: !cachedProduct, error: '' });
     api(`/products/${encodeURIComponent(id)}`, { signal: controller.signal })
       .then((data) => {
-        if (alive) setState({ product: data.product || null, loading: false, error: '' });
+        if (!alive) return;
+        const product = data.product || null;
+        if (product) writeProductDetailSnapshot(product);
+        setState({ product, loading: false, error: '' });
       })
       .catch((err) => {
-        if (alive && err.name !== 'AbortError') setState({ product: null, loading: false, error: err.message });
+        if (!alive || err.name === 'AbortError') return;
+        const fallbackProduct = readProductDetailSnapshot(id);
+        setState({ product: fallbackProduct || null, loading: false, error: fallbackProduct ? '' : err.message });
       });
     return () => {
       alive = false;
@@ -1577,21 +1624,24 @@ function useGenerationHistory(user) {
 
 function MobileBottomNav({ user }) {
   const currentPath = normalizePath();
-  const ProfileNavIcon = () => <NavProfileAvatar user={user} />;
   const mobileNavLinks = [
     { label: 'Home', href: '/home', Icon: HomeIcon },
-    { label: 'Explore', href: '/categories', Icon: GridIcon },
+    { label: 'Categories', href: '/categories', Icon: GridIcon },
     { label: 'Try-On', href: '/custom-try-on', Icon: TryOnIcon },
     { label: 'AI Stylist', href: user ? '/style-bot' : '/signup', Icon: SparkleLineIcon },
     { label: 'Wardrobe', href: '/closet', Icon: ClosetIcon },
-    { label: 'Profile', href: user ? '/profile' : '/signup', Icon: ProfileNavIcon }
   ];
   const isActiveLink = (href, index) => {
     const hrefPath = href.split('?')[0] || '/';
+    if (hrefPath === '/categories' && (
+      currentPath === '/search'
+      || currentPath.startsWith('/categories')
+      || currentPath.startsWith('/product/')
+    )) return true;
     return currentPath === hrefPath || (currentPath === '/' && index === 0);
   };
 
-  return (
+  const nav = (
     <nav className="mobile-bottom-nav" aria-label="Primary mobile navigation">
       {mobileNavLinks.map(({ label, href, Icon }, index) => {
         const active = isActiveLink(href, index);
@@ -1599,6 +1649,8 @@ function MobileBottomNav({ user }) {
       })}
     </nav>
   );
+
+  return typeof document !== 'undefined' ? createPortal(nav, document.body) : nav;
 }
 
 function NavProfileAvatar({ user }) {
@@ -1632,9 +1684,17 @@ function Header({ user, setUser, authChecked = true }) {
     ['Home', '/home'],
     ['Explore', '/categories'],
     ['Wardrobe', '/closet'],
+    ['Custom Try On', '/custom-try-on'],
     ['AI Stylist', user ? '/style-bot' : '/signup'],
+    ['Download', '/download'],
     ['About', '/about']
   ];
+  const mobilePrimaryLinks = navLinks.filter(([label]) => !['Download', 'About'].includes(label));
+  const mobileMoreLinks = [
+    ['Download App', '/download'],
+    ['About Lookmefy', '/about']
+  ];
+  const mobileDrawerLinks = [...mobilePrimaryLinks, ...mobileMoreLinks];
   const exactQueryActiveHref = navLinks.find(([, href]) => {
     if (!href.includes('?')) return false;
     const [hrefPath, hrefQuery] = href.split('?');
@@ -1783,8 +1843,13 @@ function Header({ user, setUser, authChecked = true }) {
             from both while preserving the slide animation. */}
         <div className={`mobile-menu ${menuOpen ? 'open' : ''}`} id="mobile-navigation" role="dialog" aria-modal={menuOpen ? 'true' : undefined} aria-label="Mobile navigation" inert={!menuOpen}>
           <div className="wrap mobile-menu-inner">
-            {navLinks.map(([label, href], index) => {
-              const active = isActiveLink(href, index);
+            <div className="mobile-menu-head">
+              <strong>Menu</strong>
+              <button type="button" onClick={() => setMenuOpen(false)} aria-label="Close menu"><CloseIcon /></button>
+            </div>
+            {mobileDrawerLinks.map(([label, href], index) => {
+              const navIndex = navLinks.findIndex(([navLabel]) => navLabel === (label === 'Download App' ? 'Download' : label === 'About Lookmefy' ? 'About' : label));
+              const active = isActiveLink(href, navIndex === -1 ? index : navIndex);
               return <a className={active ? 'active' : ''} aria-current={active ? 'page' : undefined} href={href} key={label} onClick={() => setMenuOpen(false)}>{label}</a>;
             })}
             <a href="/tokens" onClick={() => setMenuOpen(false)}>Credits{user ? ` (${user.tokens})` : ''}</a>
@@ -2847,86 +2912,90 @@ const referenceLooks = [
   {
     title: 'Minimal',
     copy: 'Clean pieces. Maximum impact.',
-    hero: 'category-women-hero.png',
+    hero: 'look-card-minimal-editorial.png',
+    position: '76% center',
+    slots: [['jacket', 'blazer', 'outerwear'], ['top', 'shirt', 'blouse'], ['pant', 'trouser', 'jean'], ['bag', 'handbag', 'accessor']],
     pieces: ['category-generated/jackets.png', 'category-icons/tops.png', 'category-generated/pants.png', 'category-generated/bags.png'],
     href: '/categories/jackets?gender=women'
   },
   {
     title: 'Work',
     copy: 'Confidence looks good on you.',
-    hero: 'trending-1.jpg',
-    pieces: ['category-icons/jackets-dark.png', 'category-generated/shirts.png', 'category-generated/pants.png', 'category-generated/bags.png'],
+    hero: 'look-card-work-editorial.png',
+    position: '76% center',
+    slots: [['shirt', 'blazer', 'jacket'], ['pant', 'trouser'], ['shoe', 'loafer', 'boot'], ['watch', 'bag', 'accessor']],
+    pieces: ['category-icons/jackets-dark.png', 'category-generated/pants.png', 'category-icons/shoes-section.png', 'category-generated/bags.png'],
     href: '/categories/shirts?gender=men'
   },
   {
     title: 'Casual',
     copy: 'Effortless style, every day.',
-    hero: 'ai-stylist-campaign.png',
+    hero: 'look-card-casual-editorial.png',
+    position: '72% center',
+    slots: [['top', 't-shirt', 'shirt'], ['jean', 'pant', 'bottom'], ['shoe', 'sneaker', 'sandal'], ['eyewear', 'sunglass', 'bag']],
     pieces: ['category-2.jpg', 'category-generated/jeans.png', 'category-icons/shoes-section.png', 'category-icons/eyewear-section.png'],
     href: '/categories/tops?gender=women'
   },
   {
     title: 'Evening',
     copy: 'For your bigger moments.',
-    hero: 'category-reference-hero.png',
-    pieces: ['category-generated/ethnic-wear.png', 'category-reference-accessories.png', 'category-heroes/shoes-hero.png'],
+    hero: 'look-card-evening-editorial.png',
+    position: '56% center',
+    slots: [['dress', 'ethnic', 'kurta'], ['shoe', 'heel', 'sandal'], ['bag', 'clutch'], ['jewellery', 'jewelry', 'accessor']],
+    pieces: ['category-icons/dresses-section.png', 'category-icons/shoes-section.png', 'category-generated/bags.png', 'category-generated/watches.png'],
     href: '/categories/dresses?gender=women'
   }
 ];
 
-const referencePromoSlides = [
-  {
-    id: 'women-try-on',
-    tone: 'light',
-    image: 'category-women-hero.png',
-    position: '70% 24%',
-    kicker: 'Your AI fashion assistant',
-    title: <>Wear It Before<br />You Buy It</>,
-    copy: 'Try on any outfit with AI, style smarter, and discover a more confident you.',
-    primaryLabel: 'Start Try-On',
-    primaryHref: '/custom-try-on',
-    secondaryLabel: 'Open My Wardrobe',
-    secondaryHref: '/closet',
-    note: <>Same You<br />New Possibilities</>,
-    photo: 'category-women-hero.png',
-    result: 'category-women-hero.png',
-    pieces: ['category-generated/jackets.png', 'category-icons/t-shirts-section.png', 'category-generated/ethnic-wear.png', 'category-generated/bags.png']
-  },
-  {
-    id: 'men-edit',
-    tone: 'dark',
-    image: 'category-men-hero.png',
-    position: '65% 18%',
-    kicker: 'Men’s Edit',
-    title: <>Modern Ease<br />Daily Style</>,
-    copy: 'Build refined outfits from shirts, shoes, sunglasses, caps, and essentials already in the live catalog.',
-    primaryLabel: 'Shop for Men',
-    primaryHref: '/categories?gender=men',
-    secondaryLabel: 'Open Wardrobe',
-    secondaryHref: '/closet',
-    note: <>Refined Fits<br />Daily Rotation</>,
-    photo: 'category-men-hero.png',
-    result: 'category-men-hero.png',
-    pieces: ['category-generated/shirts.png', 'category-generated/jeans.png', 'category-generated/eyewear.png', 'category-generated/watches.png']
-  },
-  {
-    id: 'ai-every-look',
-    tone: 'dark',
-    image: 'home-hero-editorial.png',
-    position: '57% 18%',
-    kicker: 'AI fashion try-on',
-    title: <>See Yourself<br />In Every Look</>,
-    copy: 'Experience the future of fashion with AI-powered virtual try-on. Upload, try, and find your perfect style.',
-    primaryLabel: 'Start AI Try-On',
-    primaryHref: '/custom-try-on',
-    secondaryLabel: 'Explore Collections',
-    secondaryHref: '/categories',
-    note: <>Upload<br />Try<br />Love It</>,
-    photo: 'category-women-hero.png',
-    result: 'home-hero-editorial.png',
-    pieces: ['category-generated/jackets.png', 'category-generated/shirts.png', 'category-generated/pants.png', 'category-icons/shoes-section.png']
-  }
-];
+const referenceSlotAliases = {
+  accessor: ['accessory', 'accessories', 'jewellery', 'jewelry', 'watch', 'bracelet', 'necklace', 'earring', 'belt', 'scarf', 'sunglass', 'eyewear'],
+  bag: ['bag', 'bags', 'handbag', 'handbags', 'purse', 'clutch', 'tote', 'sling'],
+  blazer: ['blazer', 'coat', 'jacket', 'outerwear'],
+  bottom: ['bottom', 'bottomwear', 'jean', 'jeans', 'pant', 'pants', 'trouser', 'trousers', 'skirt', 'shorts'],
+  dress: ['dress', 'dresses', 'gown', 'ethnic', 'kurta', 'kurti', 'saree', 'lehenga'],
+  footwear: ['shoe', 'shoes', 'boot', 'boots', 'sandal', 'sandals', 'sneaker', 'sneakers', 'loafer', 'loafers', 'heel', 'heels', 'footwear'],
+  top: ['top', 'tops', 'shirt', 'shirts', 't-shirt', 'tshirt', 'tee', 'blouse', 'tank', 'camisole']
+};
+
+function referenceProductSearchText(product = {}) {
+  return [
+    product.name,
+    product.category,
+    product.brand,
+    product.description,
+    Array.isArray(product.tags) ? product.tags.join(' ') : product.tags
+  ].filter(Boolean).join(' ').toLowerCase();
+}
+
+function referenceExpandedKeywords(keywords = []) {
+  const expanded = new Set();
+  keywords.forEach((keyword) => {
+    const value = String(keyword || '').toLowerCase();
+    if (!value) return;
+    expanded.add(value);
+    if (referenceSlotAliases[value]) {
+      referenceSlotAliases[value].forEach((alias) => expanded.add(alias));
+    }
+    if (['shoe', 'boot', 'sandal', 'sneaker', 'loafer', 'heel'].includes(value)) {
+      referenceSlotAliases.footwear.forEach((alias) => expanded.add(alias));
+    }
+    if (['pant', 'trouser', 'jean'].includes(value)) {
+      referenceSlotAliases.bottom.forEach((alias) => expanded.add(alias));
+    }
+    if (['jacket', 'outerwear'].includes(value)) {
+      referenceSlotAliases.blazer.forEach((alias) => expanded.add(alias));
+    }
+    if (['shirt', 'blouse', 't-shirt'].includes(value)) {
+      referenceSlotAliases.top.forEach((alias) => expanded.add(alias));
+    }
+  });
+  return [...expanded];
+}
+
+function referenceProductMatchesSlot(product, keywords = []) {
+  const text = referenceProductSearchText(product);
+  return referenceExpandedKeywords(keywords).some((keyword) => text.includes(keyword));
+}
 
 function referenceAvailabilityLabel(status) {
   const value = cleanDisplayText(status, '').toLowerCase();
@@ -3004,9 +3073,12 @@ function referenceIsCustomerFacingProduct(product = {}) {
 
 function ReferenceHome() {
   const productRailRef = useRef(null);
-  const productState = useProducts({ limit: 96 });
-  const [promoSlideIndex, setPromoSlideIndex] = useState(0);
-  const promoSlide = referencePromoSlides[promoSlideIndex] || referencePromoSlides[0];
+  const tryOnRailRef = useRef(null);
+  const productDragState = useRef({ active: false, moved: false, pointerId: null, startX: 0, scrollLeft: 0 });
+  const tryOnDragState = useRef({ active: false, moved: false, pointerId: null, startX: 0, scrollLeft: 0 });
+  const productState = useProducts({ limit: 180 });
+  const [isProductDragging, setIsProductDragging] = useState(false);
+  const [isTryOnDragging, setIsTryOnDragging] = useState(false);
   const catalogProducts = useMemo(() => uniqueProducts(productState.products)
     .filter((product) => product?.id && product?.imageUrl && referenceIsCustomerFacingProduct(product)), [productState.products]);
   const availableCatalogCount = catalogProducts.filter((product) => product.availabilityStatus === 'available').length;
@@ -3030,154 +3102,292 @@ function ReferenceHome() {
     : productState.loading
     ? 'Loading the live platform catalog.'
     : 'Live catalog items will appear here.';
-  const scrollRail = (direction) => {
-    productRailRef.current?.scrollBy({ left: direction * 420, behavior: 'smooth' });
-  };
+  const recommendedTryOnProducts = curatedReferenceProducts.slice(0, 9);
+  const recommendedReferenceLooks = useMemo(() => {
+    const liveLookProducts = stableExploreProducts([
+      ...catalogProducts.filter((product) => product.availabilityStatus === 'available' && Number(product.price || 0) > 0),
+      ...catalogProducts.filter((product) => Number(product.price || 0) > 0),
+      ...catalogProducts
+    ]);
+    if (!liveLookProducts.length) return referenceLooks.map((look) => ({ ...look, recommendations: [] }));
+    const availableIds = new Set(liveLookProducts.map((product) => String(product.id)));
 
-  useEffect(() => {
-    if (referencePromoSlides.length < 2) return undefined;
-    const prefersReducedMotion = typeof window !== 'undefined'
-      && window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
-    if (prefersReducedMotion) return undefined;
-    const timer = window.setInterval(() => {
-      setPromoSlideIndex((current) => (current + 1) % referencePromoSlides.length);
-    }, 6500);
-    return () => window.clearInterval(timer);
-  }, []);
+    return referenceLooks.map((look) => {
+      const recommendations = look.slots.map((keywords) => {
+        const matched = liveLookProducts.find((product) => availableIds.has(String(product.id))
+          && referenceProductMatchesSlot(product, keywords));
+        if (matched?.id) {
+          availableIds.delete(String(matched.id));
+          return matched;
+        }
+        return null;
+      }).filter(Boolean);
+      return { ...look, recommendations };
+    });
+  }, [catalogProducts]);
+  const scrollProductRail = (direction) => {
+    const rail = productRailRef.current;
+    if (!rail) return;
+    rail.scrollBy({ left: direction * Math.max(280, rail.clientWidth * .78), behavior: 'smooth' });
+  };
+  const scrollTryOnRail = (direction) => {
+    const rail = tryOnRailRef.current;
+    if (!rail) return;
+    rail.scrollBy({ left: direction * Math.max(320, rail.clientWidth * .82), behavior: 'smooth' });
+  };
+  const startTryOnDrag = (event) => {
+    if (event.pointerType !== 'mouse' || event.button !== 0) return;
+    const rail = tryOnRailRef.current;
+    if (!rail) return;
+    tryOnDragState.current = {
+      active: true,
+      moved: false,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      scrollLeft: rail.scrollLeft
+    };
+  };
+  const moveTryOnDrag = (event) => {
+    const drag = tryOnDragState.current;
+    const rail = tryOnRailRef.current;
+    if (!drag.active || !rail || event.pointerId !== drag.pointerId) return;
+    const distance = event.clientX - drag.startX;
+    if (!drag.moved && Math.abs(distance) > 8) {
+      drag.moved = true;
+      rail.setPointerCapture?.(event.pointerId);
+      setIsTryOnDragging(true);
+    }
+    if (drag.moved) event.preventDefault();
+    rail.scrollLeft = drag.scrollLeft - distance;
+  };
+  const endTryOnDrag = (event) => {
+    const drag = tryOnDragState.current;
+    const rail = tryOnRailRef.current;
+    if (!drag.active || event.pointerId !== drag.pointerId) return;
+    if (rail?.hasPointerCapture?.(event.pointerId)) rail.releasePointerCapture(event.pointerId);
+    drag.active = false;
+    setIsTryOnDragging(false);
+    window.setTimeout(() => {
+      if (!tryOnDragState.current.active) tryOnDragState.current.moved = false;
+    }, 0);
+  };
+  const preventTryOnDragClick = (event) => {
+    if (!tryOnDragState.current.moved) return;
+    event.preventDefault();
+    event.stopPropagation();
+    tryOnDragState.current.moved = false;
+  };
+  const handleTryOnRailKeys = (event) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    scrollTryOnRail(event.key === 'ArrowRight' ? 1 : -1);
+  };
+  const startProductDrag = (event) => {
+    if (event.pointerType !== 'mouse' || event.button !== 0) return;
+    const rail = productRailRef.current;
+    if (!rail) return;
+    productDragState.current = {
+      active: true,
+      moved: false,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      scrollLeft: rail.scrollLeft
+    };
+  };
+  const moveProductDrag = (event) => {
+    const drag = productDragState.current;
+    const rail = productRailRef.current;
+    if (!drag.active || !rail || event.pointerId !== drag.pointerId) return;
+    const distance = event.clientX - drag.startX;
+    if (!drag.moved && Math.abs(distance) > 8) {
+      drag.moved = true;
+      rail.setPointerCapture?.(event.pointerId);
+      setIsProductDragging(true);
+    }
+    if (drag.moved) event.preventDefault();
+    rail.scrollLeft = drag.scrollLeft - distance;
+  };
+  const endProductDrag = (event) => {
+    const drag = productDragState.current;
+    const rail = productRailRef.current;
+    if (!drag.active || event.pointerId !== drag.pointerId) return;
+    if (rail?.hasPointerCapture?.(event.pointerId)) rail.releasePointerCapture(event.pointerId);
+    drag.active = false;
+    setIsProductDragging(false);
+    window.setTimeout(() => {
+      if (!productDragState.current.active) productDragState.current.moved = false;
+    }, 0);
+  };
+  const preventProductDragClick = (event) => {
+    if (!productDragState.current.moved) return;
+    event.preventDefault();
+    event.stopPropagation();
+    productDragState.current.moved = false;
+  };
+  const handleProductRailKeys = (event) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    scrollProductRail(event.key === 'ArrowRight' ? 1 : -1);
+  };
 
   return (
     <div className="reference-home">
       <main>
-        <section className="reference-hero" data-tone={promoSlide.tone} aria-label="Lookmefy AI try-on">
-          <div className="reference-hero-slide-stack" aria-hidden="true">
-            {referencePromoSlides.map((slide, index) => (
-              <OptimizedImage
-                className={`reference-hero-bg reference-hero-bg-${slide.id} ${index === promoSlideIndex ? 'active' : ''}`}
-                src={asset(slide.image)}
-                alt=""
-                eager={index === 0}
-                key={slide.id}
-                style={{ objectPosition: slide.position }}
-              />
-            ))}
+        <section className="reference-hero reference-tryon-hero" aria-labelledby="reference-hero-title">
+          <div className="reference-tryon-hero-copy">
+            <span className="reference-tryon-hero-eyebrow">AI Fashion Try-On</span>
+            <h1 id="reference-hero-title">See Yourself<br />In Every Look</h1>
+            <p>Try styles on yourself before you shop. Choose from our catalog or use clothes from your own wardrobe.</p>
+            <div className="reference-hero-actions">
+              <a className="reference-button reference-button-dark reference-primary-cta" href="/custom-try-on"><SparkleLineIcon /> Start AI Try-On <span>→</span></a>
+              <a className="reference-button reference-button-light reference-secondary-cta" href="/categories"><ClosetIcon /> Explore Styles</a>
+            </div>
+            <p className="reference-tryon-steps" aria-label="AI try-on process">
+              <span>Upload photo</span>
+              <span aria-hidden="true">→</span>
+              <span>Choose outfit</span>
+              <span aria-hidden="true">→</span>
+              <span>Your AI look</span>
+            </p>
           </div>
-          <div className="reference-hero-copy">
-            <div className="reference-hero-copy-panels">
-              {referencePromoSlides.map((slide, index) => (
-                <div
-                  className={`reference-hero-copy-panel ${index === promoSlideIndex ? 'active' : ''}`}
-                  aria-hidden={index !== promoSlideIndex}
-                  key={`${slide.id}-copy`}
-                >
-                  <span>{slide.kicker}</span>
-                  <h1>{slide.title}</h1>
-                  <p>{slide.copy}</p>
-                  <div className="reference-hero-actions">
-                    <a className="reference-button reference-button-dark" href={slide.primaryHref} tabIndex={index === promoSlideIndex ? 0 : -1}><SparkleLineIcon /> {slide.primaryLabel} <span>→</span></a>
-                    <a className="reference-button reference-button-light" href={slide.secondaryHref} tabIndex={index === promoSlideIndex ? 0 : -1}><ClosetIcon /> {slide.secondaryLabel}</a>
-                  </div>
+
+          <div className="reference-tryon-hero-visual" aria-label="AI try-on workflow preview">
+            <OptimizedImage
+              className="reference-tryon-hero-image"
+              src={asset('category-women-hero.png')}
+              alt="Fashion model in a warm editorial studio wearing a neutral tailored look"
+              eager
+            />
+            <div className="reference-tryon-workflow" aria-label="Your photo plus selected outfit creates an AI try-on result">
+              <div className="reference-tryon-inputs">
+                <figure className="reference-tryon-mini-card">
+                  <figcaption>Your Photo</figcaption>
+                  <OptimizedImage src={asset('workflow-step-upload-photo.png')} alt="Original portrait used for virtual try-on" />
+                </figure>
+                <span className="reference-tryon-plus" aria-hidden="true">+</span>
+                <figure className="reference-tryon-mini-card">
+                  <figcaption>Selected Outfit</figcaption>
+                  <OptimizedImage src={asset('category-generated/jackets.png')} alt="Selected beige blazer product" />
+                </figure>
+              </div>
+              <span className="reference-tryon-flow-arrow" aria-hidden="true">↓</span>
+              <figure className="reference-tryon-result-card">
+                <span><SparkleLineIcon /> AI Try-On Result</span>
+                <OptimizedImage src={asset('home-ai-tryon-result-coat.png')} alt="AI try-on result showing the original portrait model wearing the selected camel coat" />
+                <figcaption>Your New Look</figcaption>
+              </figure>
+            </div>
+          </div>
+        </section>
+
+        <section className="reference-tryon-strip" aria-labelledby="recommended-tryon-title">
+          <div className="reference-tryon-head">
+            <div>
+              <span>Picked from the live catalog</span>
+              <h2 id="recommended-tryon-title">Recommended to Try On</h2>
+            </div>
+            <div className="reference-tryon-head-actions">
+              {recommendedTryOnProducts.length > 3 && (
+                <div className="reference-tryon-arrows" aria-label="Browse recommended products">
+                  <button type="button" aria-label="Previous recommendations" aria-controls="recommended-tryon-rail" onClick={() => scrollTryOnRail(-1)}>←</button>
+                  <button type="button" aria-label="Next recommendations" aria-controls="recommended-tryon-rail" onClick={() => scrollTryOnRail(1)}>→</button>
                 </div>
-              ))}
-            </div>
-            <div className="reference-promo-dots" aria-label="Featured home panels">
-              {referencePromoSlides.map((slide, index) => (
-                <button
-                  className={index === promoSlideIndex ? 'active' : ''}
-                  type="button"
-                  aria-label={`Show ${slide.kicker} panel`}
-                  aria-pressed={index === promoSlideIndex}
-                  key={slide.id}
-                  onClick={() => setPromoSlideIndex(index)}
-                />
-              ))}
-            </div>
-            <dl className="reference-stats" aria-label="Lookmefy stats">
-              <div><dt>1M+</dt><dd>Looks Created</dd></div>
-              <div><dt>200K+</dt><dd>Happy Users</dd></div>
-              <div><dt>4.9★</dt><dd>App Store Rating</dd></div>
-            </dl>
-          </div>
-          <div className={`reference-hero-demo ${promoSlide.id === 'women-try-on' ? 'active' : ''}`} aria-label="AI try-on preview" aria-hidden={promoSlide.id !== 'women-try-on'}>
-            <div className="reference-hero-demo-panel active">
-              <div className="reference-photo-step">
-                <OptimizedImage src={asset(referencePromoSlides[0].photo)} alt="" />
-                <strong>1. Your Photo</strong>
-              </div>
-              <span className="reference-demo-arrow" aria-hidden="true">→</span>
-              <div className="reference-result-step">
-                <span><SparkleLineIcon /> AI Try-On</span>
-                <OptimizedImage src={asset(referencePromoSlides[0].result)} alt="" />
-                <strong>2. AI Try-On Result</strong>
-              </div>
-              <div className="reference-piece-stack" aria-label="Outfit pieces">
-                {referencePromoSlides[0].pieces.map((image) => (
-                  <a href="/categories" tabIndex={promoSlide.id === 'women-try-on' ? 0 : -1} key={`women-try-on-${image}`}><OptimizedImage src={asset(image)} alt="" /></a>
-                ))}
-              </div>
+              )}
+              <a href="/categories">See all <span aria-hidden="true">→</span></a>
             </div>
           </div>
-          <div className="reference-note-stack" aria-hidden="true">
-            {referencePromoSlides.map((slide, index) => (
-              <p className={`reference-handwriting ${index === promoSlideIndex ? 'active' : ''}`} key={`${slide.id}-note`}>
-                {slide.note}
-              </p>
-              ))}
-          </div>
-          <div className="reference-side-note left">Explore<br />Infinite Looks<br />With AI</div>
-          <div className="reference-side-note right">Fashion<br />That Fits Your<br />Real Life</div>
+          {recommendedTryOnProducts.length > 0 ? (
+            <div
+              className={`reference-tryon-rail ${isTryOnDragging ? 'is-dragging' : ''}`}
+              id="recommended-tryon-rail"
+              ref={tryOnRailRef}
+              aria-label="Recommended products. Swipe, drag, or use the arrow keys to browse."
+              tabIndex={0}
+              onPointerDown={startTryOnDrag}
+              onPointerMove={moveTryOnDrag}
+              onPointerUp={endTryOnDrag}
+              onPointerCancel={endTryOnDrag}
+              onClickCapture={preventTryOnDragClick}
+              onKeyDown={handleTryOnRailKeys}
+            >
+              {recommendedTryOnProducts.map((product) => <ReferenceTryOnCard product={product} key={product.id} />)}
+            </div>
+          ) : (
+            <div className="reference-tryon-empty" role="status">
+              {productState.loading ? 'Finding pieces for you…' : 'Recommended products will appear when the catalog is available.'}
+            </div>
+          )}
         </section>
 
         <section className="reference-workflow reference-section">
           <ReferenceSectionTitle title="How Lookmefy Works" action="Three steps. A more confident you." />
           <div className="reference-step-grid">
-            <ReferenceStep number="01" title="Upload Your Photo" copy="Add a photo of yourself to create your digital try-on experience." href="/profile#upload-photo" icon={<ReferenceIcon name="upload" />} images={['category-women-hero.png']} />
-            <ReferenceStep number="02" title="Choose Outfits" copy="Browse our curated pieces or use your own wardrobe items." href="/categories" icon={<ReferenceIcon name="plus" />} images={['category-generated/jackets.png', 'category-icons/t-shirts-section.png', 'category-generated/jeans.png']} />
-            <ReferenceStep number="03" title="Get Your AI Look" copy="Let AI create realistic try-ons and style combinations in seconds." href="/custom-try-on" icon={<ReferenceIcon name="sparkle" />} images={['category-women-hero.png', 'ai-stylist-campaign.png', 'category-reference-hero.png']} />
+            <ReferenceStep number="01" title="Upload Your Photo" copy="Add a photo of yourself to create your digital try-on experience." href="/profile#upload-photo" icon={<ReferenceIcon name="upload" />} images={['workflow-step-upload-photo.png']} />
+            <ReferenceStep number="02" title="Choose Outfits" copy="Browse our curated pieces or use your own wardrobe items." href="/categories" icon={<ReferenceIcon name="plus" />} images={['workflow-step-choose-outfits.png']} />
+            <ReferenceStep number="03" title="Get Your AI Look" copy="Let AI create realistic try-ons and style combinations in seconds." href="/custom-try-on" icon={<ReferenceIcon name="sparkle" />} images={['workflow-step-ai-look.png']} />
           </div>
         </section>
+
+        <OneOutfitThreeWays />
 
         <section className="reference-hub reference-section">
           <ReferenceSectionTitle title="Your Style Hub" kicker="Everything you need in one place." action="Make fashion more you →" />
           <div className="reference-hub-grid">
-            <ReferenceHubCard title="My Wardrobe" copy="Organize your pieces and see new ways to style them." href="/closet" image="category-generated/jackets.png" icon={<ReferenceIcon name="hanger" />} />
-            <ReferenceHubCard title="Custom Try-On" copy="Try any look on you, with AI." href="/custom-try-on" image="category-women-hero.png" icon={<ReferenceIcon name="camera" />} />
-            <ReferenceHubCard title="AI Stylist" copy="Get personalized outfit recommendations." href="/style-bot" image="category-reference-bottoms.png" icon={<ReferenceIcon name="sparkle" />} />
-            <ReferenceHubCard title="Saved Looks" copy="Keep your favorite looks in one place." href="/wishlist" image="category-reference-hero.png" icon={<ReferenceIcon name="heart" />} />
+            <ReferenceHubCard title="My Wardrobe" copy="Organize your pieces and see new ways to style them." action="Open wardrobe" href="/closet" image="hub-card-wardrobe-editorial.png" imagePosition="center 32%" icon={<ReferenceIcon name="hanger" />} />
+            <ReferenceHubCard title="Custom Try-On" copy="Try any look on you, with AI." action="Start a try-on" href="/custom-try-on" image="hub-card-tryon-editorial.png" imagePosition="center 30%" icon={<ReferenceIcon name="camera" />} />
+            <ReferenceHubCard title="AI Stylist" copy="Get personalized outfit recommendations." action="Ask the stylist" href="/style-bot" image="hub-card-stylist-editorial.png" imagePosition="center 24%" icon={<ReferenceIcon name="sparkle" />} />
+            <ReferenceHubCard title="Saved Looks" copy="Keep your favorite looks in one place." action="View saved looks" href="/wishlist" image="hub-card-saved-editorial.png" imagePosition="center 30%" icon={<ReferenceIcon name="heart" />} />
           </div>
         </section>
 
         <section className="reference-products reference-section">
           <ReferenceSectionTitle title="Curated For You" kicker={productKicker} href="/categories" action="Shop all →" />
           <div className="reference-product-shell">
-            <div className="reference-product-rail" ref={productRailRef} aria-label="Curated products">
+            <div
+              className={`reference-product-rail ${isProductDragging ? 'is-dragging' : ''}`}
+              ref={productRailRef}
+              aria-label="Curated products. Swipe, drag, or use the arrow keys to browse."
+              tabIndex={0}
+              onPointerDown={startProductDrag}
+              onPointerMove={moveProductDrag}
+              onPointerUp={endProductDrag}
+              onPointerCancel={endProductDrag}
+              onClickCapture={preventProductDragClick}
+              onKeyDown={handleProductRailKeys}
+            >
               {curatedReferenceProducts.map((product) => <ReferenceProductCard product={product} key={product.id} />)}
               {productState.loading && !curatedReferenceProducts.length && <ReferenceProductStatusCard title="Loading live catalog" copy="Pulling available products, prices, colors, sizes, and material notes from the platform." />}
               {!productState.loading && !curatedReferenceProducts.length && <ReferenceProductStatusCard title="No available catalog items" copy={productState.error || 'Add or approve products in the catalog to show real options here.'} />}
             </div>
-            {curatedReferenceProducts.length > 5 && <button className="reference-rail-next" type="button" aria-label="More curated products" onClick={() => scrollRail(1)}>→</button>}
           </div>
         </section>
 
         <section className="reference-looks reference-section">
           <ReferenceSectionTitle title="Looks Made For You" kicker="AI styled. Real life ready." href="/categories" action="See more looks →" />
           <div className="reference-look-grid">
-            {referenceLooks.map((look) => <ReferenceLookCard look={look} key={look.title} />)}
+            {recommendedReferenceLooks.map((look) => <ReferenceLookCard look={look} key={look.title} />)}
           </div>
         </section>
 
-        <section className="reference-final-cta" aria-label="Build your digital wardrobe">
-          <OptimizedImage className="reference-final-bg" src={asset('ai-stylist-campaign.png')} alt="" />
+        <section className="reference-final-cta" aria-label="Ask the Lookmefy AI Stylist">
           <div className="reference-final-copy">
-            <span>Your style journey starts here</span>
-            <h2>Build Your Digital Wardrobe</h2>
-            <p>Try on outfits, get personalized recommendations, and discover a more confident you.</p>
-            <div className="reference-hero-actions">
-              <a className="reference-button reference-button-dark" href="/custom-try-on">Start Your First Try-On <span>→</span></a>
-              <a className="reference-button reference-button-light" href="/closet"><ClosetIcon /> Create My Wardrobe</a>
+            <span>Your personal AI stylist</span>
+            <h2>Confused about what to wear?</h2>
+            <p>Get outfit suggestions based on your style, occasion, and wardrobe.</p>
+            <a className="reference-button reference-button-dark" href="/style-bot"><SparkleLineIcon /> Chat with AI Stylist <span>→</span></a>
+          </div>
+          <div className="reference-final-preview" aria-hidden="true">
+            <div className="reference-final-preview-images">
+              {['look-card-casual-editorial.png', 'look-card-work-editorial.png', 'look-card-evening-editorial.png'].map((image) => (
+                <OptimizedImage src={asset(image)} alt="" key={image} />
+              ))}
+            </div>
+            <div className="reference-final-preview-copy">
+              <span><i>AI</i> What’s the occasion?</span>
+              <div>{['Work', 'Festive', 'Casual', 'Date', 'Travel'].map((occasion) => <em key={occasion}>{occasion}</em>)}</div>
+              <small>3 looks ready from your wardrobe</small>
             </div>
           </div>
-          <p className="reference-handwriting final active">More Outfits<br />A More You</p>
-          <div className="reference-final-side-note">Same You.<br />New<br />Possibilities.</div>
         </section>
       </main>
     </div>
@@ -3194,6 +3404,78 @@ function ReferenceSectionTitle({ title, kicker = '', action = '', href = '' }) {
   );
 }
 
+const oneOutfitLooks = [
+  { title: 'Casual', copy: 'Coffee runs, clearer days.', panel: 1 },
+  { title: 'Work', copy: 'Meetings, made easier.', panel: 2 },
+  { title: 'Evening', copy: 'Same blazer, bolder nights.', panel: 3 }
+];
+
+const oneOutfitPanelImages = {
+  0: 'category-generated/jackets.png',
+  1: 'look-card-casual-editorial.png',
+  2: 'look-card-work-editorial.png',
+  3: 'look-card-evening-editorial.png'
+};
+
+function OneOutfitPanel({ panel, alt }) {
+  return (
+    <span className={`reference-three-ways-image reference-three-ways-panel-${panel}`}>
+      <OptimizedImage src={asset(oneOutfitPanelImages[panel] || 'one-outfit-three-ways.png')} alt={alt} highResolution={false} />
+    </span>
+  );
+}
+
+function OneOutfitThreeWays() {
+  return (
+    <section className="reference-three-ways reference-section" aria-labelledby="one-outfit-three-ways-title">
+      <div className="reference-three-ways-surface">
+        <header className="reference-three-ways-header">
+          <div>
+            <span className="reference-three-ways-eyebrow">Lookmefy</span>
+            <h2 id="one-outfit-three-ways-title">One Outfit, Three Ways</h2>
+            <p>See how one wardrobe piece transforms across your day.</p>
+          </div>
+        </header>
+
+        <div className="reference-three-ways-stage">
+          <article className="reference-three-ways-source">
+            <span className="reference-three-ways-label">From your wardrobe</span>
+            <OneOutfitPanel panel={0} alt="A light beige blazer from your wardrobe" />
+            <div>
+              <h3>The Beige Blazer</h3>
+              <p>Your starting piece</p>
+            </div>
+          </article>
+
+          <span className="reference-three-ways-source-arrow" aria-hidden="true">→</span>
+
+          <div className="reference-three-ways-look-rail" aria-label="Three ways to style the beige blazer">
+            {oneOutfitLooks.map((look, index) => (
+              <article className="reference-three-ways-look" key={look.title}>
+                {index > 0 && <span className="reference-three-ways-card-arrow" aria-hidden="true">→</span>}
+                <OneOutfitPanel panel={look.panel} alt={`The beige blazer styled for a ${look.title.toLowerCase()} look`} />
+                <div>
+                  <h3>{look.title}</h3>
+                  <p>{look.copy}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+
+        <a className="reference-three-ways-cta" href="/closet">
+          Try it with my wardrobe <span aria-hidden="true">→</span>
+        </a>
+
+        <footer className="reference-three-ways-footer">
+          <span>AI styling for your real life</span>
+          <span>Same wardrobe. A brighter you.</span>
+        </footer>
+      </div>
+    </section>
+  );
+}
+
 function ReferenceStep({ number, title, copy, href, icon, images }) {
   return (
     <a className="reference-step-card" href={href}>
@@ -3207,12 +3489,15 @@ function ReferenceStep({ number, title, copy, href, icon, images }) {
   );
 }
 
-function ReferenceHubCard({ title, copy, href, image, icon }) {
+function ReferenceHubCard({ title, copy, action, href, image, imagePosition = 'center', icon }) {
   return (
-    <a className="reference-hub-card" href={href}>
-      <span className="reference-hub-icon">{icon}</span>
-      <span><strong>{title}</strong><small>{copy}</small><em>→</em></span>
-      <OptimizedImage src={asset(image)} alt="" />
+    <a className="reference-hub-card" href={href} aria-label={`${action}: ${title}`}>
+      <span className="reference-hub-media"><OptimizedImage src={asset(image)} alt={`${title} preview`} style={{ objectPosition: imagePosition }} /></span>
+      <span className="reference-hub-body">
+        <span className="reference-hub-heading"><span className="reference-hub-icon">{icon}</span><strong>{title}</strong></span>
+        <small>{copy}</small>
+        <span className="reference-hub-action">{action}<span aria-hidden="true">→</span></span>
+      </span>
     </a>
   );
 }
@@ -3226,6 +3511,28 @@ function ReferenceProductStatusCard({ title, copy }) {
   );
 }
 
+function ReferenceTryOnCard({ product }) {
+  const id = wishlistProductId(product);
+  const detailHref = `/product/${encodeURIComponent(id)}`;
+  const displayName = referenceProductDisplayName(product);
+  return (
+    <article className="reference-tryon-card">
+      <a className="reference-tryon-image" href={detailHref} aria-label={`View ${displayName}`}>
+        <OptimizedImage src={product.imageUrl} alt={displayName} highResolution={false} />
+      </a>
+      <div className="reference-tryon-copy">
+        <a href={detailHref}><strong>{displayName}</strong></a>
+        <span>{formatMoney(product.price || 0, product.currency)}</span>
+        <div className="reference-tryon-actions">
+          <a className="reference-tryon-button" href={`${detailHref}#ai-try-on`} onClick={() => recordEvent('tryon_recommendation_click', { productId: id })}>
+            <CameraIcon /><span>Try On</span>
+          </a>
+        </div>
+      </div>
+    </article>
+  );
+}
+
 function ReferenceProductCard({ product }) {
   const href = `/product/${encodeURIComponent(product.id)}`;
   const displayName = referenceProductDisplayName(product);
@@ -3234,7 +3541,9 @@ function ReferenceProductCard({ product }) {
   const hasDiscount = product.compareAtPrice && product.compareAtPrice > product.price;
   return (
     <a className="reference-product-card reference-product-card-live" href={href}>
-      <OptimizedImage src={product.imageUrl} alt={product.name} highResolution={false} />
+      <span className="reference-product-media">
+        <OptimizedImage src={product.imageUrl} alt={product.name} highResolution={false} />
+      </span>
       <strong title={product.name}>{displayName}</strong>
       <small>{category}</small>
       {optionSummary && <em className="reference-product-options">{optionSummary}</em>}
@@ -3247,12 +3556,32 @@ function ReferenceProductCard({ product }) {
 }
 
 function ReferenceLookCard({ look }) {
+  const recommendedPieces = Array.isArray(look.recommendations)
+    ? look.recommendations.map((product) => ({
+      key: String(product.id),
+      src: product.imageUrl,
+      alt: referenceProductDisplayName(product)
+    }))
+    : [];
   return (
-    <a className="reference-look-card" href={look.href}>
-      <OptimizedImage className="reference-look-hero" src={asset(look.hero)} alt="" />
-      <span className="reference-look-copy"><strong>{look.title}</strong><small>{look.copy}</small><em>→</em></span>
+    <a className="reference-look-card" href={look.href} aria-label={`Explore the ${look.title} style edit`}>
+      <span className="reference-look-visual">
+        <OptimizedImage
+          className="reference-look-hero"
+          src={asset(look.hero)}
+          alt={`Models wearing the ${look.title} style edit`}
+          style={{ objectPosition: look.position }}
+        />
+      </span>
+      <span className="reference-look-copy">
+        <span className="reference-look-meta"><small className="reference-look-eyebrow">Collection edit</small><small>{recommendedPieces.length} real picks</small></span>
+        <strong>{look.title}</strong>
+        <small>{look.copy}</small>
+        <em><span>View {look.title}</span><span aria-hidden="true">→</span></em>
+      </span>
       <span className="reference-look-pieces">
-        {look.pieces.map((piece) => <OptimizedImage src={asset(piece)} alt="" key={piece} />)}
+        {recommendedPieces.map((piece) => <span key={piece.key} title={piece.alt || undefined}><OptimizedImage src={piece.src} alt={piece.alt} highResolution={false} /></span>)}
+        {!recommendedPieces.length && <span className="reference-look-empty">Live products coming soon</span>}
       </span>
     </a>
   );
@@ -3303,11 +3632,11 @@ function ReferenceFooter() {
             {socialLinks.map((item) => <a href={item.href} target="_blank" rel="noreferrer" aria-label={item.label} title={item.label} key={item.label}><SocialLogo name={item.icon} /></a>)}
           </div>
         </section>
-        <nav className="reference-footer-column" aria-label="Shop">
+        <nav className="reference-footer-column reference-footer-shop" aria-label="Shop">
           <h2>Shop</h2>
           {shopLinks.map(([label, href]) => <a href={href} key={href}>{label}</a>)}
         </nav>
-        <nav className="reference-footer-column" aria-label="Help">
+        <nav className="reference-footer-column reference-footer-help" aria-label="Help">
           <h2>Help</h2>
           {helpLinks.map(([label, href]) => <a href={href} key={href}>{label}</a>)}
         </nav>
@@ -4674,6 +5003,7 @@ function ClosetPage({ user, setUser }) {
   const [selectedIds, setSelectedIds] = useState([]);
   const [comboSlots, setComboSlots] = useState({});
   const [activeWardrobeKey, setActiveWardrobeKey] = useState('topwear');
+  const [activeWardrobeSectionLabel, setActiveWardrobeSectionLabel] = useState('Tops');
   const [filter, setFilter] = useState('all');
   const [generating, setGenerating] = useState(false);
   const [message, setMessage] = useState('');
@@ -5123,7 +5453,26 @@ function ClosetPage({ user, setUser }) {
   const previewAlt = showingGeneratedOutfit ? latestOutfit?.title || 'Generated wardrobe look' : 'Current wardrobe model';
   const visibleWardrobeStageMessage = message;
   const wardrobeStageMessageIsError = /error|missing|not enough|failed|could not|cannot|unable|timed out|timeout|select|upload|try again|no other/i.test(message);
-  const mobileWardrobeSections = orderedWardrobeSections.filter((section) => section.items.length || ['Tops', 'Bottoms'].includes(section.label)).slice(0, 5);
+  const accessoryItems = closetItems.filter((item) => item.category === 'accessories');
+  const fullOutfitSection = {
+    label: 'Full Outfit',
+    icon: <WardrobeOuterwearIcon />,
+    categories: ['dresses', 'ethnic', 'suits'],
+    items: closetItems.filter((item) => ['dresses', 'ethnic', 'suits'].includes(item.category))
+  };
+  const mobileWardrobeSections = [
+    { ...wardrobeSections[0], icon: <WardrobeTopIcon /> },
+    { ...wardrobeSections[1], icon: <WardrobeBottomIcon /> },
+    { ...wardrobeSections[2], icon: <WardrobeOuterwearIcon /> },
+    { ...wardrobeSections[3], label: 'Footwear', icon: <WardrobeFootwearIcon /> },
+    { label: 'Accessories', icon: <SparkleLineIcon />, categories: ['accessories'], items: accessoryItems },
+    fullOutfitSection,
+    { label: 'Watches', icon: <WardrobeWatchIcon />, categories: ['accessories'], items: accessoryItems },
+    { label: 'Bags & Hats', icon: <BagIcon />, categories: ['accessories'], items: accessoryItems }
+  ];
+  const desktopWardrobeSections = [...mobileWardrobeSections];
+  const availableWardrobeOrder = orderedWardrobeSections.map((section) => section.label).join(',');
+  const activeDesktopWardrobeSection = desktopWardrobeSections.find((section) => section.label === activeWardrobeSectionLabel) || desktopWardrobeSections[0];
   const activeMobileWardrobeSection = mobileWardrobeSections.find((section) => section.label === mobileWardrobePicker) || null;
   const wardrobeFallbackForSection = (section) => (
     section.label === 'Bottoms' ? asset('category-icons/jeans.png') : asset('category-icons/tops.png')
@@ -5150,28 +5499,53 @@ function ClosetPage({ user, setUser }) {
             <button type="button" aria-label="Search wardrobe" onClick={() => openRoute('/closet/items')}><SearchIcon /></button>
           </div>
 
-          <div className="wardrobe-category-stack">
-            {orderedWardrobeSections.map((section) => (
-              <section className={`wardrobe-category-panel ${section.items.length ? 'has-items' : 'is-empty'}`} key={section.label}>
-                <button className="wardrobe-category-toggle" type="button" onClick={() => setFilter(section.categories[0])} aria-label={`Filter ${section.label}`}>
+          <div className="wardrobe-desktop-browser">
+            <section className="wardrobe-desktop-inventory" aria-labelledby="wardrobe-active-category">
+              <header>
+                <div>
+                  <h2 id="wardrobe-active-category">{activeDesktopWardrobeSection.label}</h2>
+                  <small>{activeDesktopWardrobeSection.items.length} {activeDesktopWardrobeSection.items.length === 1 ? 'item' : 'items'}</small>
+                </div>
+                <a href="/closet/add">+ Add</a>
+              </header>
+              {activeDesktopWardrobeSection.items.length ? (
+                <div className="wardrobe-desktop-item-grid">
+                  {activeDesktopWardrobeSection.items.map((item) => (
+                    <button className={selectedIds.includes(item.id) ? 'active' : ''} type="button" key={item.id} onClick={() => handleWardrobeItemClick(item)}>
+                      <img src={item.imageUrl} alt={item.name} />
+                      <span>{item.name}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="wardrobe-desktop-empty">
+                  <strong>No {activeDesktopWardrobeSection.label.toLowerCase()} yet</strong>
+                  <span>Upload an item to see it here.</span>
+                  <a href="/closet/add">Add item</a>
+                </div>
+              )}
+            </section>
+            <nav className="wardrobe-desktop-categories" aria-label="Wardrobe categories" data-available-order={availableWardrobeOrder}>
+              {desktopWardrobeSections.map((section) => (
+                <button
+                  className={section.label === activeDesktopWardrobeSection.label ? 'active' : ''}
+                  type="button"
+                  key={section.label}
+                  onClick={() => {
+                    setActiveWardrobeSectionLabel(section.label);
+                    setFilter(section.categories[0]);
+                  }}
+                >
                   <span>{section.icon}</span>
                   <strong>{section.label}</strong>
                   <small>{section.items.length}</small>
                 </button>
-                <div className="wardrobe-thumb-grid">
-                  {section.items.length ? section.items.slice(0, 3).map((item) => (
-                    <button className={selectedIds.includes(item.id) ? 'active' : ''} type="button" key={item.id} onClick={() => handleWardrobeItemClick(item)} title={item.name}>
-                      <img src={item.imageUrl} alt={item.name} />
-                    </button>
-                  )) : (
-                    <a className="wardrobe-empty-thumb" href="/closet/add">Add</a>
-                  )}
-                </div>
-              </section>
-            ))}
+              ))}
+            </nav>
+            <button className="wardrobe-desktop-tryon" type="button" onClick={() => generateOutfit(selectedIds, { title: 'My wardrobe look' })} disabled={generating || selectedIds.length === 0}>
+              <TryOnIcon /> {generating ? 'Generating...' : 'Try On'}
+            </button>
           </div>
-
-          <a className="wardrobe-add-button" href="/closet/add">+ Add New Item</a>
         </aside>
 
         <section className="wardrobe-model-stage" aria-label="Wardrobe model preview" style={{ background: '#d7d7d5', backgroundImage: 'none' }}>
@@ -5194,12 +5568,28 @@ function ClosetPage({ user, setUser }) {
               <span><CapIcon /></span>
               <small>Cap</small>
             </button>
-            <button type="button" onClick={() => applyAccessorySlot('goggles', 'Sunglasses')}>
-              <span><SunglassesIcon /></span>
-              <small>Glasses</small>
+            <button type="button" onClick={() => pickMobileWardrobeSection(fullOutfitSection)}>
+              <span><WardrobeOuterwearIcon /></span>
+              <small>Full Outfit</small>
             </button>
           </div>
           <a className="wardrobe-mobile-add-item" href="/closet/add">+ Add Item</a>
+          <div className="wardrobe-reference-tools left" aria-label="Garment categories">
+            {mobileWardrobeSections.slice(0, 4).map((section) => (
+              <button type="button" key={section.label} onClick={() => pickMobileWardrobeSection(section)}>
+                <span>{section.icon}</span>
+                <small>{section.label}</small>
+              </button>
+            ))}
+          </div>
+          <div className="wardrobe-reference-tools right" aria-label="Accessory categories">
+            {mobileWardrobeSections.slice(4).map((section) => (
+              <button type="button" key={section.label} onClick={() => pickMobileWardrobeSection(section)}>
+                <span>{section.icon}</span>
+                <small>{section.label}</small>
+              </button>
+            ))}
+          </div>
           {!state.loading && closetItems.length === 0 && (
             <section className="wardrobe-empty-state" aria-labelledby="wardrobe-empty-title">
               <h2 id="wardrobe-empty-title">Your wardrobe is empty</h2>
@@ -5255,9 +5645,9 @@ function ClosetPage({ user, setUser }) {
               <span><CapIcon /></span>
               <small>Cap</small>
             </button>
-            <button type="button" onClick={() => applyAccessorySlot('goggles', 'Sunglasses')}>
-              <span><SunglassesIcon /></span>
-              <small>Sunglasses</small>
+            <button type="button" onClick={() => pickMobileWardrobeSection(fullOutfitSection)}>
+              <span><WardrobeOuterwearIcon /></span>
+              <small>Full Outfit</small>
             </button>
           </div>
 
@@ -5287,45 +5677,60 @@ function ClosetPage({ user, setUser }) {
 
           <div className="wardrobe-stage-actions">
             <button className="wardrobe-generate-button" type="button" onClick={() => generateOutfit(selectedIds, { title: 'My wardrobe look' })} disabled={generating || selectedIds.length === 0}>
-              <SparkleLineIcon />
-              <span>{generating ? 'Generating...' : 'Generate Look'}</span>
+              <TryOnIcon />
+              <span>{generating ? 'Generating...' : 'Try On'}</span>
             </button>
             <button className="wardrobe-heart-button" type="button" onClick={() => latestOutfitImage ? setFullscreenImage({ src: latestOutfitImage, alt: latestOutfit.title, title: latestOutfit.title }) : setMessage('Generate a look first to preview it.') } aria-label="Open latest look"><HeartIcon /></button>
           </div>
         </section>
 
         <aside className="wardrobe-recommendations" aria-label="AI recommendations">
-          <div className="wardrobe-recommendations-head">
-            <h2><SparkleLineIcon /> Recommendations</h2>
-            <button className="wardrobe-refresh-button" type="button" onClick={() => askForSuggestions('today casual')}>Refresh</button>
-          </div>
-          <div className="wardrobe-recommendation-tabs">
-            {closetOccasions.slice(0, 4).map((idea, index) => (
-              <button className={occasion === idea ? 'active' : ''} type="button" key={idea} onClick={() => askForSuggestions(idea)}>{idea}</button>
-            ))}
-          </div>
+          <section className="wardrobe-recommendations-panel">
+            <div className="wardrobe-recommendations-head">
+              <h2>Recommendations</h2>
+              <a href="/closet/add">+ <span>Add Item</span></a>
+            </div>
+            <div className="wardrobe-recommendation-tabs">
+              {['All Looks', 'Casual', 'Party', 'Office', 'Wedding'].map((idea) => (
+                <button className={(idea === 'All Looks' && !['casual', 'party', 'office', 'wedding'].includes(occasion)) || occasion === idea.toLowerCase() ? 'active' : ''} type="button" key={idea} onClick={() => {
+                  const nextOccasion = idea === 'All Looks' ? '' : idea.toLowerCase();
+                  setOccasion(nextOccasion);
+                  if (nextOccasion) askForSuggestions(nextOccasion);
+                }}>{idea}</button>
+              ))}
+            </div>
 
-          <div className="wardrobe-recommendation-list">
-            {wardrobeRecommendationCards.length ? wardrobeRecommendationCards.map((card) => (
-              <article className="wardrobe-recommendation-card combo" key={card.id}>
-                <button className="wardrobe-recommendation-combo" type="button" onClick={() => tryRecommendedLook(card)}>
-                  <span className="wardrobe-combo-hero"><img src={card.items[0].imageUrl} alt={card.items[0].name} /></span>
-                  {card.items.length > 1 && <span className="wardrobe-combo-strip">
-                    {card.items.slice(1, 4).map((item) => <img key={`${card.id}-${item.id}`} src={item.imageUrl} alt={item.name} />)}
-                  </span>}
-                  <small>{card.items.length} wardrobe {card.items.length === 1 ? 'piece' : 'pieces'} · {occasion}</small>
-                  <strong>{card.title}</strong>
-                  {card.reason && <span className="wardrobe-recommendation-reason">{card.reason}</span>}
-                  <em>{card.partial ? 'Select piece' : 'Try this look'}</em>
-                </button>
-              </article>
-            )) : (
-              <article className="wardrobe-recommendation-card empty">
-                <p>Add a few wardrobe items to unlock outfit recommendations.</p>
-                <a href="/closet/add">Add New Item</a>
-              </article>
+            <div className="wardrobe-recommendation-list">
+              {wardrobeRecommendationCards.length ? wardrobeRecommendationCards.map((card) => (
+                <article className="wardrobe-recommendation-card combo" key={card.id}>
+                  <button className="wardrobe-recommendation-combo" type="button" onClick={() => tryRecommendedLook(card)}>
+                    <span className="wardrobe-combo-hero"><img src={card.items[0].imageUrl} alt={card.items[0].name} /></span>
+                    {card.items.length > 1 && <span className="wardrobe-combo-strip">
+                      {card.items.slice(1, 4).map((item) => <img key={`${card.id}-${item.id}`} src={item.imageUrl} alt={item.name} />)}
+                    </span>}
+                    <strong>{card.title}</strong>
+                    {card.reason && <span className="wardrobe-recommendation-reason">{card.reason}</span>}
+                    <em>{card.partial ? 'Select piece' : 'Try this look'}</em>
+                  </button>
+                </article>
+              )) : (
+                <div className="wardrobe-recommendations-empty">
+                  <strong>No recommendations yet</strong>
+                  <span>Add wardrobe photos to receive outfit recommendations.</span>
+                </div>
+              )}
+            </div>
+            <button className="wardrobe-refresh-button" type="button" onClick={() => askForSuggestions(occasion || 'today casual')}>↻ <span>Refresh</span></button>
+          </section>
+
+          <section className="wardrobe-saved-outfits">
+            <header><h3>Saved Outfits</h3><a href="/generation-history">See All</a></header>
+            {closetOutfits.length ? (
+              <div>{closetOutfits.slice(0, 3).map((outfit) => <button type="button" key={outfit.id} onClick={() => setFullscreenImage({ src: outfit.imageUrl, alt: outfit.title, title: outfit.title })}><img src={outfit.imageUrl} alt={outfit.title} /></button>)}</div>
+            ) : (
+              <p><HeartIcon /> <span>Your generated outfits will appear here.</span></p>
             )}
-          </div>
+          </section>
         </aside>
       </div>
       {fullscreenImage && <ImageLightbox image={fullscreenImage} onClose={() => setFullscreenImage(null)} />}
@@ -6171,6 +6576,54 @@ function readWishlistProductIds() {
   return [...new Set(ids)];
 }
 
+function productDetailSnapshotKey(id) {
+  return `${PRODUCT_DETAIL_SNAPSHOT_PREFIX}:${encodeURIComponent(String(id || ''))}`;
+}
+
+function normalizeProductDetailSnapshot(product) {
+  if (!product || typeof product !== 'object') return null;
+  const id = wishlistProductId(product) || product.id || product._id;
+  if (!id) return null;
+  return {
+    ...product,
+    id: String(id),
+    _id: product._id || String(id),
+    name: product.name || 'Lookmefy product',
+    brand: product.brand || product.sourceLabel || product.source || 'Lookmefy',
+    category: product.category || '',
+    currency: product.currency || 'INR',
+    imageUrl: product.imageUrl || '',
+  };
+}
+
+function readProductDetailSnapshot(id) {
+  const normalizedId = String(id || '');
+  if (!normalizedId) return null;
+  const memoryProduct = productDetailLocalCache.get(normalizedId);
+  if (memoryProduct) return memoryProduct;
+  try {
+    const payload = JSON.parse(localStorage.getItem(productDetailSnapshotKey(normalizedId)) || 'null');
+    const product = normalizeProductDetailSnapshot(payload?.product || payload);
+    if (product) productDetailLocalCache.set(normalizedId, product);
+    return product;
+  } catch {
+    return null;
+  }
+}
+
+function writeProductDetailSnapshot(product) {
+  const normalizedProduct = normalizeProductDetailSnapshot(product);
+  if (!normalizedProduct) return null;
+  productDetailLocalCache.set(normalizedProduct.id, normalizedProduct);
+  try {
+    localStorage.setItem(productDetailSnapshotKey(normalizedProduct.id), JSON.stringify({
+      savedAt: Date.now(),
+      product: normalizedProduct,
+    }));
+  } catch {}
+  return normalizedProduct;
+}
+
 function writeWishlistProductIds(ids) {
   const normalizedIds = [...new Set((ids || []).map(String).filter(Boolean))];
   ['fitlook_wishlist', 'fitlook_wishlist_ids', 'fitlook:wishlist', 'wishlist'].forEach((key) => {
@@ -6857,6 +7310,59 @@ function styleBotProductKey(product = {}) {
   return String(product?.id || product?.sourceUrl || product?.affiliateLink || product?.name || 'product');
 }
 
+function ConciergeBotIcon() {
+  const [imageFailed, setImageFailed] = useState(false);
+  if (imageFailed) return <AiBotFaceIcon />;
+  return (
+    <img
+      src={CHATBOT_ICON_SRC}
+      alt=""
+      aria-hidden="true"
+      loading="eager"
+      decoding="async"
+      onError={() => setImageFailed(true)}
+    />
+  );
+}
+
+function AiBotFaceIcon() {
+  return (
+    <svg className="concierge-bot-fallback-icon" viewBox="0 0 64 64" aria-hidden="true">
+      <circle cx="32" cy="32" r="27" />
+      <rect x="17" y="23" width="30" height="22" rx="10" />
+      <path d="M27 31.5c-2.8 0-4.7 1.8-5.8 4" />
+      <path d="M37 31.5c2.8 0 4.7 1.8 5.8 4" />
+      <path d="M32 18v-6" />
+      <circle cx="32" cy="10" r="3.5" />
+      <path d="M18 36c-4.2-.6-6.5-2.8-6.5-6.2 0-3.2 2.2-5.4 6.5-6.1" />
+      <path d="M46 36c4.2-.6 6.5-2.8 6.5-6.2 0-3.2-2.2-5.4-6.5-6.1" />
+      <path d="m47 18 1.2 3.2 3.3 1.1-3.3 1.1L47 27.5l-1.2-4.1-3.3-1.1 3.3-1.1L47 18Z" />
+    </svg>
+  );
+}
+
+function styleBotChatStorageKey(user) {
+  const identity = String(user?.id || user?.email || user?.phone || user?.username || 'guest').trim() || 'guest';
+  return `${STYLE_BOT_CHAT_STORAGE_PREFIX}:${identity}`;
+}
+
+function normalizeStoredStyleBotRuns(runs = []) {
+  return (Array.isArray(runs) ? runs : [])
+    .map((run) => ({
+      ...run,
+      id: String(run?.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`),
+      query: String(run?.query || '').trim(),
+      reply: String(run?.reply || ''),
+      products: Array.isArray(run?.products) ? run.products : [],
+      outfits: Array.isArray(run?.outfits) ? run.outfits : [],
+      actions: Array.isArray(run?.actions) ? run.actions : [],
+      loading: false,
+      searchError: run?.loading ? 'This response was interrupted. Send the prompt again to retry.' : String(run?.searchError || '')
+    }))
+    .filter((run) => run.query)
+    .slice(-30);
+}
+
 function isOnlineAiStudioProduct(product = {}) {
   const source = String([product.source, product.searchSource, product.sourceLabel].filter(Boolean).join(' ')).toLowerCase();
   if (/lookmefy|catalog/.test(source)) return false;
@@ -6925,10 +7431,40 @@ function StyleBotPage({ user, setUser }) {
   const [chatTryOnLoading, setChatTryOnLoading] = useState({});
   const [chatTryOnErrors, setChatTryOnErrors] = useState({});
   const [fullscreenImage, setFullscreenImage] = useState(null);
+  const [mobileHistoryOpen, setMobileHistoryOpen] = useState(false);
+  const [chatHistoryHydrated, setChatHistoryHydrated] = useState(false);
   const conciergeScrollRef = useRef(null);
   const conciergeEndRef = useRef(null);
-  const promptIdeas = ['office outfit from my wardrobe', 'black party dress under 1000', 'search online for sneakers', 'how do tokens work?'];
+  const promptIdeas = ['Style my wardrobe', 'Wedding look', 'Under ₹2,000', 'How do credits work?'];
   const creditCount = Number(user?.tokens || 0);
+  const aiThinking = busy || runs.some((run) => run.loading);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setChatHistoryHydrated(false);
+      return;
+    }
+    try {
+      const stored = JSON.parse(localStorage.getItem(styleBotChatStorageKey(user)) || 'null');
+      setRuns(normalizeStoredStyleBotRuns(stored?.runs || []));
+      setConversationId(String(stored?.conversationId || ''));
+    } catch {
+      setRuns([]);
+      setConversationId('');
+    } finally {
+      setChatHistoryHydrated(true);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id || !chatHistoryHydrated) return;
+    const payload = {
+      conversationId,
+      runs: normalizeStoredStyleBotRuns(runs),
+      savedAt: new Date().toISOString()
+    };
+    localStorage.setItem(styleBotChatStorageKey(user), JSON.stringify(payload));
+  }, [chatHistoryHydrated, conversationId, runs, user]);
 
   useEffect(() => {
     if (!user || runs.length === 0) return undefined;
@@ -7012,6 +7548,7 @@ function StyleBotPage({ user, setUser }) {
     setChatTryOns({});
     setChatTryOnLoading({});
     setChatTryOnErrors({});
+    setMobileHistoryOpen(false);
   };
 
   const generateChatTryOn = async (product) => {
@@ -7057,12 +7594,45 @@ function StyleBotPage({ user, setUser }) {
       </aside>
 
       <section className="concierge-workspace" aria-label="Lookmefy Concierge">
+        <div className="concierge-mobile-assistant-bar">
+          <button className="concierge-mobile-history-trigger" type="button" aria-label="Open chat history" aria-expanded={mobileHistoryOpen} onClick={() => setMobileHistoryOpen(true)}><span aria-hidden="true" /></button>
+          <span className={`concierge-mobile-assistant-avatar ${aiThinking ? 'thinking' : ''}`} aria-label={aiThinking ? 'AI Stylist is thinking' : 'AI Stylist'}><ConciergeBotIcon /></span>
+          <span><strong>AI Stylist</strong><small><i aria-hidden="true" />Active now</small></span>
+          <button className="concierge-mobile-new-chat-button" type="button" aria-label="New chat" onClick={startNewSession}>New chat</button>
+        </div>
+        <div className={`concierge-mobile-history ${mobileHistoryOpen ? 'open' : ''}`} aria-hidden={!mobileHistoryOpen}>
+          <button className="concierge-mobile-history-backdrop" type="button" aria-label="Close chat history" onClick={() => setMobileHistoryOpen(false)} />
+          <div className="concierge-mobile-history-panel" role="dialog" aria-modal="true" aria-label="AI Stylist chat history">
+            <div className="concierge-mobile-history-head">
+              <span><strong>Chat history</strong><small>AI Stylist sessions</small></span>
+              <button type="button" aria-label="Close chat history" onClick={() => setMobileHistoryOpen(false)}>×</button>
+            </div>
+            <button className="concierge-mobile-history-new" type="button" onClick={startNewSession}>+ New chat</button>
+            <div className="concierge-mobile-history-list">
+              {sessionHistory.length ? sessionHistory.map((run, index) => (
+                <button type="button" key={run.id} onClick={() => { setQuery(run.query); setMobileHistoryOpen(false); }}>
+                  <span>{String(sessionHistory.length - index).padStart(2, '0')}</span>
+                  <strong>{run.query}</strong>
+                  <small>{run.loading ? 'Curating' : run.searchError ? 'Needs retry' : `${run.products.length} suggestions`}</small>
+                </button>
+              )) : <p>No chats yet. Start with a styling question.</p>}
+            </div>
+          </div>
+        </div>
         <div className="concierge-chat-head"><span className="concierge-status-dot" aria-hidden="true" /><strong>Lookmefy Concierge</strong><small>{creditCount} credits</small></div>
         <div className="concierge-scroll" ref={conciergeScrollRef}>
-          <div className="concierge-message assistant">
-            <p className="concierge-message-label">Lookmefy Concierge</p>
-            <div className="concierge-bubble">Welcome. Share the item, occasion, color, or budget you have in mind and I’ll curate a considered edit for your wardrobe.</div>
-          </div>
+          {!runs.length && (
+            <div className="concierge-mobile-welcome">
+              <span className="concierge-mobile-orb"><ConciergeBotIcon /></span>
+              <h2>What can I help you style?</h2>
+              <p>Ask about your wardrobe, an occasion, a budget, or a piece you want to wear.</p>
+              <div>
+                <button type="button" onClick={() => setQuery('Create a work outfit from my wardrobe')}>Create a work outfit from my wardrobe</button>
+                <button type="button" onClick={() => setQuery('Find a wedding look under Rs 2000')}>Find a wedding look under Rs 2000</button>
+                <button type="button" onClick={() => setQuery('Help me style sneakers today')}>Help me style sneakers today</button>
+              </div>
+            </div>
+          )}
           {runs.map((run) => (
             <div className="concierge-run" key={run.id}>
               <div className="concierge-message user"><p className="concierge-message-label">You</p><div className="concierge-bubble">{run.query}</div></div>
@@ -7117,8 +7687,8 @@ function StyleBotPage({ user, setUser }) {
           <div className="concierge-scroll-anchor" ref={conciergeEndRef} aria-hidden="true" />
         </div>
         <form className="concierge-composer" onSubmit={submit}>
-          <div><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Ask your stylist anything..." aria-label="Ask Lookmefy Concierge" /><button type="submit" disabled={busy || !query.trim()} aria-label={busy ? 'Curating suggestions' : 'Send message'} title={busy ? 'Curating suggestions' : 'Send message'}>{busy ? '...' : '→'}</button></div>
-          <section aria-label="Prompt ideas">{promptIdeas.slice(0, 3).map((idea) => <button type="button" key={idea} onClick={() => setQuery(idea)}>{idea}</button>)}</section>
+          <div><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Ask your stylist anything..." aria-label="Ask Lookmefy Concierge" /><button type="submit" disabled={busy || !query.trim()} aria-label={busy ? 'Curating suggestions' : 'Send message'} title={busy ? 'Curating suggestions' : 'Send message'}>{busy ? '...' : <SendIcon />}</button></div>
+          <section aria-label="Prompt ideas"><div className="concierge-quick-head"><span>Quick prompts</span><span>See more ›</span></div>{promptIdeas.slice(0, 3).map((idea) => <button type="button" key={idea} onClick={() => setQuery(idea)}>{idea}</button>)}</section>
         </form>
       </section>
       {fullscreenImage && <ImageLightbox image={fullscreenImage} onClose={() => setFullscreenImage(null)} />}
@@ -7154,7 +7724,6 @@ function StyleBotProduct({ product, tryOn, loading, error, onFullscreen, onTryOn
   const onlineProduct = isOnlineAiStudioProduct(product);
   const hasUsableTryOn = Boolean(tryOn?.imageUrl) && !tryOnImageFailed;
   const displayedImage = hasUsableTryOn ? String(tryOn.imageUrl) : productImage;
-  const externalShop = Boolean(product.affiliateLink || product.sourceUrl);
   const localProduct = !onlineProduct && !product.searchLink && Boolean(product.id);
   const canTryOn = !product.searchLink
     && product.tryOnAvailable !== false
@@ -7165,10 +7734,8 @@ function StyleBotProduct({ product, tryOn, loading, error, onFullscreen, onTryOn
   const visibleBrand = ['amazon', 'web'].includes(String(product.source || '').toLowerCase()) && displayBrand(product).toLowerCase() === 'amazon'
     ? 'Online retailer'
     : displayBrand(product);
-  const localDetailHref = `/product/${encodeURIComponent(product.id)}`;
-  const shopHref = product.affiliateLink || product.sourceUrl || localDetailHref;
-  const detailHref = onlineProduct ? shopHref : localDetailHref;
-  const detailIsExternal = onlineProduct && externalShop;
+  const canOpenDetail = Boolean(product.id) && !product.searchLink;
+  const localDetailHref = canOpenDetail ? `/product/${encodeURIComponent(product.id)}` : '';
 
   useEffect(() => {
     setTryOnImageFailed(false);
@@ -7178,17 +7745,46 @@ function StyleBotProduct({ product, tryOn, loading, error, onFullscreen, onTryOn
     setProductImageFailed(false);
   }, [productImage]);
 
+  const openProductPreview = () => {
+    if (!displayedImage) return;
+    onFullscreen({
+      src: displayedImage,
+      alt: `${hasUsableTryOn ? 'AI try-on' : 'Product photo'} for ${product.name}`,
+      title: product.name,
+    });
+  };
+  const openProductDetail = () => {
+    writeProductDetailSnapshot({
+      ...product,
+      brand: product.brand || visibleBrand,
+      sourceLabel: product.sourceLabel || (onlineProduct ? 'Lookmefy AI result' : product.sourceLabel),
+    });
+    recordEvent('product_click', { productId: product.id, source: onlineProduct ? 'ai_stylist_online' : 'ai_stylist_catalog' });
+  };
+
   return (
     <article className="concierge-product-card">
       {hasProductImage ? (
-        <button className="concierge-product-image" type="button" aria-label={`View ${hasUsableTryOn ? 'AI preview' : 'product photo'} for ${product.name}`} onClick={() => onFullscreen({ src: displayedImage, alt: `${hasUsableTryOn ? 'AI try-on' : 'Product photo'} for ${product.name}`, title: product.name })}>
+        canOpenDetail ? (
+        <a className="concierge-product-image" href={localDetailHref} aria-label={`Open ${product.name}`} onClick={openProductDetail}>
+          <OptimizedImage src={displayedImage} alt={product.name} fallbackSrc="" onError={() => hasUsableTryOn ? setTryOnImageFailed(true) : setProductImageFailed(true)} />
+        </a>
+        ) : (
+        <button className="concierge-product-image" type="button" aria-label={`View ${hasUsableTryOn ? 'AI preview' : 'product photo'} for ${product.name}`} onClick={openProductPreview}>
           <OptimizedImage src={displayedImage} alt={product.name} fallbackSrc="" onError={() => hasUsableTryOn ? setTryOnImageFailed(true) : setProductImageFailed(true)} />
         </button>
+        )
       ) : <div className="concierge-product-image concierge-product-image-missing" role="img" aria-label={`Image unavailable for ${product.name}`}><span>Image unavailable</span></div>}
       {localProduct ? <WishlistHeartButton product={product} className="card-wishlist-heart" /> : null}
       {product.sourceLabel ? <span className="concierge-source-badge">{product.sourceLabel}</span> : null}
       <p>{visibleBrand}</p>
-      <h2><a href={detailHref} target={detailIsExternal ? '_blank' : undefined} rel={detailIsExternal ? 'noreferrer' : undefined} onClick={() => recordEvent(detailIsExternal ? 'shop_click' : 'product_click', { productId: product.id })}>{product.name}</a></h2>
+      <h2>
+        {canOpenDetail ? (
+          <a href={localDetailHref} onClick={openProductDetail}>{product.name}</a>
+        ) : (
+          <button className="concierge-product-title-button" type="button" onClick={openProductPreview} disabled={!displayedImage}>{product.name}</button>
+        )}
+      </h2>
       <strong>{hasVerifiedPrice ? formatMoney(product.price, product.currency) : 'Price unavailable'}</strong>
       {loading && <span className="concierge-product-state">Preparing preview</span>}
       {hasUsableTryOn && <button className="concierge-preview-action" type="button" onClick={() => onFullscreen({ src: tryOn.imageUrl, alt: `AI try-on for ${product.name}`, title: product.name })}>View preview</button>}
@@ -7196,7 +7792,6 @@ function StyleBotProduct({ product, tryOn, loading, error, onFullscreen, onTryOn
       {error && <span className="concierge-product-error">{error}</span>}
       {canTryOn ? <button className="concierge-preview-action" type="button" disabled={loading} onClick={onTryOn}>{tryOn?.imageUrl ? 'Generate Again' : 'Generate Try-On'}</button> : null}
       {!product.searchLink && product.tryOnAvailable !== false && product.aiTryOnAvailable !== false && !hasProductImage ? <span className="concierge-product-state">Try-on needs a product image</span> : null}
-      <a className="concierge-shop-action" href={shopHref} target={externalShop ? '_blank' : undefined} rel={externalShop ? 'noreferrer' : undefined} onClick={() => recordEvent(externalShop ? 'shop_click' : 'product_click', { productId: product.id })}>{product.searchLink ? 'Search Amazon' : externalShop ? 'View on Amazon' : 'View product'}</a>
     </article>
   );
 }
@@ -7230,7 +7825,7 @@ function ImageLightbox({ image, onClose }) {
 
   const lightbox = (
     <div className={`image-lightbox ${isVideo ? 'video-lightbox' : ''}`} role="dialog" aria-modal="true" aria-label={isVideo ? 'Full screen video preview' : 'Full screen image preview'} onClick={onClose}>
-      <button className="lightbox-close" ref={closeButtonRef} type="button" onClick={onClose} aria-label="Close full screen preview">×</button>
+      <button className="lightbox-close" ref={closeButtonRef} type="button" onClick={onClose} aria-label="Close full screen preview"><CloseIcon /></button>
       <figure onClick={(event) => event.stopPropagation()}>
         {isVideo ? (
           <video className="lightbox-video" src={image.src} poster={image.poster} autoPlay muted loop playsInline controls />
@@ -8703,6 +9298,7 @@ function displayGarmentPlacement(product = {}) {
 function ProductPage({ id, user, setUser, demoEcommerceMode = false }) {
   const { product, loading, error } = useProduct(id);
   const related = useSimilarProducts(id, 4);
+  const relatedCatalog = useRelatedCatalogProducts(product, 8);
   const [tryOn, setTryOn] = useState(null);
   const [tryOnImageFailed, setTryOnImageFailed] = useState(false);
   const [tryOnLoading, setTryOnLoading] = useState(false);
@@ -8715,7 +9311,17 @@ function ProductPage({ id, user, setUser, demoEcommerceMode = false }) {
   const [detailImageView, setDetailImageView] = useState('tryon');
   const [sizeRequestOpen, setSizeRequestOpen] = useState(false);
   const productViewStarted = useRef('');
-  const relatedProducts = related.products.filter((item) => item.id !== id).slice(0, 4);
+  const relatedProducts = useMemo(() => {
+    const seen = new Set([String(id)]);
+    return [...related.products, ...relatedCatalog.products]
+      .filter((item) => {
+        const itemId = String(wishlistProductId(item) || '');
+        if (!itemId || seen.has(itemId) || !item?.imageUrl) return false;
+        seen.add(itemId);
+        return true;
+      })
+      .slice(0, 4);
+  }, [id, related.products, relatedCatalog.products]);
 
   useEffect(() => {
     if (!user || !id) {
@@ -8805,6 +9411,12 @@ function ProductPage({ id, user, setUser, demoEcommerceMode = false }) {
   const brand = displayBrand(product);
   const category = displayCategory(product);
   const garmentPlacement = displayGarmentPlacement(product);
+  const productShapeText = `${product.name || ''} ${product.category || ''} ${product.subcategory || ''}`.toLowerCase();
+  const productFrameShape = /\b(sneakers?|trainers?|shoe|shoes|loafers?|flats?|sandals?|slides?|slippers?)\b/.test(productShapeText) && !/\b(boots?|ankle boot|heel boot)\b/.test(productShapeText)
+    ? 'wide-shoe-frame'
+    : /\b(boots?|ankle boot|heel boot)\b/.test(productShapeText)
+    ? 'tall-shoe-frame'
+    : '';
   const fitAreaLabel = garmentPlacement === 'bottom'
     ? 'Bottomwear'
     : garmentPlacement === 'full-body'
@@ -8848,6 +9460,12 @@ function ProductPage({ id, user, setUser, demoEcommerceMode = false }) {
       onSelect: () => setDetailImageView('video')
     }
   ].filter(Boolean);
+  const activeGalleryIndex = Math.max(0, galleryItems.findIndex((item) => item.active));
+  const selectGalleryByOffset = (offset) => {
+    if (galleryItems.length < 2) return;
+    const nextIndex = (activeGalleryIndex + offset + galleryItems.length) % galleryItems.length;
+    galleryItems[nextIndex]?.onSelect?.();
+  };
 
   const generateProductTryOn = async () => {
     if (!product || tryOnLoading) return;
@@ -8945,7 +9563,7 @@ function ProductPage({ id, user, setUser, demoEcommerceMode = false }) {
         <div className="product-editorial-breadcrumb"><a href="/categories">New arrivals</a><span>/</span><a href={`/categories/${encodeURIComponent(categorySlug(product.category || ''))}`}>{category}</a></div>
         <div className="product-editorial-grid">
           <div className="product-editorial-gallery">
-            <div className={`product-detail-media product-editorial-media ${showingTryOn ? 'showing-tryon' : 'showing-product'}`}>
+            <div className={`product-detail-media product-editorial-media ${showingTryOn ? 'showing-tryon' : 'showing-product'} ${productFrameShape}`}>
               {showingTryOnVideo ? (
                 <button
                   className="tryon-video-preview-button"
@@ -8960,8 +9578,8 @@ function ProductPage({ id, user, setUser, demoEcommerceMode = false }) {
                 <ZoomableImage
                   src={image}
                   alt={product.name}
-                  zoom={showingTryOn ? 1 : 1.75}
-                  disableZoom={showingTryOn}
+                  zoom={1}
+                  disableZoom
                   onOpen={() => setFullscreenImage({
                     src: image,
                     alt: showingTryOn ? `AI try-on for ${product.name}` : `${product.name} product photo`,
@@ -8972,6 +9590,12 @@ function ProductPage({ id, user, setUser, demoEcommerceMode = false }) {
                     else if (event.currentTarget.src !== window.location.origin + asset('hero2.png')) event.currentTarget.src = asset('hero2.png');
                   }}
                 />
+              )}
+              {galleryItems.length > 1 && (
+                <div className="product-editorial-gallery-nav" aria-label="Product gallery controls">
+                  <button type="button" onClick={() => selectGalleryByOffset(-1)} aria-label="Previous product image">‹</button>
+                  <button type="button" onClick={() => selectGalleryByOffset(1)} aria-label="Next product image">›</button>
+                </div>
               )}
               {badge && <span className="badge">{badge}</span>}
               {showingTryOn && <span className="badge tryon-badge">{showingTryOnVideo ? 'Video Try-On' : 'AI Try-On'}</span>}
@@ -9026,7 +9650,7 @@ function ProductPage({ id, user, setUser, demoEcommerceMode = false }) {
               {!demoEcommerceMode && <p className="product-editorial-rating"><span>Rating</span> {Number(product.rating || 0).toFixed(1)} {product.ratingCount ? `(${product.ratingCount} reviews)` : ''}</p>}
             </div>
 
-            <div className="product-editorial-actions">
+            <div className="product-editorial-actions" id="ai-try-on">
               <div className="product-tryon-credit-panel" aria-live="polite">
                 <strong>AI Try-On</strong>
                 <span>Selected product: {product.name}</span>
@@ -9036,18 +9660,18 @@ function ProductPage({ id, user, setUser, demoEcommerceMode = false }) {
               </div>
               {user ? (
                 <button className="product-editorial-tryon" type="button" onClick={generateProductTryOn} disabled={tryOnLoading}>
-                  {tryOnLoading ? 'Creating your look...' : hasUsableTryOn ? 'Refresh try-on' : tryOnImageFailed ? 'Try Again' : 'Generate Try-On'}
+                  {tryOnLoading ? 'Creating your look...' : hasUsableTryOn ? 'Refresh Try-On' : tryOnImageFailed ? 'Try Again' : 'Generate Try-On'}
                 </button>
-              ) : <a className="product-editorial-tryon" href="/signup">AI try-on</a>}
+              ) : <a className="product-editorial-tryon" href="/signup">Generate Try-On</a>}
               {user ? (
                 <button className="product-editorial-video" type="button" onClick={generateProductTryOnVideo} disabled={tryOnVideoLoading} title="Generate an AI try-on video">
-                  {tryOnVideoLoading ? 'Making video...' : hasTryOnVideo ? 'Refresh video' : 'Generate video'}
+                  {tryOnVideoLoading ? 'Making video...' : hasTryOnVideo ? 'Refresh Video' : 'Generate Video'}
                 </button>
-              ) : <a className="product-editorial-video" href="/signup">Generate video</a>}
+              ) : <a className="product-editorial-video" href="/signup">Generate Video</a>}
               {demoEcommerceMode ? (
-                <a className="product-editorial-shop" href={user ? buyHref : authBuyHref} onClick={() => recordEvent(user ? 'buy_now_click' : 'buy_auth_prompt', { productId: product.id })}>{user ? 'Buy now' : 'Sign up to buy'}</a>
+                <a className="product-editorial-shop" href={user ? buyHref : authBuyHref} onClick={() => recordEvent(user ? 'buy_now_click' : 'buy_auth_prompt', { productId: product.id })}>{user ? 'Buy Now' : 'Sign up to buy'}</a>
               ) : (
-                product.affiliateLink && <a className="product-editorial-shop" href={product.affiliateLink} target="_blank" rel="noreferrer" onClick={() => recordEvent('shop_click', { productId: product.id })}>Shop now</a>
+                product.affiliateLink && <a className="product-editorial-shop" href={product.affiliateLink} target="_blank" rel="noreferrer" onClick={() => recordEvent('shop_click', { productId: product.id })}>Buy Now</a>
               )}
             </div>
             {(tryOnLoading || tryOnVideoLoading) && <p className="form-message" role="status">{tryOnSlow ? 'This is taking a little longer than usual.' : 'Preparing your try-on...'}</p>}
@@ -9076,7 +9700,7 @@ function ProductPage({ id, user, setUser, demoEcommerceMode = false }) {
                 {productTags.length > 0 && <p className="product-editorial-tags">{productTags.map((tag) => <a href={`/categories?tag=${encodeURIComponent(tag)}`} key={tag}>{tag}</a>)}</p>}
               </details>
               <details>
-                <summary>Delivery and returns</summary>
+                <summary>Shipping & returns</summary>
                 <p>{demoEcommerceMode ? 'Checkout confirms your order inside Lookmefy. Delivery is currently available within India, and order updates are sent to your contact details.' : 'Checkout, delivery, and return terms are managed by Amazon or the linked seller.'}</p>
               </details>
             </div>
@@ -9094,9 +9718,11 @@ function ProductPage({ id, user, setUser, demoEcommerceMode = false }) {
       </section>
 
       {relatedProducts.length > 0 && (
-        <section className="wrap product-editorial-related">
-          <div className="product-editorial-related-head"><div><p>Curated for you</p><h2>Complete the look</h2></div><a href={`/categories/${encodeURIComponent(categorySlug(product.category || ''))}`}>View all in {category}</a></div>
-          <div className="product-editorial-related-grid">{relatedProducts.map((item) => <EditorialRelatedProduct key={item.id} product={item} />)}</div>
+        <section className="wrap product-editorial-related" aria-labelledby="complete-the-look-title">
+          <div className="product-editorial-related-head"><div><p>Curated for you</p><h2 id="complete-the-look-title">Complete the look</h2></div><a href={`/categories/${encodeURIComponent(categorySlug(product.category || ''))}`}>View all in {category}</a></div>
+          <div className="product-editorial-related-grid">
+            {relatedProducts.map((item) => <EditorialRelatedProduct key={wishlistProductId(item)} product={item} />)}
+          </div>
         </section>
       )}
       {sizeRequestOpen && <SizeRequestPanel product={product} onClose={() => setSizeRequestOpen(false)} />}
@@ -9151,9 +9777,10 @@ function SizeRequestPanel({ product, onClose }) {
 function EditorialRelatedProduct({ product }) {
   const category = displayCategory(product);
   const brand = displayBrand(product);
+  const productId = wishlistProductId(product);
   return (
     <article className="product-editorial-related-card">
-      <a href={`/product/${encodeURIComponent(product.id)}`}>
+      <a href={`/product/${encodeURIComponent(productId)}`} onClick={() => recordEvent('product_click', { productId, source: 'complete_the_look' })}>
         <img src={product.imageUrl || asset('hero2.png')} alt={product.name} />
         <p>{brand}</p>
         <h3>{product.name}</h3>
@@ -11425,6 +12052,10 @@ function SearchIcon() {
   return <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>;
 }
 
+function SendIcon() {
+  return <svg viewBox="0 0 24 24"><path d="M20.5 3.5 3.8 10.7c-.9.4-.8 1.7.1 2l6.1 1.9 1.9 6.1c.3.9 1.6 1 2 .1l7.2-16.7c.3-.7-.2-1.3-.6-.6Z" /><path d="m10.2 14.2 4.5-4.5" /></svg>;
+}
+
 function MailIcon() {
   return <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></svg>;
 }
@@ -11439,6 +12070,30 @@ function EyeIcon({ crossed = false }) {
 
 function TryOnIcon() {
   return <svg viewBox="0 0 24 24"><path d="M12 4 5 8v8l7 4 7-4V8l-7-4Z" /><path d="M9 13a3 3 0 0 0 6 0" /><path d="M9 9h.01" /><path d="M15 9h.01" /></svg>;
+}
+
+function WardrobeTopIcon() {
+  return <svg viewBox="0 0 24 24"><path d="m8 4-5 3 2.5 4L8 9.5V20h8V9.5l2.5 1.5L21 7l-5-3c-.8 1.2-2.2 2-4 2S8.8 5.2 8 4Z" /></svg>;
+}
+
+function WardrobeBottomIcon() {
+  return <svg viewBox="0 0 24 24"><path d="M8 3h8l1 17h-4l-1-10-1 10H7L8 3Z" /><path d="M8 7h8" /></svg>;
+}
+
+function WardrobeOuterwearIcon() {
+  return <svg viewBox="0 0 24 24"><path d="m8 3-5 4 2 4 3-2v11h8V9l3 2 2-4-5-4-4 4-4-4Z" /><path d="M12 7v13" /><path d="m9 12 3 2 3-2" /></svg>;
+}
+
+function WardrobeFootwearIcon() {
+  return <svg viewBox="0 0 24 24"><path d="M4 7v7c0 2 1.5 3 4 3h11c1.2 0 2-.8 2-2 0-1.5-1-2.2-3-2.5-3-.4-5.5-1.6-7.5-3.5L8 11 4 7Z" /><path d="M8 11 6 9" /></svg>;
+}
+
+function WardrobeWatchIcon() {
+  return <svg viewBox="0 0 24 24"><path d="m9 2-1 5h8l-1-5H9Z" /><rect x="7" y="7" width="10" height="10" rx="4" /><path d="m8 17 1 5h6l1-5" /><path d="M12 9v3l2 1" /></svg>;
+}
+
+function WardrobeGlassesIcon() {
+  return <svg viewBox="0 0 24 24"><path d="M3 10h3l1 5h4l1-5h3l1 5h4l1-5" /><path d="M11 12h4" /><path d="M4 10c2-1 4-1 7 0M15 10c2-1 4-1 6 0" /></svg>;
 }
 
 function ClosetIcon() {

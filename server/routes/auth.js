@@ -684,6 +684,53 @@ async function authenticatedUserPayload(user, req, authMethod) {
   return { token: sign(user, sessionId), mediaToken: signUserMediaToken(user._id), user: user.toClient() };
 }
 
+function localTestLoginEnabled() {
+  return String(process.env.NODE_ENV || '').toLowerCase() !== 'production'
+    && parseBoolean(process.env.ENABLE_LOCAL_TEST_LOGIN);
+}
+
+async function localTestLoginUser(phone, password) {
+  if (!localTestLoginEnabled()) return null;
+  const testPhone = normalizePhone(process.env.LOCAL_TEST_LOGIN_PHONE || '9876543213');
+  const testPassword = String(process.env.LOCAL_TEST_LOGIN_PASSWORD || 'Lookmefy@123');
+  if (!testPhone || phone !== testPhone || String(password || '') !== testPassword) return null;
+
+  const now = new Date();
+  const email = `test_${testPhone}@fitlook.local`;
+  const username = `test_${testPhone}`;
+  let user = await User.findOne({ $or: [{ phone: testPhone }, { email }] }).select('+passwordHash');
+  const passwordHash = await hashPassword(testPassword);
+
+  if (!user) {
+    user = await User.create({
+      name: 'Lookmefy Test User',
+      email,
+      phone: testPhone,
+      phoneVerifiedAt: now,
+      username,
+      genderPreference: 'other',
+      passwordHash,
+      passwordSetAt: now,
+      accountStatus: 'active',
+      onboardingSeenAt: now
+    });
+    return user;
+  }
+
+  user.name = user.name || 'Lookmefy Test User';
+  user.email = user.email || email;
+  user.phone = testPhone;
+  user.phoneVerifiedAt = user.phoneVerifiedAt || now;
+  user.username = user.username || username;
+  user.genderPreference = user.genderPreference || 'other';
+  user.passwordHash = passwordHash;
+  user.passwordSetAt = now;
+  user.accountStatus = 'active';
+  user.onboardingSeenAt = user.onboardingSeenAt || now;
+  await user.save();
+  return user;
+}
+
 function normalizeUsername(value = '') {
   return String(value)
     .trim()
@@ -1159,6 +1206,8 @@ router.post('/login', authIpLimiter, loginAttemptLimiter, asyncRoute(async (req,
       ...(identifier ? [{ email: identifier }, { username: normalizeUsername(identifier) }] : [])
     ]
   }).select('+passwordHash');
+  const testUser = await localTestLoginUser(phone, password);
+  if (testUser) return res.json(await authenticatedUserPayload(testUser, req, 'password'));
   if (!user) return res.status(401).json({ message: 'Invalid mobile number or password' });
   const passwordVerification = await verifyPassword(password, user.passwordHash);
   if (!passwordVerification.valid) return res.status(401).json({ message: 'Invalid mobile number or password' });
