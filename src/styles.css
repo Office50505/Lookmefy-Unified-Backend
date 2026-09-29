@@ -37627,6 +37627,107 @@ body:has(.network-status):has(.app-toast) .wishlist-undo-toast {
   }
 }
 
+/* Mobile search UX fix: prevent clear icon + submit button from colliding. */
+@media (max-width: 700px) {
+  .mobile-search-page {
+    padding: 18px 20px calc(96px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .mobile-search-panel h1 {
+    max-width: 9ch !important;
+    margin-bottom: 18px !important;
+    font-size: clamp(40px, 11.5vw, 50px) !important;
+    line-height: .96 !important;
+  }
+
+  .mobile-search-page-form {
+    display: grid !important;
+    grid-template-columns: 22px minmax(0, 1fr) 36px !important;
+    grid-template-rows: 46px 48px !important;
+    align-items: center !important;
+    gap: 8px 10px !important;
+    min-height: 112px !important;
+    border-radius: 34px !important;
+    padding: 10px 12px 12px 18px !important;
+    background: #fffdfb !important;
+    box-shadow: 0 16px 34px rgba(57, 42, 35, .08) !important;
+  }
+
+  .mobile-search-page-form > svg {
+    grid-column: 1 !important;
+    grid-row: 1 !important;
+  }
+
+  .mobile-search-page-form input {
+    grid-column: 2 !important;
+    grid-row: 1 !important;
+    height: 46px !important;
+    padding: 0 !important;
+  }
+
+  .mobile-search-clear {
+    grid-column: 3 !important;
+    grid-row: 1 !important;
+    width: 36px !important;
+    min-width: 36px !important;
+    height: 36px !important;
+    min-height: 36px !important;
+    border-radius: 999px !important;
+    padding: 0 !important;
+    background: transparent !important;
+    color: #536f9e !important;
+  }
+
+  .mobile-search-page-form > button[type="submit"] {
+    grid-column: 1 / -1 !important;
+    grid-row: 2 !important;
+    justify-self: stretch !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 48px !important;
+    border-radius: 999px !important;
+    padding: 0 20px !important;
+    background: #211c18 !important;
+    color: #fff !important;
+    box-shadow: none !important;
+  }
+
+  .mobile-search-block {
+    margin-top: 26px !important;
+  }
+
+  .mobile-search-chip-row {
+    gap: 10px !important;
+    margin-right: -20px !important;
+    padding-right: 20px !important;
+    scroll-padding-inline: 20px !important;
+  }
+
+  .mobile-search-chip-row a {
+    padding: 12px 18px !important;
+    white-space: nowrap !important;
+  }
+
+  .mobile-search-category-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 20px 18px !important;
+  }
+
+  .mobile-search-category-grid img {
+    width: clamp(66px, 19vw, 78px) !important;
+  }
+}
+
+@media (max-width: 360px) {
+  .mobile-search-page {
+    padding-inline: 16px !important;
+  }
+
+  .mobile-search-category-grid {
+    gap: 18px 12px !important;
+  }
+}
+
 /* Keep Best of Categories heading fixed while only the cards scroll on mobile */
 @media (max-width: 700px) {
   .atelier-best-category-section.atelier-wide {
@@ -47813,6 +47914,256 @@ label,
   }
 }
 
+/* Department mobile cards: compact action buttons for a cleaner two-column grid. */
+@media (max-width: 700px) {
+  .department-page .product-card-actions {
+    padding: 0 10px 12px !important;
+  }
+
+  .department-page .product-card-actions a,
+  .department-page .product-card-actions button {
+    justify-self: center !important;
+    width: min(100%, 116px) !important;
+    min-height: 36px !important;
+    border-radius: 999px !important;
+    font-size: 12px !important;
+    font-weight: 850 !important;
+    letter-spacing: .04em !important;
+    box-shadow: 0 8px 16px rgba(23, 20, 17, .10) !important;
+  }
+
+  .department-page .off {
+    padding: 4px 8px !important;
+    font-size: 8.5px !important;
+    letter-spacing: .04em !important;
+  }
+}
+
+@media (max-width: 390px) {
+  .department-page .product-card-actions a,
+  .department-page .product-card-actions button {
+    width: min(100%, 106px) !important;
+    min-height: 34px !important;
+    font-size: 11px !important;
+  }
+}
+
+/* Department mobile cards: keep cards minimal by hiding marketplace + discount tags. */
+@media (max-width: 700px) {
+  .department-page .product-media .badge,
+  .department-page .product-media .tryon-badge,
+  .department-page .price-row .off {
+    display: none !important;
+  }
+
+  .department-page .product-card-actions {
+    padding: 0 10px 12px !important;
+  }
+
+  .department-page .product-card-actions a,
+  .department-page .product-card-actions button {
+    width: 96px !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    min-height: 32px !important;
+    padding: 0 14px !important;
+    font-size: 10.5px !important;
+    line-height: 1 !important;
+    letter-spacing: .035em !important;
+  }
+}
+
+.department-mobile-filter-buttons,
+.department-mobile-filter-sheet {
+  display: none;
+}
+
+/* Mobile department filters: custom sheet avoids ugly native select popovers. */
+@media (max-width: 700px) {
+  .department-page .department-filter-selects {
+    display: none !important;
+  }
+
+  .department-mobile-filter-buttons {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 9px !important;
+    width: 100% !important;
+  }
+
+  .department-mobile-filter-buttons button {
+    position: relative !important;
+    display: flex !important;
+    min-width: 0 !important;
+    min-height: 44px !important;
+    align-items: center !important;
+    gap: 6px !important;
+    border: 1px solid rgba(34, 29, 26, .13) !important;
+    border-radius: 999px !important;
+    padding: 0 34px 0 14px !important;
+    background: rgba(255, 255, 255, .88) !important;
+    color: #211d1a !important;
+    box-shadow: 0 7px 16px rgba(34, 29, 26, .035) !important;
+    text-align: left !important;
+  }
+
+  .department-mobile-filter-buttons button::after {
+    content: "⌄" !important;
+    position: absolute !important;
+    top: 50% !important;
+    right: 13px !important;
+    color: #6f6761 !important;
+    font-size: 14px !important;
+    font-weight: 900 !important;
+    line-height: 1 !important;
+    transform: translateY(-55%) !important;
+    pointer-events: none !important;
+  }
+
+  .department-mobile-filter-buttons button:disabled {
+    opacity: .52 !important;
+  }
+
+  .department-mobile-filter-buttons span {
+    color: #9c534d !important;
+    font-family: var(--font-body) !important;
+    font-size: 10px !important;
+    font-weight: 900 !important;
+    letter-spacing: .08em !important;
+    line-height: 1 !important;
+    text-transform: uppercase !important;
+    white-space: nowrap !important;
+  }
+
+  .department-mobile-filter-buttons span::after {
+    content: ":" !important;
+  }
+
+  .department-mobile-filter-buttons strong {
+    flex: 1 1 auto !important;
+    overflow: hidden !important;
+    color: #211d1a !important;
+    font-family: var(--font-body) !important;
+    font-size: 14px !important;
+    font-weight: 800 !important;
+    line-height: 1.1 !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  .department-mobile-filter-sheet {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 2147483646 !important;
+    display: grid !important;
+    align-items: end !important;
+    background: rgba(24, 21, 19, .32) !important;
+    backdrop-filter: blur(5px) !important;
+    -webkit-backdrop-filter: blur(5px) !important;
+  }
+
+  .department-mobile-filter-sheet section {
+    display: grid !important;
+    max-height: min(68dvh, 520px) !important;
+    overflow: hidden !important;
+    border: 1px solid rgba(34, 29, 26, .08) !important;
+    border-radius: 24px 24px 0 0 !important;
+    background: #fffaf7 !important;
+    box-shadow: 0 -24px 54px rgba(24, 21, 19, .18) !important;
+  }
+
+  .department-mobile-filter-sheet header {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 42px !important;
+    align-items: center !important;
+    gap: 12px !important;
+    border-bottom: 1px solid rgba(34, 29, 26, .08) !important;
+    padding: 18px 20px 14px !important;
+  }
+
+  .department-mobile-filter-sheet header div {
+    display: grid !important;
+    gap: 4px !important;
+  }
+
+  .department-mobile-filter-sheet header small {
+    color: #9c534d !important;
+    font-family: var(--font-body) !important;
+    font-size: 10px !important;
+    font-weight: 900 !important;
+    letter-spacing: .14em !important;
+    text-transform: uppercase !important;
+  }
+
+  .department-mobile-filter-sheet header strong {
+    color: #211d1a !important;
+    font-family: var(--font-body) !important;
+    font-size: 24px !important;
+    font-weight: 900 !important;
+    line-height: 1 !important;
+  }
+
+  .department-mobile-filter-sheet header > button {
+    display: grid !important;
+    width: 40px !important;
+    height: 40px !important;
+    place-items: center !important;
+    border: 1px solid rgba(34, 29, 26, .10) !important;
+    border-radius: 999px !important;
+    background: #fff !important;
+    color: #211d1a !important;
+    font-size: 24px !important;
+    line-height: 1 !important;
+  }
+
+  .department-mobile-filter-options {
+    display: grid !important;
+    gap: 8px !important;
+    overflow-y: auto !important;
+    padding: 12px 16px calc(18px + env(safe-area-inset-bottom)) !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .department-mobile-filter-options button {
+    display: flex !important;
+    min-height: 48px !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 12px !important;
+    border: 1px solid rgba(34, 29, 26, .09) !important;
+    border-radius: 14px !important;
+    padding: 0 14px !important;
+    background: rgba(255, 255, 255, .76) !important;
+    color: #211d1a !important;
+    font-family: var(--font-body) !important;
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    text-align: left !important;
+  }
+
+  .department-mobile-filter-options button.active {
+    border-color: #171411 !important;
+    background: #171411 !important;
+    color: #fff !important;
+  }
+
+  .department-mobile-filter-options button span {
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  .department-mobile-filter-options button b {
+    flex: 0 0 auto !important;
+    font-size: 13px !important;
+  }
+
+  html body:has(.department-mobile-filter-sheet) .mobile-bottom-nav,
+  html body:has(.department-mobile-filter-sheet) .mobile-bottom-nav-backdrop {
+    display: none !important;
+  }
+}
+
 /* Homepage AI try-on hero: static editorial replacement for the old carousel. */
 .reference-tryon-hero.reference-hero {
   position: relative;
@@ -54111,4 +54462,200 @@ body .style-bot-page.concierge-page .concierge-message.user .concierge-message-l
   .site-header .brand {
     width: min(120px, 31vw) !important;
   }
+}
+
+/* Desktop AI Stylist product cards: prevent image/title/button collision. */
+@media (min-width: 701px) {
+  #main-content .style-bot-page.concierge-page .concierge-product-grid {
+    align-items: stretch !important;
+  }
+
+  #main-content .style-bot-page.concierge-page .concierge-product-card {
+    display: flex !important;
+    min-height: 540px !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+    padding: 12px !important;
+  }
+
+  #main-content .style-bot-page.concierge-page .concierge-product-image {
+    flex: 0 0 auto !important;
+    width: 100% !important;
+    aspect-ratio: 1 / 1.18 !important;
+    max-height: 360px !important;
+    border-radius: 12px !important;
+  }
+
+  #main-content .style-bot-page.concierge-page .concierge-product-image img {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: contain !important;
+    object-position: center !important;
+    background: #fff !important;
+    transform: none !important;
+  }
+
+  #main-content .style-bot-page.concierge-page .concierge-product-card > p {
+    flex: 0 0 auto !important;
+    min-height: 13px !important;
+    margin: 12px 4px 6px !important;
+  }
+
+  #main-content .style-bot-page.concierge-page .concierge-product-card h2 {
+    display: -webkit-box !important;
+    flex: 0 0 44px !important;
+    min-height: 44px !important;
+    max-height: 44px !important;
+    overflow: hidden !important;
+    margin: 0 4px !important;
+    padding: 0 !important;
+    background: transparent !important;
+    color: #211d1a !important;
+    line-height: 1.28 !important;
+    -webkit-box-orient: vertical !important;
+    -webkit-line-clamp: 2 !important;
+  }
+
+  #main-content .style-bot-page.concierge-page .concierge-product-card h2 a,
+  #main-content .style-bot-page.concierge-page .concierge-product-card h2 .concierge-product-title-button {
+    display: inline !important;
+    width: auto !important;
+    min-height: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+    color: inherit !important;
+    box-shadow: none !important;
+    text-align: left !important;
+    text-decoration: none !important;
+  }
+
+  #main-content .style-bot-page.concierge-page .concierge-product-card > strong {
+    flex: 0 0 auto !important;
+    margin: 10px 4px 0 !important;
+    line-height: 1.2 !important;
+  }
+
+  #main-content .style-bot-page.concierge-page .concierge-product-state,
+  #main-content .style-bot-page.concierge-page .concierge-product-error {
+    flex: 0 0 auto !important;
+    margin: 8px 4px 0 !important;
+  }
+
+  #main-content .style-bot-page.concierge-page .concierge-preview-action,
+  #main-content .style-bot-page.concierge-page .concierge-shop-action {
+    position: static !important;
+    display: flex !important;
+    width: 100% !important;
+    min-height: 40px !important;
+    flex: 0 0 auto !important;
+    align-items: center !important;
+    justify-content: center !important;
+    margin: auto 4px 0 !important;
+    border-radius: 999px !important;
+    padding: 0 16px !important;
+    line-height: 1 !important;
+    text-align: center !important;
+    white-space: nowrap !important;
+  }
+}
+
+/* True EOF lock: department filter sheet must appear above fixed mobile chrome. */
+@media (max-width: 700px) {
+  html body:has(.department-mobile-filter-sheet) .mobile-bottom-nav,
+  html body:has(.department-mobile-filter-sheet) .mobile-bottom-nav-backdrop {
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+
+  html body .department-mobile-filter-sheet {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 2147483647 !important;
+    display: flex !important;
+    align-items: flex-end !important;
+    justify-content: center !important;
+    padding: 0 12px max(10px, env(safe-area-inset-bottom)) !important;
+    background: rgba(24, 21, 19, .38) !important;
+    backdrop-filter: blur(5px) !important;
+    -webkit-backdrop-filter: blur(5px) !important;
+  }
+
+  html body .department-mobile-filter-sheet section {
+    display: grid !important;
+    width: min(100%, 430px) !important;
+    max-height: min(72dvh, 560px) !important;
+    overflow: hidden !important;
+    border: 1px solid rgba(34, 29, 26, .08) !important;
+    border-radius: 24px !important;
+    background: #fffaf7 !important;
+    box-shadow: 0 24px 70px rgba(24, 21, 19, .24) !important;
+  }
+
+  html body .department-mobile-filter-options {
+    max-height: calc(min(72dvh, 560px) - 78px) !important;
+  }
+}
+
+/* Wardrobe side controls: selected category circles show the chosen item image. */
+@media (max-width: 700px) {
+  .wardrobe-reference-tools button.active > span,
+  .wardrobe-studio-page .wardrobe-reference-tools button.active > span {
+    position: relative !important;
+    overflow: hidden !important;
+    border-color: rgba(23, 20, 17, .82) !important;
+    padding: 3px !important;
+    background: #fffaf6 !important;
+    box-shadow:
+      0 0 0 3px rgba(255, 255, 255, .88),
+      0 12px 24px rgba(22, 20, 18, .14) !important;
+  }
+
+  .wardrobe-reference-tools button > span img,
+  .wardrobe-studio-page .wardrobe-reference-tools button > span img {
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    padding: 0 !important;
+    border-radius: 50% !important;
+    object-fit: cover !important;
+    object-position: center top !important;
+    background: #f7f1ec !important;
+  }
+}
+
+/* AI Stylist send button color lock: prevent mixed/black icon glitches. */
+#main-content .style-bot-page.concierge-page .concierge-composer > div > button {
+  isolation: isolate !important;
+  overflow: hidden !important;
+  border: 0 !important;
+  background: #14110f !important;
+  color: #fff8f1 !important;
+  filter: none !important;
+  mix-blend-mode: normal !important;
+  opacity: 1 !important;
+}
+
+#main-content .style-bot-page.concierge-page .concierge-composer > div > button:not(:disabled):hover,
+#main-content .style-bot-page.concierge-page .concierge-composer > div > button:not(:disabled):focus-visible {
+  background: #080706 !important;
+  color: #fff8f1 !important;
+}
+
+#main-content .style-bot-page.concierge-page .concierge-composer > div > button:disabled {
+  background: #d8d1cb !important;
+  color: #8c837d !important;
+  box-shadow: none !important;
+}
+
+#main-content .style-bot-page.concierge-page .concierge-composer > div > button svg,
+#main-content .style-bot-page.concierge-page .concierge-composer > div > button svg * {
+  fill: none !important;
+  stroke: currentColor !important;
+  color: inherit !important;
+  filter: none !important;
+  mix-blend-mode: normal !important;
 }

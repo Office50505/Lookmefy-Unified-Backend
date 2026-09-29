@@ -1914,14 +1914,14 @@ function SearchLandingPage() {
         <div className="mobile-search-block">
           <h2>Popular now</h2>
           <div className="mobile-search-chip-row">
-            {quickSearches.map((search) => <a href={`/categories?q=${encodeURIComponent(search)}`} key={search}>{search}</a>)}
+            {quickSearches.map((search) => <a href={categoryPageHref(search)} key={search}>{search}</a>)}
           </div>
         </div>
         <div className="mobile-search-block">
           <h2>Browse categories</h2>
           <div className="mobile-search-category-grid">
             {featuredCategories.map(([label, image, value]) => (
-              <a href={`/categories/${encodeURIComponent(categorySlug(value))}`} key={value}>
+              <a href={categoryPageHref(value)} key={value}>
                 <OptimizedImage src={asset(categoryIconVisuals[categoryVisualKey(value)]?.image || image)} alt="" />
                 <span>{label}</span>
               </a>
@@ -4311,6 +4311,7 @@ function CategoryDepartmentPage({ category, user, demoEcommerceMode = false }) {
   const [brandFilter, setBrandFilter] = useState('all');
   const [priceFilter, setPriceFilter] = useState('all');
   const [sort, setSort] = useState('newest');
+  const [activeMobileFilter, setActiveMobileFilter] = useState('');
   const state = useProducts({ category, gender, sort, limit: 96 });
   const title = departmentTitle(category);
   const categoryPath = categoryPageHref(category, gender);
@@ -4341,6 +4342,24 @@ function CategoryDepartmentPage({ category, user, demoEcommerceMode = false }) {
     ['price_desc', 'Price: High to Low'],
     !demoEcommerceMode && ['rating', 'Top Rated']
   ].filter(Boolean);
+  const mobileFilterOptions = {
+    brand: {
+      label: 'Brand',
+      value: brandFilter,
+      display: brandFilter === 'all' ? 'All brands' : brandFilter,
+      options: [['all', 'All brands'], ...departmentBrands.map((brand) => [brand.value, `${brand.label} (${brand.count})`])],
+      disabled: !departmentBrands.length,
+      onChange: setBrandFilter
+    },
+    sort: {
+      label: 'Sort',
+      value: sort,
+      display: departmentSortOptions.find(([value]) => value === sort)?.[1] || 'Newest',
+      options: departmentSortOptions,
+      onChange: setSort
+    }
+  };
+  const activeMobileFilterConfig = activeMobileFilter ? mobileFilterOptions[activeMobileFilter] : null;
   const visibleProducts = useMemo(() => {
     const priceOption = departmentPriceFilters.find((option) => option.value === priceFilter) || departmentPriceFilters[0];
     return departmentProducts
@@ -4403,7 +4422,45 @@ function CategoryDepartmentPage({ category, user, demoEcommerceMode = false }) {
             <label className="department-sort"><span>Price</span><select value={priceFilter} onChange={(event) => setPriceFilter(event.target.value)} aria-label="Filter products by price">{departmentPriceOptions.map((option) => <option value={option.value} key={option.value}>{option.label}{option.value !== 'all' ? ` (${option.count})` : ''}</option>)}</select></label>
             <label className="department-sort"><span>Sort</span><select value={sort} onChange={(event) => setSort(event.target.value)} aria-label="Sort products">{departmentSortOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
           </div>
+          <div className="department-mobile-filter-buttons" aria-label="Catalog filters">
+            {Object.entries(mobileFilterOptions).map(([key, config]) => (
+              <button type="button" key={key} disabled={config.disabled} onClick={() => setActiveMobileFilter(key)}>
+                <span>{config.label}</span>
+                <strong>{config.display}</strong>
+              </button>
+            ))}
+          </div>
         </div>
+
+        {activeMobileFilterConfig && typeof document !== 'undefined' && createPortal((
+          <div className="department-mobile-filter-sheet" role="presentation" onClick={() => setActiveMobileFilter('')}>
+            <section role="dialog" aria-modal="true" aria-label={`${activeMobileFilterConfig.label} filter`} onClick={(event) => event.stopPropagation()}>
+              <header>
+                <div>
+                  <small>Filter</small>
+                  <strong>{activeMobileFilterConfig.label}</strong>
+                </div>
+                <button type="button" aria-label="Close filter" onClick={() => setActiveMobileFilter('')}>×</button>
+              </header>
+              <div className="department-mobile-filter-options">
+                {activeMobileFilterConfig.options.map(([value, label]) => (
+                  <button
+                    className={activeMobileFilterConfig.value === value ? 'active' : ''}
+                    type="button"
+                    key={value}
+                    onClick={() => {
+                      activeMobileFilterConfig.onChange(value);
+                      setActiveMobileFilter('');
+                    }}
+                  >
+                    <span>{label}</span>
+                    {activeMobileFilterConfig.value === value && <b>✓</b>}
+                  </button>
+                ))}
+              </div>
+            </section>
+          </div>
+        ), document.body)}
 
         <div className="department-results-head"><div><p>{state.loading ? 'Loading' : `${visibleProducts.length} Products`}</p><h2>{title}</h2></div><button className="department-reset-link" type="button" disabled={!filtersActive} onClick={resetDepartmentFilters}>Reset department</button></div>
         {state.loading && <ProductGridSkeleton count={8} />}
@@ -4541,7 +4598,7 @@ const closetCategories = [
 
 const closetOccasions = ['today casual', 'office meeting', 'date night', 'party', 'wedding function', 'college day', 'travel', 'rainy weather'];
 const closetComboSlots = [
-  { key: 'topwear', label: 'Topwear', helper: 'Choose shirt/top', categories: ['tops', 'ethnic'] },
+  { key: 'topwear', label: 'Topwear', helper: 'Choose shirt/top', categories: ['tops', 'shirts', 't-shirts', 'tshirts', 'activewear', 'ethnic'] },
   { key: 'bottomwear', label: 'Bottomwear', helper: 'Choose pant/bottom', categories: ['bottoms'] },
   { key: 'outerwear', label: 'Layer', helper: 'Jacket or suit', categories: ['outerwear', 'suits'] },
   { key: 'footwear', label: 'Footwear', helper: 'Choose shoes', categories: ['shoes'] },
@@ -5117,7 +5174,7 @@ function ClosetPage({ user, setUser }) {
   const selectedKey = selectedIds.slice().sort().join(':');
   const comboPreviewItems = (selectedItems.length ? selectedItems : closetItems.filter((item) => ['tops', 'bottoms', 'suits', 'outerwear', 'shoes'].includes(item.category))).slice(0, 4);
   const wardrobeSections = [
-    { label: 'Tops', icon: <TryOnIcon />, categories: ['tops', 'ethnic', 'activewear'] },
+    { label: 'Tops', icon: <TryOnIcon />, categories: ['tops', 'shirts', 't-shirts', 'tshirts', 'activewear', 'ethnic'] },
     { label: 'Bottoms', icon: <ClosetIcon />, categories: ['bottoms'] },
     { label: 'Outerwear', icon: <BagIcon />, categories: ['outerwear', 'suits'] },
     { label: 'Shoes', icon: <TagIcon />, categories: ['shoes'] }
@@ -5575,20 +5632,28 @@ function ClosetPage({ user, setUser }) {
           </div>
           <a className="wardrobe-mobile-add-item" href="/closet/add">+ Add Item</a>
           <div className="wardrobe-reference-tools left" aria-label="Garment categories">
-            {mobileWardrobeSections.slice(0, 4).map((section) => (
-              <button type="button" key={section.label} onClick={() => pickMobileWardrobeSection(section)}>
-                <span>{section.icon}</span>
-                <small>{section.label}</small>
-              </button>
-            ))}
+            {mobileWardrobeSections.slice(0, 4).map((section) => {
+              const selectedItem = section.items.find((item) => selectedIds.includes(item.id));
+              const previewItem = selectedItem || null;
+              return (
+                <button className={selectedItem ? 'active' : ''} type="button" key={section.label} onClick={() => pickMobileWardrobeSection(section)}>
+                  <span>{previewItem ? <OptimizedImage src={previewItem.imageUrl} fallbackSrc={wardrobeFallbackForSection(section)} alt="" /> : section.icon}</span>
+                  <small>{section.label}</small>
+                </button>
+              );
+            })}
           </div>
           <div className="wardrobe-reference-tools right" aria-label="Accessory categories">
-            {mobileWardrobeSections.slice(4).map((section) => (
-              <button type="button" key={section.label} onClick={() => pickMobileWardrobeSection(section)}>
-                <span>{section.icon}</span>
-                <small>{section.label}</small>
-              </button>
-            ))}
+            {mobileWardrobeSections.slice(4).map((section) => {
+              const selectedItem = section.items.find((item) => selectedIds.includes(item.id));
+              const previewItem = selectedItem || null;
+              return (
+                <button className={selectedItem ? 'active' : ''} type="button" key={section.label} onClick={() => pickMobileWardrobeSection(section)}>
+                  <span>{previewItem ? <OptimizedImage src={previewItem.imageUrl} fallbackSrc={wardrobeFallbackForSection(section)} alt="" /> : section.icon}</span>
+                  <small>{section.label}</small>
+                </button>
+              );
+            })}
           </div>
           {!state.loading && closetItems.length === 0 && (
             <section className="wardrobe-empty-state" aria-labelledby="wardrobe-empty-title">
@@ -7425,6 +7490,7 @@ function normalizeAiStudioProducts(products = [], outfits = []) {
 function StyleBotPage({ user, setUser }) {
   const [query, setQuery] = useState('');
   const [runs, setRuns] = useState([]);
+  const [historyRuns, setHistoryRuns] = useState([]);
   const [busy, setBusy] = useState(false);
   const [conversationId, setConversationId] = useState('');
   const [chatTryOns, setChatTryOns] = useState({});
@@ -7441,30 +7507,37 @@ function StyleBotPage({ user, setUser }) {
 
   useEffect(() => {
     if (!user?.id) {
+      setHistoryRuns([]);
       setChatHistoryHydrated(false);
       return;
     }
+    let storedRuns = [];
     try {
       const stored = JSON.parse(localStorage.getItem(styleBotChatStorageKey(user)) || 'null');
-      setRuns(normalizeStoredStyleBotRuns(stored?.runs || []));
-      setConversationId(String(stored?.conversationId || ''));
+      storedRuns = normalizeStoredStyleBotRuns(stored?.runs || []);
     } catch {
-      setRuns([]);
-      setConversationId('');
-    } finally {
-      setChatHistoryHydrated(true);
+      storedRuns = [];
     }
+    setHistoryRuns(storedRuns);
+    setRuns([]);
+    setConversationId('');
+    setChatTryOns({});
+    setChatTryOnLoading({});
+    setChatTryOnErrors({});
+    setMobileHistoryOpen(false);
+    setChatHistoryHydrated(true);
   }, [user?.id]);
 
   useEffect(() => {
     if (!user?.id || !chatHistoryHydrated) return;
+    const storedRuns = normalizeStoredStyleBotRuns([...historyRuns, ...runs]);
     const payload = {
       conversationId,
-      runs: normalizeStoredStyleBotRuns(runs),
+      runs: storedRuns,
       savedAt: new Date().toISOString()
     };
     localStorage.setItem(styleBotChatStorageKey(user), JSON.stringify(payload));
-  }, [chatHistoryHydrated, conversationId, runs, user]);
+  }, [chatHistoryHydrated, conversationId, historyRuns, runs, user]);
 
   useEffect(() => {
     if (!user || runs.length === 0) return undefined;
@@ -7490,7 +7563,7 @@ function StyleBotPage({ user, setUser }) {
 
   if (!user) return <AuthPage mode="signup" setUser={setUser} />;
 
-  const sessionHistory = runs.slice().reverse();
+  const sessionHistory = normalizeStoredStyleBotRuns([...historyRuns, ...runs]).slice().reverse();
 
   const updateRun = (id, updater) => {
     setRuns((current) => current.map((run) => (run.id === id ? { ...run, ...updater(run) } : run)));
@@ -7542,6 +7615,7 @@ function StyleBotPage({ user, setUser }) {
   };
 
   const startNewSession = () => {
+    setHistoryRuns((current) => normalizeStoredStyleBotRuns([...current, ...runs]));
     setRuns([]);
     setQuery('');
     setConversationId('');
@@ -9819,7 +9893,7 @@ function EmptyProducts({ search }) {
         </div>
       )}
       <div className="empty-products-actions">
-        {featuredSearchCategories.slice(0, 4).map(([label, , value]) => <a href={`/categories/${encodeURIComponent(categorySlug(value))}`} key={value}>{label}</a>)}
+        {featuredSearchCategories.slice(0, 4).map(([label, , value]) => <a href={categoryPageHref(value)} key={value}>{label}</a>)}
         <a className="button" href="/categories">Back to Explore</a>
       </div>
     </div>
@@ -9894,7 +9968,7 @@ function NotFoundPage() {
           </div>
         </div>
         <nav className="not-found-categories" aria-label="Popular categories">
-          {featuredSearchCategories.slice(0, 6).map(([label, , value]) => <a href={`/categories/${encodeURIComponent(categorySlug(value))}`} key={value}>{label}</a>)}
+          {featuredSearchCategories.slice(0, 6).map(([label, , value]) => <a href={categoryPageHref(value)} key={value}>{label}</a>)}
         </nav>
       </section>
     </main>
