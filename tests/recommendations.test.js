@@ -113,6 +113,17 @@ test('ranking combines learned taste with the explicit gender preference', () =>
   assert.ok(matching.reasons.includes('category'));
 });
 
+test('scoring handles fresh users without a preference profile', () => {
+  const result = scoreProduct(product({ _id: 'fresh-user-product' }), {
+    preference: null,
+    genderPreference: 'female',
+    now
+  });
+
+  assert.equal(Number.isFinite(result.score), true);
+  assert.equal(result.components.avoid, 0);
+});
+
 test('surface scoring config is neutral until a surface is intentionally tuned', () => {
   const preference = {
     categories: { dresses: 12 },

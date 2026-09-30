@@ -19,6 +19,7 @@ import {
   cleanBrand,
   getBestBrand,
   getProductFacts,
+  loadTestProductFilter,
   refineProductDraft,
   temporaryExternalAmazonFilter
 } from '../server/routes/products.js';
@@ -238,6 +239,13 @@ test('approved imported Amazon products are not filtered as temporary recommenda
   const filter = temporaryExternalAmazonFilter();
   assert.deepEqual(filter.catalogApproved, { $ne: true });
   assert.equal(filter.badge, 'Amazon');
+});
+
+test('load-test products have a dedicated customer catalog exclusion', () => {
+  const filter = loadTestProductFilter();
+  assert.equal(filter.name.test('Load Test Product 123'), true);
+  assert.equal(filter.name.test('load test product write-profile'), true);
+  assert.equal(filter.name.test('Load Tested Everyday Dress'), false);
 });
 
 test('product draft brand ignores Amazon size chart table text', () => {

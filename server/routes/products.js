@@ -34,7 +34,11 @@ import {
   availableStatusClause,
   normalizeAvailabilityStatus
 } from '../utils/productAvailability.js';
-import { temporaryExternalAmazonFilter } from '../utils/productCatalogVisibility.js';
+import {
+  loadTestProductFilter,
+  publicCatalogExclusions,
+  temporaryExternalAmazonFilter
+} from '../utils/productCatalogVisibility.js';
 import { accessoryIdentityPattern } from '../utils/accessoryTaxonomy.js';
 
 const router = express.Router();
@@ -1340,8 +1344,8 @@ router.get('/', productReadLimiter, async (req, res) => {
     const limit = Math.min(Number(req.query.limit) || 48, 96);
     const minPrice = Number(req.query.minPrice);
     const maxPrice = Number(req.query.maxPrice);
-    const botAmazonRecord = temporaryExternalAmazonFilter();
-    const filter = { isActive: true, $and: [availableStatusClause()], $nor: [botAmazonRecord] };
+    const catalogExclusions = publicCatalogExclusions();
+    const filter = { isActive: true, $and: [availableStatusClause()], $nor: catalogExclusions };
 
     if (q) filter.$text = { $search: q };
     if (tag) filter.tags = new RegExp(`^${escapeRegExp(String(tag).trim())}$`, 'i');
@@ -1367,8 +1371,8 @@ router.get('/', productReadLimiter, async (req, res) => {
     const [products, total, brands, categories, categoryCounts] = await Promise.all([
       query,
       Product.countDocuments(filter),
-      Product.distinct('brand', { isActive: true, $and: [availableStatusClause()], $nor: [botAmazonRecord] }),
-      Product.distinct('category', { isActive: true, $and: [availableStatusClause()], $nor: [botAmazonRecord] }),
+      Product.distinct('brand', { isActive: true, $and: [availableStatusClause()], $nor: catalogExclusions }),
+      Product.distinct('category', { isActive: true, $and: [availableStatusClause()], $nor: catalogExclusions }),
       Product.aggregate([
         { $match: filter },
         { $group: { _id: '$category', count: { $sum: 1 } } },
@@ -1888,7 +1892,8 @@ router.get('/:id', productReadLimiter, async (req, res) => {
       const product = await Product.findOne({
         _id: req.params.id,
         isActive: true,
-        $and: [availableStatusClause()]
+        $and: [availableStatusClause()],
+        $nor: publicCatalogExclusions()
       }).lean();
       if (!product) {
         const error = new Error('Product not found');
@@ -2164,5 +2169,6 @@ export {
   runProductRecategorizationJob,
   smartImportDraftFromSearchResult,
   smartImportRecord,
+  loadTestProductFilter,
   temporaryExternalAmazonFilter
 };

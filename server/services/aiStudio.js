@@ -15,7 +15,7 @@ import {
 } from '../utils/genderPreference.js';
 import { inferTryOnModel } from '../utils/tryOnModel.js';
 import { availableStatusClause } from '../utils/productAvailability.js';
-import { temporaryExternalAmazonFilter } from '../utils/productCatalogVisibility.js';
+import { publicCatalogExclusions } from '../utils/productCatalogVisibility.js';
 import {
   accessoryCategoryAliases,
   accessoryIdentityPattern,
@@ -1744,7 +1744,7 @@ function catalogFilter(extra = {}) {
   const extraAnd = Array.isArray(extra.$and) ? extra.$and : [];
   const filter = { ...extra };
   delete filter.$and;
-  return { ...filter, isActive: true, $nor: [temporaryExternalAmazonFilter()], $and: [availableStatusClause(), ...extraAnd] };
+  return { ...filter, isActive: true, $nor: publicCatalogExclusions(), $and: [availableStatusClause(), ...extraAnd] };
 }
 
 function categoryQuery(category = '') {

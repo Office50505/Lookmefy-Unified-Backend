@@ -183,7 +183,7 @@ test('rendered app covers auth, search, product, account, wardrobe, credits, and
   await page.goto('/tokens');
   await expect(page.getByText('Due today')).toBeVisible();
   await expect(page.getByText('First recurring payment')).toBeVisible();
-  await expect(page.getByRole('button', { name: /Set up ₹500\/month mandate/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Pay ₹1 and set mandate/ })).toBeVisible();
   await expect(page.getByText('₹1').first()).toBeVisible();
   await page.screenshot({ path: `${screenshotDir}/${testInfo.project.name}-credits.png`, fullPage: false });
 
@@ -216,6 +216,7 @@ test('responsive menu, OTP inputs, search layout, and payment summary fit every 
   await guestPage.getByRole('button', { name: /Send OTP/i }).click();
   const testOtpText = guestPage.locator('.signup-test-otp');
   await expect(testOtpText).toBeVisible();
+  await expect(testOtpText).toContainText(/\d{6}/);
   const testOtpMatch = (await testOtpText.innerText()).match(/\d{6}/);
   expect(testOtpMatch?.[0]).toMatch(/^\d{6}$/);
   const otpInput = guestPage.getByLabel('6-digit OTP');
@@ -232,7 +233,7 @@ test('responsive menu, OTP inputs, search layout, and payment summary fit every 
     await expectOneMain(page);
     await expectNoHorizontalOverflow(page);
   }
-  await expect(page.getByRole('button', { name: /Set up ₹500\/month mandate/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Pay ₹1 and set mandate/ })).toBeVisible();
   await page.screenshot({ path: `${screenshotDir}/${testInfo.project.name}-responsive-core.png`, fullPage: false });
 });
 
@@ -245,11 +246,13 @@ test('forgot password verifies OTP, changes the password, and ends existing sess
   await expect(page).toHaveURL(/\/forgot-password$/);
   await page.getByLabel('Mobile number').fill(account.phone);
   await page.getByRole('button', { name: 'Send OTP' }).click();
-  await page.getByLabel('6-digit OTP').fill(await latestOtp(account.phone, 'password-reset'));
+  const resetOtpInput = page.getByLabel('6-digit OTP');
+  await expect(resetOtpInput).toBeVisible();
+  await resetOtpInput.fill(await latestOtp(account.phone, 'password-reset'));
   await page.getByRole('button', { name: 'Verify OTP' }).click();
 
-  await page.getByLabel('New password').fill(nextPassword);
-  await page.getByLabel('Confirm password').fill(nextPassword);
+  await page.getByLabel('New password', { exact: true }).fill(nextPassword);
+  await page.getByLabel('Confirm password', { exact: true }).fill(nextPassword);
   await page.getByRole('button', { name: 'Reset Password' }).click();
   await expect(page).toHaveURL(/\/login\?passwordReset=success$/);
   await expect(page.getByText('Password reset successfully. Sign in with your new password.')).toBeVisible();
@@ -300,8 +303,9 @@ test('authentication persists across tabs and logout syncs', async ({ page, requ
   await second.goto('/profile');
   await expect(second.getByText(account.user.name).first()).toBeVisible();
 
-  if (await page.getByRole('button', { name: 'Log out', exact: true }).count()) {
-    await page.getByRole('button', { name: 'Log out', exact: true }).first().click();
+  const profileLogout = page.getByRole('main').getByRole('button', { name: /^Log out/ });
+  if (await profileLogout.count()) {
+    await profileLogout.click();
   } else {
     await page.getByRole('button', { name: 'Open menu' }).click();
     await page.locator('#mobile-navigation').getByRole('button', { name: /Log out/ }).click();

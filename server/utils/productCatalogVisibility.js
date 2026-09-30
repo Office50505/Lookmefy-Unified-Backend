@@ -7,4 +7,12 @@ function temporaryExternalAmazonFilter() {
   };
 }
 
-export { temporaryExternalAmazonFilter };
+function loadTestProductFilter() {
+  return { name: /^Load Test Product(?:\b|$)/i };
+}
+
+function publicCatalogExclusions() {
+  return [temporaryExternalAmazonFilter(), loadTestProductFilter()];
+}
+
+export { loadTestProductFilter, publicCatalogExclusions, temporaryExternalAmazonFilter };

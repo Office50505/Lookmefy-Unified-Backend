@@ -1830,7 +1830,6 @@ function Header({ user, setUser, authChecked = true }) {
             <a className={`header-credit-button ${!authChecked ? 'auth-pending' : ''}`} href="/tokens" aria-label={user ? `Buy credits. ${tokenLabel} available` : 'Buy credits'}><SparkleLineIcon /><span>Credits</span><strong>{user ? user.tokens : 0}</strong>{!authChecked && <strong className="header-auth-skeleton" aria-hidden="true" />}</a>
             <a className="icon-button header-count-button" href="/wishlist" aria-label={`${wishlistCount} wishlist items`}><HeartIcon />{wishlistCount > 0 && <strong>{wishlistCount}</strong>}</a>
             {!authChecked ? <span className="icon-button header-auth-loading" role="status" aria-label="Checking account"><UserIcon /></span> : user ? <a className="icon-button" href="/profile" aria-label="Profile"><NavProfileAvatar user={user} /></a> : <a className="icon-button" href="/signup" aria-label="Account"><UserIcon /></a>}
-            {user && <button className="text-button" onClick={logout}>Log out</button>}
             <button className="icon-button menu-toggle" type="button" aria-label={menuOpen ? 'Close menu' : 'Open menu'} aria-controls="mobile-navigation" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>
               {menuOpen ? <CloseIcon /> : <MenuIcon />}
             </button>
@@ -1845,7 +1844,6 @@ function Header({ user, setUser, authChecked = true }) {
           <div className="wrap mobile-menu-inner">
             <div className="mobile-menu-head">
               <strong>Menu</strong>
-              <button type="button" onClick={() => setMenuOpen(false)} aria-label="Close menu"><CloseIcon /></button>
             </div>
             {mobileDrawerLinks.map(([label, href], index) => {
               const navIndex = navLinks.findIndex(([navLabel]) => navLabel === (label === 'Download App' ? 'Download' : label === 'About Lookmefy' ? 'About' : label));
@@ -1960,18 +1958,19 @@ function storeLinkItems(context = 'page') {
 
 function StoreAction({ item, className = 'download-store-action' }) {
   const analyticsEvent = item.platform === 'apple' ? 'app_store_click' : 'google_play_click';
+  const unavailable = !item.href;
   const content = (
     <>
       <StoreLogo name={item.icon} />
       <span>
-        <small>{item.helper}</small>
+        <small>{unavailable ? 'Coming soon on' : item.helper}</small>
         <strong>{item.title}</strong>
       </span>
     </>
   );
-  if (!item.href) {
+  if (unavailable) {
     return (
-      <button className={`${className} is-disabled`} type="button" disabled aria-label={`${item.label} unavailable until the store URL is configured`}>
+      <button className={`${className} is-disabled`} type="button" disabled aria-label={`${item.title} app coming soon`} title={`${item.title} app coming soon`}>
         {content}
       </button>
     );
@@ -3524,7 +3523,16 @@ function ReferenceTryOnCard({ product }) {
         <a href={detailHref}><strong>{displayName}</strong></a>
         <span>{formatMoney(product.price || 0, product.currency)}</span>
         <div className="reference-tryon-actions">
-          <a className="reference-tryon-button" href={`${detailHref}#ai-try-on`} onClick={() => recordEvent('tryon_recommendation_click', { productId: id })}>
+          <a
+            className="reference-tryon-button"
+            href={`${detailHref}#ai-try-on`}
+            onPointerDown={(event) => event.currentTarget.classList.add('is-pressing')}
+            onPointerUp={(event) => event.currentTarget.classList.remove('is-pressing')}
+            onPointerLeave={(event) => event.currentTarget.classList.remove('is-pressing')}
+            onPointerCancel={(event) => event.currentTarget.classList.remove('is-pressing')}
+            onBlur={(event) => event.currentTarget.classList.remove('is-pressing')}
+            onClick={() => recordEvent('tryon_recommendation_click', { productId: id })}
+          >
             <CameraIcon /><span>Try On</span>
           </a>
         </div>
@@ -10622,11 +10630,12 @@ function OnboardingOverview({ user, onComplete, onClose, persist = true }) {
       icon: <SearchIcon />,
       visual: 'Search + filters',
       target: 'Search and explore',
+      mobileTarget: 'Categories tab',
       position: 'top',
       selectors: ['.desktop-search', '.search-shell', '.mobile-search-trigger', 'a[href="/categories"]', 'a[href="/search"]'],
-      mobileSelectors: ['.mobile-search-trigger', '.mobile-bottom-nav a[href="/categories"]', 'a[href="/search"]', 'a[href="/categories"]'],
+      mobileSelectors: ['.mobile-bottom-nav a[href="/categories"]', '.mobile-search-trigger', 'a[href="/categories"]', 'a[href="/search"]'],
       fallback: { x: 50, y: 14, radius: 88 },
-      mobileFallback: { x: 62, y: 8, radius: 50 }
+      mobileFallback: { x: 28, y: 92, radius: 44 }
     },
     {
       eyebrow: 'Preview',

@@ -19,13 +19,13 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: `PORT=${apiPort} NODE_ENV=test OTP_DELIVERY_PROVIDER=mock OTP_MOCK_STORE_PATH=${otpStorePath} ENABLE_TEST_OTP_HELPER=true PHONEPE_CALLBACK_USERNAME=playwright PHONEPE_CALLBACK_PASSWORD=playwright QUEUE_ENABLED=false TEMP_SESSION_REQUIRE_REDIS=false REDIS_URL= RATE_LIMIT_GLOBAL_MAX=10000 RATE_LIMIT_AUTH_OTP_REQUEST_IP_MAX=1000 RATE_LIMIT_AUTH_OTP_REQUEST_PHONE_MAX=100 RATE_LIMIT_AUTH_OTP_REQUEST_PHONE_HOURLY_MAX=100 npm run server`,
+      command: `PORT=${apiPort} NODE_ENV=test OTP_DELIVERY_PROVIDER=mock OTP_FIXED_CODE= OTP_MOCK_STORE_PATH=${otpStorePath} ENABLE_TEST_OTP_HELPER=true PHONEPE_CALLBACK_USERNAME=playwright PHONEPE_CALLBACK_PASSWORD=playwright QUEUE_ENABLED=false TEMP_SESSION_REQUIRE_REDIS=false REDIS_URL= RATE_LIMIT_GLOBAL_MAX=10000 RATE_LIMIT_AUTH_OTP_REQUEST_IP_MAX=1000 RATE_LIMIT_AUTH_OTP_REQUEST_PHONE_MAX=100 RATE_LIMIT_AUTH_OTP_REQUEST_PHONE_HOURLY_MAX=100 npm run server`,
       url: `${apiBaseUrl}/api/health`,
       reuseExistingServer: true,
       timeout: 30_000
     },
     {
-      command: `VITE_DEV_PROXY_TARGET=${apiBaseUrl} VITE_ENABLE_TEST_OTP_HELPER=true npm run dev -- --port ${webPort}`,
+      command: `VITE_DEV_API_BASE_URL=${apiBaseUrl} VITE_DEV_PROXY_TARGET=${apiBaseUrl} VITE_ENABLE_TEST_OTP_HELPER=true npm run dev -- --port ${webPort}`,
       url: `${webBaseUrl}/`,
       reuseExistingServer: true,
       timeout: 30_000

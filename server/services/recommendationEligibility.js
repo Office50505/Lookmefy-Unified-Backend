@@ -1,11 +1,12 @@
 import { availableStatusClause, productAvailabilityStatus } from '../utils/productAvailability.js';
+import { loadTestProductFilter } from '../utils/productCatalogVisibility.js';
 
 function recommendationCatalogFilter(extra = {}) {
   const botAmazonRecord = { badge: 'Amazon', $or: [{ sourceUrl: /amazon\.[a-z.]+\/dp\//i }, { affiliateLink: /amazon\.[a-z.]+\/dp\//i }] };
   const extraAnd = Array.isArray(extra.$and) ? extra.$and : [];
   const filter = { ...extra };
   delete filter.$and;
-  return { ...filter, isActive: true, $nor: [botAmazonRecord], $and: [availableStatusClause(), ...extraAnd] };
+  return { ...filter, isActive: true, $nor: [botAmazonRecord, loadTestProductFilter()], $and: [availableStatusClause(), ...extraAnd] };
 }
 
 function productRecommendationImageUrl(product = {}) {

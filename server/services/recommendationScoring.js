@@ -427,18 +427,19 @@ function multiSignalScore(keys, preferenceMap, recentMap, preferenceScale, recen
 }
 
 function avoidSignalScore(product, preference = {}) {
+  const safePreference = preference || {};
   const styleSignals = productStyleSignals(product);
   const tagKeys = productStyleKeys(product);
   const total = (
-    (boundedSignal(preferenceValue(preference.avoidCategories, normalizeKey(product.category))) * 2.4)
-    + (boundedSignal(preferenceValue(preference.avoidBrands, normalizeKey(product.brand))) * 1.15)
-    + (boundedSignal(genderSignalValue(preference.avoidGenders, product.gender)) * 1.15)
-    + multiSignalScore(tagKeys, preference.avoidTags, null, 0.9, 0, 4)
-    + multiSignalScore(styleSignals.colors, preference.avoidColors, null, 0.85, 0, 3)
-    + multiSignalScore(styleSignals.garmentPlacements, preference.avoidGarmentPlacements, null, 0.75, 0, 2)
-    + multiSignalScore(styleSignals.occasions, preference.avoidOccasions, null, 0.75, 0, 3)
-    + multiSignalScore(styleSignals.formalities, preference.avoidFormalities, null, 0.65, 0, 2)
-    + multiSignalScore(styleSignals.priceBands, preference.avoidPriceBands, null, 0.5, 0, 1)
+    (boundedSignal(preferenceValue(safePreference.avoidCategories, normalizeKey(product.category))) * 2.4)
+    + (boundedSignal(preferenceValue(safePreference.avoidBrands, normalizeKey(product.brand))) * 1.15)
+    + (boundedSignal(genderSignalValue(safePreference.avoidGenders, product.gender)) * 1.15)
+    + multiSignalScore(tagKeys, safePreference.avoidTags, null, 0.9, 0, 4)
+    + multiSignalScore(styleSignals.colors, safePreference.avoidColors, null, 0.85, 0, 3)
+    + multiSignalScore(styleSignals.garmentPlacements, safePreference.avoidGarmentPlacements, null, 0.75, 0, 2)
+    + multiSignalScore(styleSignals.occasions, safePreference.avoidOccasions, null, 0.75, 0, 3)
+    + multiSignalScore(styleSignals.formalities, safePreference.avoidFormalities, null, 0.65, 0, 2)
+    + multiSignalScore(styleSignals.priceBands, safePreference.avoidPriceBands, null, 0.5, 0, 1)
   );
   return -Math.min(8, total);
 }
