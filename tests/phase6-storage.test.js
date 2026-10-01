@@ -4,8 +4,10 @@ import test from 'node:test';
 import User from '../server/models/User.js';
 import { serveUploadedMedia } from '../server/utils/security.js';
 import { mediaMigrationPlans, mediaMigrationCandidates, shouldMigrate } from '../scripts/migrate-uploads-to-bunny.js';
+import { classifyFromBooleans, localStyleReferenceFromField } from '../scripts/audit-missing-media.js';
 import { generateFullBodyProfileInBackground, profileFullBodyJobSource, runProfileFullBodyJob } from '../server/routes/auth.js';
 import {
+  bunnyObjectExists,
   deleteStoredFile,
   localPathForKey,
   readStoredFile,
@@ -106,6 +108,45 @@ test('media migration inventories nested body photo originals and every media-be
     bodyPhoto: { original: { path: 'uploads/users/abc/original.jpg', storage: 'local' } }
   });
   assert.deepEqual(mediaMigrationCandidates(user, byModel.get('User')), ['bodyPhoto.original']);
+});
+
+test('missing media audit reads the same local-style field values without writes', () => {
+  assert.deepEqual(localStyleReferenceFromField({ path: '/uploads/users/u/body.jpg' }), {
+    raw: '/uploads/users/u/body.jpg',
+    path: 'uploads/users/u/body.jpg',
+    sourceProperty: 'path'
+  });
+  assert.deepEqual(localStyleReferenceFromField({ url: 'uploads/users/u/body.jpg' }), {
+    raw: 'uploads/users/u/body.jpg',
+    path: 'uploads/users/u/body.jpg',
+    sourceProperty: 'url'
+  });
+  assert.deepEqual(localStyleReferenceFromField('uploads/users/u/transparent.png'), {
+    raw: 'uploads/users/u/transparent.png',
+    path: 'uploads/users/u/transparent.png',
+    sourceProperty: 'value'
+  });
+  assert.equal(localStyleReferenceFromField('https://cdn.example.test/users/u/remote.jpg'), null);
+  assert.equal(classifyFromBooleans({ localPresent: true, bunnyPresent: true }), 'LOCAL_PRESENT');
+  assert.equal(classifyFromBooleans({ localPresent: false, bunnyPresent: true }), 'BUNNY_PRESENT');
+  assert.equal(classifyFromBooleans({ localPresent: false, bunnyPresent: false }), 'MISSING_EVERYWHERE');
+});
+
+test('Bunny existence audit uses HEAD with storage cleanKey mapping', async (t) => {
+  configureBunnyProduction(t);
+  const calls = [];
+  mockFetch(t, async (url, options = {}) => {
+    calls.push({ url: String(url), method: options.method, headers: options.headers });
+    return new Response('', { status: 200 });
+  });
+
+  const exists = await bunnyObjectExists('uploads/users/64f000000000000000000001/profile/body photo.jpg');
+
+  assert.equal(exists, true);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].method, 'HEAD');
+  assert.match(calls[0].url, /\/lookmefy-test\/users\/64f000000000000000000001\/profile\/body%20photo\.jpg$/);
+  assert.equal(calls[0].headers.AccessKey, 'test-key');
 });
 
 test('production shared storage failure throws controlled dependency error without local fallback', async (t) => {

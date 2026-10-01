@@ -30,6 +30,7 @@
     "analytics:retention:apply": "node scripts/backfill-analytics-retention.js",
     "storage:migrate:bunny": "node scripts/migrate-uploads-to-bunny.js",
     "storage:migrate:bunny:apply": "node scripts/migrate-uploads-to-bunny.js --apply",
+    "storage:audit:bunny": "node scripts/audit-missing-media.js",
     "recommendations:debug": "node scripts/recommendation-debug.js",
     "test:coverage": "node --test --experimental-test-coverage --test-coverage-lines=40 --test-coverage-functions=40 --test-coverage-branches=60 tests/*.test.js",
     "quality:sonar": "sonar-scanner",

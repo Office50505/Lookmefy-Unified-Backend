@@ -164,6 +164,14 @@ async function listBunnyInventory({ prefix = '', maxFiles, maxDepth } = {}) {
   return { files, truncated, maxFiles: fileLimit, maxDepth: depthLimit };
 }
 
+async function bunnyObjectExists(key) {
+  if (!useBunny()) throw new Error('Bunny storage is not enabled');
+  const response = await bunnyRequest(key, { method: 'HEAD' });
+  if (response.ok) return true;
+  if (response.status === 404) return false;
+  throw storageUnavailableError(`Bunny storage HEAD failed (${response.status})`);
+}
+
 async function saveBuffer({ key, buffer, mimetype = 'application/octet-stream', filename }) {
   const clean = cleanKey(key || filename);
   if (!clean) throw new Error('Storage key is required');
@@ -316,6 +324,7 @@ async function storedFileSignature(file) {
 }
 
 export {
+  bunnyObjectExists,
   cleanKey,
   deleteStoredFile,
   deleteStoredPrefix,
