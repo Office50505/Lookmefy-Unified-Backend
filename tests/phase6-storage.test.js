@@ -132,21 +132,39 @@ test('missing media audit reads the same local-style field values without writes
   assert.equal(classifyFromBooleans({ localPresent: false, bunnyPresent: false }), 'MISSING_EVERYWHERE');
 });
 
-test('Bunny existence audit uses HEAD with storage cleanKey mapping', async (t) => {
+test('Bunny existence audit uses ranged GET with storage cleanKey mapping without reading body', async (t) => {
   configureBunnyProduction(t);
   const calls = [];
+  let canceled = false;
+  let read = false;
   mockFetch(t, async (url, options = {}) => {
     calls.push({ url: String(url), method: options.method, headers: options.headers });
-    return new Response('', { status: 200 });
+    return {
+      ok: true,
+      status: 206,
+      body: {
+        cancel() {
+          canceled = true;
+          return Promise.resolve();
+        },
+        getReader() {
+          read = true;
+          return { read: async () => ({ done: true }) };
+        }
+      }
+    };
   });
 
   const exists = await bunnyObjectExists('uploads/users/64f000000000000000000001/profile/body photo.jpg');
 
   assert.equal(exists, true);
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].method, 'HEAD');
+  assert.equal(calls[0].method, 'GET');
+  assert.equal(calls[0].headers.Range, 'bytes=0-0');
   assert.match(calls[0].url, /\/lookmefy-test\/users\/64f000000000000000000001\/profile\/body%20photo\.jpg$/);
   assert.equal(calls[0].headers.AccessKey, 'test-key');
+  assert.equal(canceled, true);
+  assert.equal(read, false);
 });
 
 test('production shared storage failure throws controlled dependency error without local fallback', async (t) => {

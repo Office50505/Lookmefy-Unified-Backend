@@ -166,10 +166,15 @@ async function listBunnyInventory({ prefix = '', maxFiles, maxDepth } = {}) {
 
 async function bunnyObjectExists(key) {
   if (!useBunny()) throw new Error('Bunny storage is not enabled');
-  const response = await bunnyRequest(key, { method: 'HEAD' });
+  const response = await bunnyRequest(key, {
+    method: 'GET',
+    headers: { Range: 'bytes=0-0' }
+  });
+  const cancelResult = response.body?.cancel?.();
+  if (cancelResult?.catch) cancelResult.catch(() => {});
   if (response.ok) return true;
   if (response.status === 404) return false;
-  throw storageUnavailableError(`Bunny storage HEAD failed (${response.status})`);
+  throw storageUnavailableError(`Bunny storage GET failed (${response.status})`);
 }
 
 async function saveBuffer({ key, buffer, mimetype = 'application/octet-stream', filename }) {
