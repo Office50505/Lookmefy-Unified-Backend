@@ -16,7 +16,7 @@ systemctl restart lookmefy-worker.service || true
 
 check_ready() {
   curl -fsS --max-time 6 "$1" 2>/dev/null |
-    python3 -c 'import json,sys; x=json.load(sys.stdin); sys.exit(0 if x.get("ready") is True and all(x.get(k)=="ready" for k in ("database","redis","queue")) else 1)' 2>/dev/null
+    python3 -c 'import json,sys; x=json.load(sys.stdin); c=x.get("checks",{}); sys.exit(0 if x.get("ok") is True and all(c.get(k)=="ready" for k in ("mongo","redis","queue")) else 1)' 2>/dev/null
 }
 
 local_ready=0

@@ -966,7 +966,7 @@ test('mocked PhonePe failure, cancellation, and timeout do not credit tokens', a
         const result = await reconcileOrder(order);
         assert.equal(result.order.status, 'failed');
         assert.equal(result.order.providerState, state);
-        assert.equal(result.order.saved, true);
+        assert.equal(order.saved, undefined, 'stale Mongoose save must not overwrite a concurrent fulfillment');
       });
     }
     assert.equal(modelCalls.credits, 0);

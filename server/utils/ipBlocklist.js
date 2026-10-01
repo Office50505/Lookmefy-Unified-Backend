@@ -2,6 +2,7 @@ import net from 'node:net';
 import BlockedIp from '../models/BlockedIp.js';
 import { emitStructuredLog } from './logging.js';
 import { clientIp } from './rateLimit.js';
+import { sharedStateUnavailableError } from './cache.js';
 
 let cache = { loadedAt: 0, rules: [] };
 
@@ -38,23 +39,37 @@ function blocklistEnabled(env = process.env) {
   return !['0', 'false', 'no', 'off'].includes(raw);
 }
 
-async function loadRules() {
-  const ttlMs = Math.max(1000, Number(process.env.IP_BLOCKLIST_CACHE_MS || 30_000));
-  if (Date.now() - cache.loadedAt < ttlMs) return cache.rules;
-  if (BlockedIp.db?.readyState !== 1) return cache.rules;
+async function queryRules() {
+  if (BlockedIp.db?.readyState !== 1) throw sharedStateUnavailableError();
   const now = new Date();
   const rows = await BlockedIp.find({
     active: true,
     $or: [{ expiresAt: { $exists: false } }, { expiresAt: null }, { expiresAt: { $gt: now } }]
   }).select('value reason source expiresAt').lean();
+  return rows.map((row) => ({ ...row, value: normalizeIpRule(row.value) })).filter((row) => row.value);
+}
+
+function sharedBlocklistRequired() {
+  return String(process.env.NODE_ENV || '').toLowerCase() === 'production';
+}
+
+async function loadRules() {
+  if (sharedBlocklistRequired()) {
+    // Security decisions require current database state on every request.
+    // Redis and process-local caches can retain an unsafe allow decision after a write.
+    return queryRules();
+  }
+  const ttlMs = Math.max(1000, Number(process.env.IP_BLOCKLIST_CACHE_MS || 30_000));
+  if (Date.now() - cache.loadedAt < ttlMs) return cache.rules;
+  if (BlockedIp.db?.readyState !== 1) return cache.rules;
   cache = {
     loadedAt: Date.now(),
-    rules: rows.map((row) => ({ ...row, value: normalizeIpRule(row.value) })).filter((row) => row.value)
+    rules: await queryRules()
   };
   return cache.rules;
 }
 
-function clearIpBlocklistCache() {
+async function clearIpBlocklistCache() {
   cache = { loadedAt: 0, rules: [] };
 }
 
@@ -75,7 +90,7 @@ async function createBlockedIp({ value, reason = '', source = 'manual', expiresA
     },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );
-  clearIpBlocklistCache();
+  await clearIpBlocklistCache();
   return doc;
 }
 
@@ -116,7 +131,7 @@ function ipBlocklistMiddleware() {
       return res.status(403).json({ code: 'IP_BLOCKED', message: 'This network is blocked.' });
     } catch (error) {
       emitStructuredLog({ level: 'warn', event: 'ip_blocklist_failed', message: error.message });
-      return next();
+      return res.status(503).json({ code: 'SHARED_STATE_UNAVAILABLE', message: 'Security checks are temporarily unavailable.' });
     }
   };
 }

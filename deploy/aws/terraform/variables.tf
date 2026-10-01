@@ -87,4 +87,9 @@ variable "backend_env" {
   type        = map(string)
   sensitive   = true
   default     = {}
+
+  validation {
+    condition     = can(regex("^rediss?://", lookup(var.backend_env, "REDIS_URL", ""))) && !can(regex("^rediss?://(?:[^@/]+@)?(?:localhost|127\\.0\\.0\\.1|0\\.0\\.0\\.0|\\[::1\\])(?::|/|$)", lookup(var.backend_env, "REDIS_URL", "")))
+    error_message = "backend_env.REDIS_URL must identify a shared, non-local Redis endpoint."
+  }
 }

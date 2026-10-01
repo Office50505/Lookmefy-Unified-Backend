@@ -212,11 +212,21 @@ async function readRemoteBuffer(url, label = 'image') {
   };
 }
 
+async function readBunnyBuffer(key) {
+  const response = await bunnyRequest(key, { method: 'GET' });
+  if (!response.ok) throw storageUnavailableError(`Bunny storage read failed (${response.status})`);
+  return {
+    buffer: Buffer.from(await response.arrayBuffer()),
+    mimetype: response.headers.get('content-type') || 'application/octet-stream'
+  };
+}
+
 async function readStoredFile(file, label = 'image') {
   if (!file) throw new Error(`${label} is missing`);
   if (Buffer.isBuffer(file)) return { buffer: file, mimetype: '' };
   if (typeof file === 'string') {
     if (/^https?:\/\//i.test(file)) return readRemoteBuffer(file, label);
+    if (isProductionEnv() && useBunny()) return readBunnyBuffer(file);
     try {
       return {
         buffer: await fs.readFile(localPathForKey(file)),
@@ -226,6 +236,11 @@ async function readStoredFile(file, label = 'image') {
       if (!useBunny()) throw error;
       return readRemoteBuffer(publicUrlForKey(file), label);
     }
+  }
+
+  if (isProductionEnv() && useBunny() && file.path && !/^https?:\/\//i.test(file.path)) {
+    const result = await readBunnyBuffer(file.path);
+    return { ...result, mimetype: file.mimetype || result.mimetype };
   }
 
   const directUrl = file.url || file.remoteUrl || (file.storage === 'bunny' ? publicUrlForStoredFile(file) : '');

@@ -785,7 +785,7 @@ function subscriptionStatusForRazorpay(value = '') {
 }
 
 function capturedPayment(payment = {}) {
-  return ['captured', 'authorized'].includes(String(payment.status || '').toLowerCase());
+  return String(payment.status || '').toLowerCase() === 'captured';
 }
 
 function isMongoDuplicateKeyError(error) {
@@ -888,8 +888,8 @@ function razorpayCycleOrderMatchesFulfillment(cycleOrder, {
   if (!cycleOrder) return true;
   const orderSubscriptionId = String(cycleOrder.merchantSubscriptionId || cycleOrder.razorpaySubscriptionId || '').trim();
   if (orderSubscriptionId && orderSubscriptionId !== String(subscriptionId || '').trim()) return false;
-  const orderInvoiceId = String(cycleOrder.razorpayInvoiceId || '').trim();
-  if (invoiceId && orderInvoiceId && orderInvoiceId !== String(invoiceId).trim()) return false;
+  // Invoice metadata can be absent or vary between webhook types. The payment
+  // ID is the canonical economic identity used by the fulfillment key.
   const orderPaymentId = String(cycleOrder.razorpayPaymentId || '').trim();
   if (paymentId && orderPaymentId && orderPaymentId !== String(paymentId).trim()) return false;
   const parentOrderId = String(cycleOrder.parentOrderId || '').trim();
@@ -1030,12 +1030,20 @@ async function grantRazorpayMandateSetupTokens({ order, subscription = {}, payme
 
 async function grantRazorpaySubscriptionCycleTokens({ order, subscription = {}, payment = {}, invoice = {}, providerResponse = {} }) {
   const subscriptionId = order.merchantSubscriptionId || order.razorpaySubscriptionId || subscription.id || payment.subscription_id || invoice.subscription_id || '';
+  if ((payment.subscription_id && payment.subscription_id !== subscriptionId)
+    || (invoice.subscription_id && invoice.subscription_id !== subscriptionId)) {
+    const error = new Error('Razorpay payment does not belong to this subscription');
+    error.statusCode = 400;
+    throw error;
+  }
   const paymentId = payment.id || '';
   const invoiceId = invoice.id || payment.invoice_id || '';
-  const sourceId = invoiceId || paymentId || subscriptionId;
-  if (!subscriptionId || !sourceId) {
-    const error = new Error('Razorpay subscription payment reference is missing');
-    error.statusCode = 400;
+  // A payment may arrive with or without its invoice in different webhook types.
+  // The provider payment ID is the one identity shared by all notifications.
+  const sourceId = paymentId;
+  if (!subscriptionId || !paymentId) {
+    const error = new Error('Razorpay subscription payment ID is required for fulfillment');
+    error.statusCode = 503;
     throw error;
   }
   const now = new Date();
@@ -1505,13 +1513,13 @@ async function completeRazorpayPayment({ user, merchantOrderId, razorpayOrderId,
     error.statusCode = 400;
     throw error;
   }
-  if (Number(payment.amount || 0) && Number(payment.amount || 0) !== Number(order.dueTodayAmount || order.amount || 0)) {
+  if (Number(payment.amount || 0) !== Number(order.dueTodayAmount || order.amount || 0)) {
     const error = new Error('Razorpay payment amount does not match this checkout');
     error.statusCode = 400;
     throw error;
   }
-  if (['failed', 'cancelled'].includes(String(payment.status || '').toLowerCase())) {
-    const error = new Error('Razorpay payment was not successful');
+  if (!capturedPayment(payment)) {
+    const error = new Error('Razorpay payment has not been captured');
     error.statusCode = 400;
     throw error;
   }
@@ -1555,21 +1563,30 @@ async function reconcileRazorpayOrder(order) {
     const subscriptionId = order.merchantSubscriptionId || order.razorpaySubscriptionId;
     const subscription = await razorpayFetch(`/subscriptions/${encodeURIComponent(subscriptionId)}`, {}, credentials);
     const providerState = String(subscription.status || '').toUpperCase();
-    order.provider = 'razorpay';
-    order.providerState = providerState || order.providerState;
-    order.providerResponse = subscription;
-    order.status = ['active', 'authenticated'].includes(String(subscription.status || '').toLowerCase()) ? 'pending' : order.status;
-    await order.save();
-    const user = await updateRazorpaySubscriptionSnapshot({ order, subscription, providerResponse: { provider: 'razorpay', verifiedBy: 'subscription_status', subscription } });
-    return { order, user: user || await User.findById(order.user) };
+    const pendingOrder = await TokenOrder.findOneAndUpdate(
+      { _id: order._id, creditedAt: null },
+      { $set: {
+        provider: 'razorpay',
+        providerState: providerState || order.providerState,
+        providerResponse: subscription,
+        status: ['active', 'authenticated'].includes(String(subscription.status || '').toLowerCase()) ? 'pending' : order.status
+      } },
+      { new: true }
+    );
+    const currentOrder = pendingOrder || await TokenOrder.findById(order._id);
+    const user = await updateRazorpaySubscriptionSnapshot({ order: currentOrder, subscription, providerResponse: { provider: 'razorpay', verifiedBy: 'subscription_status', subscription } });
+    return { order: currentOrder, user: user || await User.findById(order.user) };
   }
   if (!order.razorpayOrderId) return { order, user: await User.findById(order.user) };
 
   const razorpayOrder = await razorpayFetch(`/orders/${encodeURIComponent(order.razorpayOrderId)}`, {}, credentials);
   const providerState = String(razorpayOrder.status || '').toUpperCase();
-    if (String(razorpayOrder.status || '').toLowerCase() === 'paid') {
+  if (String(razorpayOrder.status || '').toLowerCase() === 'paid') {
     const payments = await razorpayFetch(`/orders/${encodeURIComponent(order.razorpayOrderId)}/payments`, {}, credentials);
-    const payment = (payments.items || []).find((item) => ['captured', 'authorized'].includes(String(item.status || '').toLowerCase()));
+    const payment = (payments.items || []).find((item) => capturedPayment(item)
+      && (!item.order_id || item.order_id === order.razorpayOrderId)
+      && Number(item.amount || 0) === Number(order.dueTodayAmount || order.amount || 0));
+    if (!payment) return { order, user: await User.findById(order.user) };
     const providerResponse = {
       provider: 'razorpay',
       verifiedBy: 'order_status',
@@ -1590,12 +1607,17 @@ async function reconcileRazorpayOrder(order) {
     return { order: completedOrder, user };
   }
 
-  order.provider = 'razorpay';
-  order.providerState = providerState || order.providerState;
-  order.providerResponse = razorpayOrder;
-  order.status = statusFromRazorpayOrderStatus(razorpayOrder.status) || order.status;
-  await order.save();
-  return { order, user: await User.findById(order.user) };
+  const pendingOrder = await TokenOrder.findOneAndUpdate(
+    { _id: order._id, creditedAt: null },
+    { $set: {
+      provider: 'razorpay',
+      providerState: providerState || order.providerState,
+      providerResponse: razorpayOrder,
+      status: statusFromRazorpayOrderStatus(razorpayOrder.status) || order.status
+    } },
+    { new: true }
+  );
+  return { order: pendingOrder || await TokenOrder.findById(order._id), user: await User.findById(order.user) };
 }
 
 async function createDemoCreditPayment({ req, user, plan = SUBSCRIPTION_PLAN }) {
@@ -1773,11 +1795,16 @@ async function reconcileOrder(order) {
     return { order: completedOrder, user };
   }
 
-  order.providerState = state || order.providerState;
-  order.providerResponse = status;
-  order.status = statusFromPhonePeState(state) || order.status;
-  await order.save();
-  return { order, user: await User.findById(order.user) };
+  const pendingOrder = await TokenOrder.findOneAndUpdate(
+    { _id: order._id, creditedAt: null },
+    { $set: {
+      providerState: state || order.providerState,
+      providerResponse: status,
+      status: statusFromPhonePeState(state) || order.status
+    } },
+    { new: true }
+  );
+  return { order: pendingOrder || await TokenOrder.findById(order._id), user: await User.findById(order.user) };
 }
 
 async function runPhonePeTokenOrderReconciliationJob(

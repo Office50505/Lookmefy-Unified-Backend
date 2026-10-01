@@ -1,15 +1,35 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { configurationReadiness, phonePeEnabled, razorpayEnabled, validateServerEnv } from '../server/utils/envValidation.js';
+import { configurationReadiness, phonePeEnabled, razorpayEnabled, validateServerEnv, validateSharedRedisConfiguration, validateSharedStorageConfiguration } from '../server/utils/envValidation.js';
+
+test('production refuses absent or instance-local Redis for API and worker', () => {
+  assert.throws(() => validateSharedRedisConfiguration({ NODE_ENV: 'production' }), /REDIS_URL is required/);
+  for (const url of ['redis://127.0.0.1:6379', 'redis://localhost:6379', 'redis://[::1]:6379']) {
+    assert.throws(() => validateSharedRedisConfiguration({ NODE_ENV: 'production', REDIS_URL: url }), /shared Redis/);
+  }
+  assert.doesNotThrow(() => validateSharedRedisConfiguration({ NODE_ENV: 'production', REDIS_URL: 'rediss://shared-redis.example.internal:6379' }));
+});
 
 const productionAiEnv = {
   CLIENT_ORIGIN: 'https://fitlook.in',
+  REDIS_URL: 'rediss://shared-redis.example.internal:6379',
+  STORAGE_PROVIDER: 'bunny',
+  BUNNY_STORAGE_ZONE: 'lookmefy-test',
+  BUNNY_STORAGE_API_KEY: 'test-key',
+  BUNNY_CDN_BASE_URL: 'https://cdn.lookmefy.test',
   AI_PROVIDER: 'pruna',
   TRYON_VIDEO_PROVIDER: 'pixverse',
   PRUNA_API_KEY: 'pruna-test-key',
   FAL_KEY: 'fal-test-key',
   FITROOM_API_KEY: 'fitroom-test-key'
 };
+
+test('production API and worker refuse local or incomplete media storage', () => {
+  assert.throws(() => validateSharedStorageConfiguration({ NODE_ENV: 'production', STORAGE_PROVIDER: 'local' }), /STORAGE_PROVIDER=bunny/);
+  assert.throws(() => validateSharedStorageConfiguration({ NODE_ENV: 'production', STORAGE_PROVIDER: 'bunny' }), /BUNNY_STORAGE_ZONE.*BUNNY_STORAGE_API_KEY.*BUNNY_CDN_BASE_URL/);
+  assert.throws(() => validateSharedStorageConfiguration({ NODE_ENV: 'production', ...productionAiEnv, BUNNY_CDN_BASE_URL: 'https://localhost:8080' }), /public HTTPS URL/);
+  assert.doesNotThrow(() => validateSharedStorageConfiguration({ NODE_ENV: 'production', ...productionAiEnv }));
+});
 
 test('validateServerEnv requires production-critical values', () => {
   assert.throws(() => validateServerEnv({ MONGODB_URI: '', JWT_SECRET: '' }), /MONGODB_URI, JWT_SECRET/);
@@ -278,12 +298,13 @@ test('production requires keys for selected AI providers and enabled generation 
     MONGODB_URI: 'mongodb://localhost:27017/fitlook',
     JWT_SECRET: 'secret',
     CLIENT_ORIGIN: 'https://fitlook.in',
+    REDIS_URL: 'rediss://shared-redis.example.internal:6379',
     OTP_DELIVERY_PROVIDER: 'disabled',
     PHONEPE_ENABLED: 'false'
   };
   assert.throws(() => validateServerEnv(base), /PRUNA_API_KEY.*FAL_KEY.*FITROOM_API_KEY/);
   assert.doesNotThrow(() => validateServerEnv({ ...base, ...productionAiEnv }));
-  assert.doesNotThrow(() => validateServerEnv({ ...base, AI_FEATURES_ENABLED: 'false' }));
+  assert.doesNotThrow(() => validateServerEnv({ ...base, ...productionAiEnv, AI_FEATURES_ENABLED: 'false' }));
 });
 
 test('validateServerEnv allows fixed OTP for staging mock delivery', () => {

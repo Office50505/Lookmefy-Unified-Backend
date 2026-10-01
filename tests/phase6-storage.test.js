@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import test from 'node:test';
 import User from '../server/models/User.js';
+import { serveUploadedMedia } from '../server/utils/security.js';
+import { mediaMigrationPlans, mediaMigrationCandidates, shouldMigrate } from '../scripts/migrate-uploads-to-bunny.js';
 import { generateFullBodyProfileInBackground, profileFullBodyJobSource, runProfileFullBodyJob } from '../server/routes/auth.js';
 import {
   deleteStoredFile,
@@ -64,6 +66,46 @@ test('production persistent upload uses Bunny shared storage', async (t) => {
   assert.equal(calls.length, 1);
   assert.equal(calls[0].method, 'PUT');
   assert.equal(calls[0].body.toString(), 'image-bytes');
+});
+
+test('production /uploads reads Bunny even when no EC2-local file exists', async (t) => {
+  configureBunnyProduction(t);
+  const key = 'product-cross-instance.jpg';
+  await assert.rejects(fs.stat(localPathForKey(key)), { code: 'ENOENT' });
+  let requested = '';
+  mockFetch(t, async (url) => {
+    requested = String(url);
+    return new Response(Buffer.from('shared-image'), { status: 200, headers: { 'content-type': 'image/jpeg' } });
+  });
+  const res = {
+    headers: {},
+    setHeader(name, value) { this.headers[name] = value; },
+    type(value) { this.contentType = value; return this; },
+    send(value) { this.body = value; return this; },
+    status(value) { this.statusCode = value; return this; },
+    end() { return this; }
+  };
+  await serveUploadedMedia()({ path: `/${key}` }, res);
+  assert.equal(res.body.toString(), 'shared-image');
+  assert.match(requested, /product-cross-instance\.jpg$/);
+});
+
+test('media migration inventories nested body photo originals and every media-bearing model', () => {
+  const byModel = new Map(mediaMigrationPlans.map((plan) => [plan.model.modelName, plan]));
+  assert.deepEqual(byModel.get('User').fields, ['avatarPhoto', 'bodyPhoto', 'bodyPhoto.original']);
+  for (const name of ['Product', 'TryOn', 'CustomTryOn', 'ExternalTryOn', 'ClosetItem', 'ClosetOutfit']) {
+    assert.ok(byModel.get(name)?.fields.length, `${name} must be inventoried`);
+  }
+  assert.equal(shouldMigrate({ path: 'uploads/users/abc/original.jpg', storage: 'local' }), true);
+  assert.equal(shouldMigrate({ url: '/uploads/users/abc/original.jpg', storage: 'local' }), true);
+  assert.equal(shouldMigrate({ path: 'uploads/users/abc/original.jpg', storage: 'bunny' }), false);
+  const user = new User({
+    name: 'Migration Test',
+    email: 'media-migration@example.test',
+    passwordHash: 'test-hash',
+    bodyPhoto: { original: { path: 'uploads/users/abc/original.jpg', storage: 'local' } }
+  });
+  assert.deepEqual(mediaMigrationCandidates(user, byModel.get('User')), ['bodyPhoto.original']);
 });
 
 test('production shared storage failure throws controlled dependency error without local fallback', async (t) => {

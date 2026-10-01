@@ -2969,5 +2969,7 @@ export {
   runProductTryOnJob,
   sareeImageQuality,
   shouldUseFalImageEditForProduct,
-  tryOnMediaTokenKind
+  tryOnMediaTokenKind,
+  reserveToken as reserveTryOnToken,
+  refundToken as refundTryOnToken
 };

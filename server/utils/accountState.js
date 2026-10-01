@@ -34,6 +34,29 @@ function tokenBalanceAfter({ current, mode, amount }) {
   return next;
 }
 
+async function updateAdminTokensAtomic(UserModel, userId, mode, amount) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const current = await UserModel.findById(userId);
+    if (!current) return null;
+    if (accountStatusFor(current) === 'deleted') {
+      const error = new Error('Cannot change tokens for a deleted account');
+      error.statusCode = 409;
+      throw error;
+    }
+    const previousTokens = Number(current.tokens || 0);
+    const nextTokens = tokenBalanceAfter({ current: previousTokens, mode, amount });
+    const user = await UserModel.findOneAndUpdate(
+      { _id: userId, tokens: previousTokens, accountStatus: { $ne: 'deleted' } },
+      mode === 'add' ? { $inc: { tokens: Number(amount) } } : { $set: { tokens: nextTokens } },
+      { new: true }
+    );
+    if (user) return { user, previousTokens };
+  }
+  const error = new Error('Token balance changed concurrently. Please retry.');
+  error.statusCode = 409;
+  throw error;
+}
+
 function anonymizedIdentity(userId) {
   const id = String(userId || '').toLowerCase();
   if (!/^[a-f\d]{24}$/.test(id)) throw new Error('Invalid user id');
@@ -49,5 +72,6 @@ export {
   accountAccessError,
   accountStatusFor,
   anonymizedIdentity,
-  tokenBalanceAfter
+  tokenBalanceAfter,
+  updateAdminTokensAtomic
 };

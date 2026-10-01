@@ -1,5 +1,7 @@
 import BlockedIp from '../models/BlockedIp.js';
+import { createHash } from 'node:crypto';
 import { createBlockedIp } from './ipBlocklist.js';
+import { getRedisClient, keyPrefix, sharedStateUnavailableError, withTimeout } from './cache.js';
 import { emitStructuredLog } from './logging.js';
 import { requestPath } from './logSanitization.js';
 import { clientIp } from './rateLimit.js';
@@ -55,19 +57,36 @@ function suspiciousRequest(req = {}) {
   return null;
 }
 
-function recordViolation(ip, violation) {
-  const windowMs = Math.max(10_000, Number(process.env.SECURITY_AUTO_BLOCK_WINDOW_MS || 5 * 60_000));
-  const threshold = Math.max(2, Number(process.env.SECURITY_AUTO_BLOCK_THRESHOLD || 8));
+async function recordViolation(ip, violation, { env = process.env, redisClientProvider = getRedisClient } = {}) {
+  const windowMs = Math.max(10_000, Number(env.SECURITY_AUTO_BLOCK_WINDOW_MS || 5 * 60_000));
+  const threshold = Math.max(2, Number(env.SECURITY_AUTO_BLOCK_THRESHOLD || 8));
   const now = Date.now();
-  const current = violationBuckets.get(ip);
-  const bucket = current && current.resetAt > now ? current : { count: 0, resetAt: now + windowMs };
-  bucket.count += 1;
-  violationBuckets.set(ip, bucket);
+  let count;
+  if (String(env.NODE_ENV || '').toLowerCase() === 'production') {
+    const redis = await redisClientProvider();
+    if (!redis) throw sharedStateUnavailableError();
+    const hashedIp = createHash('sha256').update(String(ip)).digest('hex').slice(0, 40);
+    const key = `${keyPrefix()}:security:violations:${hashedIp}`;
+    // The increment and expiry are one operation, including on a new key.
+    const script = 'local n = redis.call("INCR", KEYS[1]); if n == 1 then redis.call("PEXPIRE", KEYS[1], ARGV[1]); end; return n';
+    try {
+      count = Number(await withTimeout(redis.eval(script, { keys: [key], arguments: [String(windowMs)] })));
+      if (!Number.isSafeInteger(count) || count < 1) throw new Error('Invalid shared violation count');
+    } catch (error) {
+      throw sharedStateUnavailableError();
+    }
+  } else {
+    const current = violationBuckets.get(ip);
+    const bucket = current && current.resetAt > now ? current : { count: 0, resetAt: now + windowMs };
+    bucket.count += 1;
+    violationBuckets.set(ip, bucket);
+    count = bucket.count;
+  }
   return {
-    count: bucket.count,
+    count,
     threshold,
-    shouldAutoBlock: autoBlockEnabled() && bucket.count >= threshold,
-    expiresAt: new Date(now + Math.max(60_000, Number(process.env.SECURITY_AUTO_BLOCK_TTL_MS || 60 * 60_000))),
+    shouldAutoBlock: autoBlockEnabled(env) && count >= threshold,
+    expiresAt: new Date(now + Math.max(60_000, Number(env.SECURITY_AUTO_BLOCK_TTL_MS || 60 * 60_000))),
     violation
   };
 }
@@ -78,7 +97,13 @@ function securityFilterMiddleware() {
     const violation = suspiciousRequest(req);
     if (!violation) return next();
     const ip = clientIp(req);
-    const result = recordViolation(ip, violation);
+    let result;
+    try {
+      result = await recordViolation(ip, violation);
+    } catch (error) {
+      emitStructuredLog({ level: 'warn', event: 'security_counter_unavailable', message: error.message });
+      return res.status(503).json({ code: 'SHARED_STATE_UNAVAILABLE', message: 'Security checks are temporarily unavailable.' });
+    }
     emitStructuredLog({
       level: 'warn',
       event: 'security_request_blocked',
@@ -91,13 +116,19 @@ function securityFilterMiddleware() {
       count: result.count,
       threshold: result.threshold
     });
-    if (result.shouldAutoBlock && BlockedIp.db?.readyState === 1) {
-      void createBlockedIp({
-        value: ip,
-        reason: `Automatic block after repeated ${violation.code} violations`,
-        source: 'auto',
-        expiresAt: result.expiresAt
-      }).catch((error) => emitStructuredLog({ level: 'warn', event: 'security_auto_block_failed', message: error.message }));
+    if (result.shouldAutoBlock) {
+      try {
+        if (BlockedIp.db?.readyState !== 1) throw sharedStateUnavailableError();
+        await createBlockedIp({
+          value: ip,
+          reason: `Automatic block after repeated ${violation.code} violations`,
+          source: 'auto',
+          expiresAt: result.expiresAt
+        });
+      } catch (error) {
+        emitStructuredLog({ level: 'warn', event: 'security_auto_block_failed', message: error.message });
+        return res.status(503).json({ code: 'SHARED_STATE_UNAVAILABLE', message: 'Security checks are temporarily unavailable.' });
+      }
     }
     return res.status(403).json({ code: violation.code, message: 'Request blocked.' });
   };

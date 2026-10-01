@@ -30,6 +30,54 @@ const FEATURE_ENV_GROUPS = [
 const FALSE_ENV_VALUES = new Set(['0', 'false', 'no', 'off', 'disabled']);
 const TRUE_ENV_VALUES = new Set(['1', 'true', 'yes', 'on']);
 
+function sharedRedisConfigurationIssue(env = process.env) {
+  if (!isProductionEnv(env)) return '';
+  const raw = String(env.REDIS_URL || '').trim();
+  if (!raw) return 'REDIS_URL is required in production.';
+  try {
+    const url = new URL(raw);
+    if (!['redis:', 'rediss:'].includes(url.protocol)) return 'REDIS_URL must use redis or rediss.';
+    if (['localhost', '127.0.0.1', '0.0.0.0', '[::1]'].includes(url.hostname.toLowerCase())) {
+      return 'REDIS_URL must point to shared Redis, not the local instance.';
+    }
+  } catch {
+    return 'REDIS_URL is invalid.';
+  }
+  return '';
+}
+
+export function validateSharedRedisConfiguration(env = process.env) {
+  const issue = sharedRedisConfigurationIssue(env);
+  if (issue) throw new Error(issue);
+}
+
+function sharedStorageConfigurationIssues(env = process.env) {
+  if (!isProductionEnv(env)) return [];
+  const errors = [];
+  if (String(env.STORAGE_PROVIDER || '').trim().toLowerCase() !== 'bunny') {
+    errors.push('STORAGE_PROVIDER=bunny is required in production.');
+  }
+  for (const key of ['BUNNY_STORAGE_ZONE', 'BUNNY_STORAGE_API_KEY', 'BUNNY_CDN_BASE_URL']) {
+    if (!String(env[key] || '').trim()) errors.push(`${key} is required for shared production media.`);
+  }
+  if (String(env.BUNNY_CDN_BASE_URL || '').trim()) {
+    try {
+      const url = new URL(env.BUNNY_CDN_BASE_URL);
+      if (url.protocol !== 'https:' || !url.hostname || localOriginConfigured(env.BUNNY_CDN_BASE_URL)) {
+        errors.push('BUNNY_CDN_BASE_URL must be a public HTTPS URL.');
+      }
+    } catch {
+      errors.push('BUNNY_CDN_BASE_URL must be a public HTTPS URL.');
+    }
+  }
+  return errors;
+}
+
+export function validateSharedStorageConfiguration(env = process.env) {
+  const issues = sharedStorageConfigurationIssues(env);
+  if (issues.length) throw new Error(issues.join(' '));
+}
+
 function featureEnabled(env, key, defaultValue = true) {
   const value = String(env[key] ?? '').trim().toLowerCase();
   if (!value) return defaultValue;
@@ -135,6 +183,9 @@ export function validateServerEnv(env = process.env) {
   const production = isProductionEnv(env);
   validateProductionAiConfiguration(env, errors);
   if (production) {
+    const redisIssue = sharedRedisConfigurationIssue(env);
+    if (redisIssue) errors.push(redisIssue);
+    errors.push(...sharedStorageConfigurationIssues(env));
     if (!String(env.CLIENT_ORIGIN || '').trim()) errors.push('CLIENT_ORIGIN is required in production.');
     if (TRUE_ENV_VALUES.has(String(env.ALLOW_LOCAL_ORIGINS || '').trim().toLowerCase())) {
       errors.push('ALLOW_LOCAL_ORIGINS cannot be enabled in production.');

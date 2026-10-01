@@ -46,7 +46,6 @@ locals {
     {
       NODE_ENV                  = "production"
       PORT                      = "5050"
-      REDIS_URL                 = "redis://127.0.0.1:6379"
       REDIS_KEY_PREFIX          = "fitlook"
       CLIENT_ORIGIN             = "http://${aws_eip.frontend.public_ip}"
       ADMIN_ORIGIN              = "http://${aws_eip.frontend.public_ip}"

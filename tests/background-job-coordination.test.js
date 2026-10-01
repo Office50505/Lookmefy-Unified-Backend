@@ -257,10 +257,11 @@ test('duplicate PhonePe callbacks resolve to the same deterministic BullMQ job i
   };
   const order = { merchantOrderId: 'CALLBACK-DUPLICATE', providerState: 'PENDING', status: 'pending' };
 
-  await handlePhonePeCallback({}, responseRecorder(), callbackOptions({ order, enqueue }));
-  await handlePhonePeCallback({}, responseRecorder(), callbackOptions({ order, enqueue }));
+  const responses = [responseRecorder(), responseRecorder()];
+  await Promise.all(responses.map((res) => handlePhonePeCallback({}, res, callbackOptions({ order, enqueue }))));
 
   assert.equal(persistedJobs.size, 1);
+  assert.deepEqual(responses.map((res) => res.statusCode), [202, 202]);
   assert.equal(jobs[0].options.jobId, 'phonepe-token-order-reconcile-CALLBACK-DUPLICATE');
   assert.equal(jobs[0].options.jobId, jobs[1].options.jobId);
   assert.deepEqual(jobs[0].data, { merchantOrderId: 'CALLBACK-DUPLICATE' });

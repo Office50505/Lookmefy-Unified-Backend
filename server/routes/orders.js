@@ -239,11 +239,16 @@ async function reconcileProductOrder(order) {
     );
     return paidOrder || ProductOrder.findById(order._id);
   }
-  order.providerState = state || order.providerState;
-  order.providerResponse = status;
-  order.paymentStatus = phonePeProductStatus(state) || order.paymentStatus;
-  await order.save();
-  return order;
+  const pendingOrder = await ProductOrder.findOneAndUpdate(
+    { _id: order._id, paidAt: null },
+    { $set: {
+      providerState: state || order.providerState,
+      providerResponse: status,
+      paymentStatus: phonePeProductStatus(state) || order.paymentStatus
+    } },
+    { new: true }
+  );
+  return pendingOrder || ProductOrder.findById(order._id);
 }
 
 async function runPhonePeProductOrderReconciliationJob(

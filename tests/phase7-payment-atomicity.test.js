@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHmac } from 'node:crypto';
 import mongoose from 'mongoose';
 import test from 'node:test';
 import AppleTransaction from '../server/models/AppleTransaction.js';
@@ -10,9 +11,55 @@ import {
   grantPaidTokens,
   grantRazorpayMandateSetupTokens,
   grantRazorpaySubscriptionCycleTokens,
+  completeRazorpayPayment,
   runLocalPaymentTransaction,
   setLocalPaymentTransactionRunnerForTests
 } from '../server/routes/payments.js';
+
+test('Razorpay checkout grants only captured payments across all provider states', async (t) => {
+  const originalFetch = globalThis.fetch;
+  const originalEnabled = process.env.RAZORPAY_ENABLED;
+  const originalKeyId = process.env.RAZORPAY_KEY_ID;
+  const originalKeySecret = process.env.RAZORPAY_KEY_SECRET;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    if (originalEnabled === undefined) delete process.env.RAZORPAY_ENABLED; else process.env.RAZORPAY_ENABLED = originalEnabled;
+    if (originalKeyId === undefined) delete process.env.RAZORPAY_KEY_ID; else process.env.RAZORPAY_KEY_ID = originalKeyId;
+    if (originalKeySecret === undefined) delete process.env.RAZORPAY_KEY_SECRET; else process.env.RAZORPAY_KEY_SECRET = originalKeySecret;
+  });
+  process.env.RAZORPAY_ENABLED = 'true';
+  process.env.RAZORPAY_KEY_ID = 'test-key';
+  process.env.RAZORPAY_KEY_SECRET = 'test-secret';
+  setLocalPaymentTransactionRunnerForTests(async (work) => work(null));
+  t.after(() => setLocalPaymentTransactionRunnerForTests(null));
+  restoreModelMethods(t, [
+    [TokenOrder, 'findOne'], [TokenOrder, 'findById'], [TokenOrder, 'findByIdAndUpdate'], [TokenOrder, 'findOneAndUpdate'],
+    [User, 'findById'], [User, 'findOneAndUpdate'], [CreditEvent, 'findOne'], [CreditEvent, 'create']
+  ]);
+  const signature = createHmac('sha256', 'test-secret').update('order-1|payment-1').digest('hex');
+  for (const status of ['captured', 'authorized', 'created', 'failed', 'cancelled', 'unknown']) {
+    const order = tokenOrder({ merchantOrderId: 'merchant-1', razorpayOrderId: 'order-1', dueTodayAmount: 100, amount: 100 });
+    let credits = 0;
+    TokenOrder.findOne = async () => order;
+    TokenOrder.findById = async () => order;
+    TokenOrder.findByIdAndUpdate = async () => order;
+    TokenOrder.findOneAndUpdate = async (_filter, update) => { order.creditedAt = update.$set.creditedAt; return order; };
+    User.findById = async () => ({ _id: order.user, tokens: credits });
+    User.findOneAndUpdate = async (_filter, update) => { credits += update.$inc.tokens; return { _id: order.user, tokens: credits }; };
+    CreditEvent.findOne = async () => null;
+    CreditEvent.create = async (event) => event;
+    globalThis.fetch = async () => new Response(JSON.stringify({ id: 'payment-1', order_id: 'order-1', amount: 100, status }), {
+      status: 200, headers: { 'content-type': 'application/json' }
+    });
+    const call = completeRazorpayPayment({
+      user: { _id: order.user }, merchantOrderId: order.merchantOrderId,
+      razorpayOrderId: order.razorpayOrderId, razorpayPaymentId: 'payment-1', razorpaySignature: signature
+    });
+    if (status === 'captured') await call;
+    else await assert.rejects(call, /has not been captured/);
+    assert.equal(credits, status === 'captured' ? 7 : 0, status);
+  }
+});
 import { SUBSCRIPTION_PLAN } from '../shared/pricing.js';
 
 function restoreModelMethods(t, replacements) {
@@ -435,7 +482,7 @@ test('Phase 7: Razorpay monthly cycle uses one deterministic fulfillment key for
   assert.equal(first.alreadyCredited, false);
   assert.equal(duplicate.alreadyCredited, true);
   assert.equal(creditedTokens, SUBSCRIPTION_PLAN.tokens);
-  assert.deepEqual(fulfillmentKeys, ['razorpay_subscription:sub_phase7:inv_phase7']);
+  assert.deepEqual(fulfillmentKeys, ['razorpay_subscription:sub_phase7:pay_phase7']);
 });
 
 test('Phase 7: unrelated Razorpay monthly duplicate key is rethrown', async (t) => {

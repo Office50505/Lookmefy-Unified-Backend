@@ -298,7 +298,12 @@ router.patch('/system/ip-blocks/:id', async (req, res, next) => {
     }
     const block = await BlockedIp.findByIdAndUpdate(req.params.id, { $set: set }, { new: true });
     if (!block) return res.status(404).json({ message: 'IP block not found' });
-    clearIpBlocklistCache();
+    if (set.active === false) {
+      // Older concurrent upserts may have produced more than one row for an IP.
+      // Unblocking must deactivate every matching rule.
+      await BlockedIp.updateMany({ value: block.value }, { $set: { active: false } });
+    }
+    await clearIpBlocklistCache();
     await recordAdminAudit(req, {
       action: 'ip_block_updated',
       entityType: 'blocked_ip',

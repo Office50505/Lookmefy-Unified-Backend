@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import test from 'node:test';
+import { spawnSync } from 'node:child_process';
 import {
   dependencyReadiness,
   createReadinessHandler
@@ -98,6 +99,24 @@ test('Phase 8 readiness returns 200 when Mongo, Redis, and queue are ready', asy
     queue: 'ready',
     storage: 'not_checked'
   });
+});
+
+test('deployment cutover parser accepts the real readiness body and rejects failed dependencies', async () => {
+  const script = await fs.readFile(new URL('../deployment/ssm/cutover-backend.sh', import.meta.url), 'utf8');
+  const parser = script.match(/python3 -c '([^']+)'/)?.[1];
+  assert.ok(parser, 'cutover readiness parser must exist');
+  const good = await ready();
+  const bad = await ready({ queueIsEnabled: () => false });
+  const check = (body) => spawnSync('python3', ['-c', parser], { input: JSON.stringify(body), encoding: 'utf8' }).status;
+  assert.equal(check(good.body), 0);
+  assert.equal(check(bad.body), 1);
+});
+
+test('worker restart policy keeps API readiness tied to durable queue, not worker heartbeat', async () => {
+  const result = await ready();
+  assert.equal(result.httpStatus, 200);
+  assert.equal(result.body.checks.queue, 'ready');
+  assert.equal(Object.hasOwn(result.body.checks, 'worker'), false);
 });
 
 test('Phase 8 readiness returns 503 when Mongo is unavailable', async () => {

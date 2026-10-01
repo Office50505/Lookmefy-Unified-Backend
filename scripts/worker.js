@@ -12,6 +12,7 @@ import {
 import { closeRedisClient } from '../server/utils/cache.js';
 import { closeJobQueues, queueEnabled, startWorker } from '../server/utils/jobQueue.js';
 import { appRole, mongoConnectOptions, serviceMetadata } from '../server/utils/runtime.js';
+import { validateSharedRedisConfiguration, validateSharedStorageConfiguration } from '../server/utils/envValidation.js';
 
 dotenv.config();
 
@@ -28,6 +29,8 @@ async function connectMongo() {
 }
 
 async function main() {
+  validateSharedRedisConfiguration();
+  validateSharedStorageConfiguration();
   if (!queueEnabled()) {
     throw new Error('Queue is disabled or REDIS_URL is missing');
   }

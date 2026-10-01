@@ -9,6 +9,7 @@ backend_iam_role_name         = "FitlookBackendEc2Role"
 backend_instance_profile_name = "FitlookBackendInstanceProfile"
 
 backend_env = {
+  REDIS_URL = "rediss://shared-redis.example.internal:6379"
   MONGODB_URI = "mongodb+srv://user:password@example.mongodb.net/fitlook"
   MONGODB_DB  = "fitlook"
   JWT_SECRET  = "replace-with-a-long-random-secret"
@@ -49,7 +50,10 @@ backend_env = {
   AMAZON_MARKETPLACE      = "www.amazon.in"
   AMAZON_ASSOCIATE_TAG    = "optional-amazon-associate-tag"
 
-  STORAGE_PROVIDER = "local"
+  STORAGE_PROVIDER       = "bunny"
+  BUNNY_STORAGE_ZONE     = "replace-with-storage-zone"
+  BUNNY_STORAGE_API_KEY  = "replace-with-storage-api-key"
+  BUNNY_CDN_BASE_URL     = "https://replace-with-cdn-host.example"
 
   BACKGROUND_REMOVAL_PROVIDER = "edge-mask"
   BACKGROUND_REMOVAL_PYTHON   = ".venv-rembg/bin/python"

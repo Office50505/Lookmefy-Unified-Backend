@@ -37,7 +37,7 @@ import {
   accountAccessError,
   accountStatusFor,
   anonymizedIdentity,
-  tokenBalanceAfter
+  updateAdminTokensAtomic
 } from '../utils/accountState.js';
 import { availableStatusClause } from '../utils/productAvailability.js';
 import { adminMediaUsage, deleteBunnyOrphans, reconcileBunnyInventory } from '../services/adminMediaUsage.js';
@@ -2196,17 +2196,15 @@ router.patch('/admin/users/:id/tokens', requireAdmin, requireUserOperationsAdmin
   const mode = String(req.body?.mode || 'set').toLowerCase();
   if (!/^[a-f\d]{24}$/i.test(req.params.id)) return res.status(400).json({ message: 'Invalid user id' });
 
-  const user = await User.findById(req.params.id);
-  if (!user) return res.status(404).json({ message: 'User not found' });
-  if (accountStatusFor(user) === 'deleted') return res.status(409).json({ message: 'Cannot change tokens for a deleted account' });
-  const amount = Number(req.body?.amount);
-  const previousTokens = Number(user.tokens || 0);
+  const amount = req.body?.amount;
+  let result;
   try {
-    user.tokens = tokenBalanceAfter({ current: previousTokens, mode, amount });
+    result = await updateAdminTokensAtomic(User, req.params.id, mode, amount);
   } catch (error) {
-    return res.status(400).json({ message: error.message });
+    return res.status(error.statusCode || 400).json({ message: error.message });
   }
-  await user.save();
+  if (!result) return res.status(404).json({ message: 'User not found' });
+  const { user, previousTokens } = result;
   await recordAdminAudit(req, {
     action: mode === 'add' ? 'tokens_added' : 'tokens_set',
     entityType: 'user',

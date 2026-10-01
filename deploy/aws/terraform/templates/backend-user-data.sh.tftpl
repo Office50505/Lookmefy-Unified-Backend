@@ -4,7 +4,7 @@ set -euxo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
 apt-get update
-apt-get install -y ca-certificates curl git gnupg nginx python3-pip python3-venv redis-server
+apt-get install -y ca-certificates curl git gnupg nginx python3-pip python3-venv
 
 if [ ! -f /swapfile ]; then
   fallocate -l 1G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=1024
@@ -16,9 +16,6 @@ fi
 
 curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
 apt-get install -y nodejs
-
-systemctl enable redis-server
-systemctl restart redis-server
 
 id -u fitlook >/dev/null 2>&1 || useradd --system --create-home --shell /usr/sbin/nologin fitlook
 
@@ -51,8 +48,7 @@ chown root:root /etc/fitlook/backend.env
 cat >/etc/systemd/system/fitlook-backend.service <<'SERVICE'
 [Unit]
 Description=FitLook backend API
-After=network.target redis-server.service
-Wants=redis-server.service
+After=network.target
 
 [Service]
 Type=simple
@@ -72,8 +68,7 @@ SERVICE
 cat >/etc/systemd/system/fitlook-worker.service <<'SERVICE'
 [Unit]
 Description=FitLook background worker
-After=network.target redis-server.service
-Wants=redis-server.service
+After=network.target
 
 [Service]
 Type=simple

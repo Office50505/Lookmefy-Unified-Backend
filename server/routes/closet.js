@@ -1436,5 +1436,5 @@ router.patch('/outfits/:id', requireUser, async (req, res) => {
   res.json({ outfit: outfitToClient(outfit, items) });
 });
 
-export { closetMediaTokenKind, hasCoreClosetGarment, imageMimeTypeFromBytes, itemToClient, outfitToClient, selectFitRoomClosetPlan };
+export { closetMediaTokenKind, hasCoreClosetGarment, imageMimeTypeFromBytes, itemToClient, outfitToClient, selectFitRoomClosetPlan, reserveToken as reserveClosetToken, refundToken as refundClosetToken };
 export default router;

@@ -7,6 +7,7 @@ import sharp from 'sharp';
 import User from '../models/User.js';
 import { accountAccessError } from './accountState.js';
 import { verifyUserMediaToken } from './mediaTokens.js';
+import { readStoredFile } from './storage.js';
 
 const ALLOWED_RASTER_MIME_TYPES = new Set([
   'image/jpeg',
@@ -381,12 +382,17 @@ function serveUploadedMedia() {
       res.setHeader('X-Content-Type-Options', 'nosniff');
       res.setHeader('Cache-Control', auth.public ? 'public, max-age=86400' : 'private, no-store');
       if (disposition) res.setHeader('Content-Disposition', disposition);
+      if (isProduction()) {
+        const { buffer, mimetype } = await readStoredFile(clean, 'uploaded media');
+        res.type(mimetype && mimetype !== 'application/octet-stream' ? mimetype : path.extname(clean) || 'application/octet-stream');
+        return res.send(buffer);
+      }
       return res.sendFile(localPathForKey(clean), (error) => {
         if (!error || res.headersSent) return;
         res.status(error.statusCode || 404).end();
       });
     } catch (error) {
-      return res.status(error.status || 400).json({ message: error.message || 'Could not read media' });
+      return res.status(error.status || error.statusCode || 400).json({ message: error.message || 'Could not read media' });
     }
   };
 }
