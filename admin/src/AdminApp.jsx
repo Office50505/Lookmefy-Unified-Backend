@@ -21,10 +21,12 @@ import {
 } from './AdminManagementPages.jsx';
 import { AdminRolesPage } from './AdminRolesPage.jsx';
 
-const configuredApiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
-const devApiBaseUrl = (import.meta.env.VITE_DEV_API_BASE_URL || '').replace(/\/$/, '');
-const API_BASE = import.meta.env.DEV ? devApiBaseUrl : configuredApiBaseUrl;
-const STORE_BASE = (import.meta.env.VITE_STORE_BASE_URL || 'http://localhost:5173').replace(/\/$/, '');
+const API_BASE = import.meta.env.MODE === 'development'
+  ? normalizeApiBaseUrl(import.meta.env.VITE_DEV_API_BASE_URL)
+  : assertProductionApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
+const STORE_BASE = import.meta.env.MODE === 'development'
+  ? normalizeApiBaseUrl(import.meta.env.VITE_STORE_BASE_URL || 'http://localhost:5173')
+  : assertOptionalProductionPublicUrl(import.meta.env.VITE_STORE_BASE_URL, 'VITE_STORE_BASE_URL');
 const ADMIN_SESSION_KEY = 'fitlook_admin_session';
 const ADMIN_THEME_KEY = 'lookmefy_admin_theme';
 const ADMIN_RECENT_SEARCHES_KEY = 'lookmefy_admin_recent_searches';
@@ -36,6 +38,54 @@ const EMPTY_STORAGE_USAGE = {
   unknownSize: { all: 0, profile: 0, tryon: 0, video: 0, closet: 0, product: 0 }
 };
 const EMPTY_STORAGE_COUNTS = { all: 0, profile: 0, tryon: 0, video: 0, closet: 0, product: 0 };
+
+function normalizeApiBaseUrl(value = '') {
+  return String(value || '').trim().replace(/\/$/, '');
+}
+
+function isProductionBlockedApiHost(hostname = '') {
+  const host = String(hostname || '').trim().toLowerCase().replace(/^\[|\]$/g, '');
+  if (!host) return true;
+  if (host === 'localhost' || host.endsWith('.localhost')) return true;
+  if (host === '127.0.0.1' || host === '0.0.0.0' || host === '10.0.2.2' || host === '::1') return true;
+  if (host.startsWith('127.') || host.startsWith('10.') || host.startsWith('192.168.')) return true;
+  if (/^172\.(1[6-9]|2\d|3[0-1])\./.test(host)) return true;
+  if (/^169\.254\./.test(host)) return true;
+  if (/^(fc|fd|fe80):/i.test(host)) return true;
+  return false;
+}
+
+function assertProductionApiBaseUrl(value) {
+  const normalized = normalizeApiBaseUrl(value);
+  if (!normalized) throw new Error('Production build requires VITE_API_BASE_URL.');
+  let url;
+  try {
+    url = new URL(normalized);
+  } catch {
+    throw new Error('VITE_API_BASE_URL must be an absolute URL for production builds.');
+  }
+  if (url.protocol !== 'https:') throw new Error('VITE_API_BASE_URL must use HTTPS in production builds.');
+  if (isProductionBlockedApiHost(url.hostname)) {
+    throw new Error(`VITE_API_BASE_URL cannot point to a local or private development host in production: ${url.hostname}`);
+  }
+  return normalized;
+}
+
+function assertOptionalProductionPublicUrl(value, name) {
+  const normalized = normalizeApiBaseUrl(value);
+  if (!normalized) return '';
+  let url;
+  try {
+    url = new URL(normalized);
+  } catch {
+    throw new Error(`${name} must be an absolute URL for production builds.`);
+  }
+  if (url.protocol !== 'https:') throw new Error(`${name} must use HTTPS in production builds.`);
+  if (isProductionBlockedApiHost(url.hostname)) {
+    throw new Error(`${name} cannot point to a local or private development host in production: ${url.hostname}`);
+  }
+  return normalized;
+}
 
 function storedAdminSession() {
   try {

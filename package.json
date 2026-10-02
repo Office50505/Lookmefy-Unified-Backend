@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "admin:dev": "vite --config admin/vite.config.js --host 0.0.0.0",
-    "admin:build": "vite build --config admin/vite.config.js",
+    "admin:build": "NODE_ENV=production vite build --config admin/vite.config.js",
     "admin:preview": "vite preview --config admin/vite.config.js --host 0.0.0.0",
     "server": "node server/index.js",
     "worker": "node scripts/worker.js",
@@ -16,7 +16,7 @@
     "catalog:import:dry": "node scripts/import-products.mjs --dry-run",
     "test": "node --test tests/*.test.js",
     "test:browser": "node node_modules/@playwright/test/cli.js test",
-    "build": "vite build",
+    "build": "NODE_ENV=production vite build",
     "preview": "vite preview",
     "db:create-indexes": "node scripts/create-indexes.js",
     "db:migrate": "node scripts/db-migrate.js up",
