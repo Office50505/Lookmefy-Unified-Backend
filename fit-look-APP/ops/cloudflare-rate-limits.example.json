@@ -1,0 +1,57 @@
+{
+  "notes": [
+    "Apply these at the Cloudflare/WAF layer before traffic reaches Node.",
+    "Keep Express rate limits enabled too; edge limits protect origin capacity, app limits protect per-user business rules.",
+    "Tune thresholds after a fresh k6 run against production-like infra."
+  ],
+  "rules": [
+    {
+      "name": "FitLook global API abuse",
+      "expression": "(http.host eq \"api.fitlook.example\" and starts_with(http.request.uri.path, \"/api/\"))",
+      "period_seconds": 60,
+      "requests_per_period": 180,
+      "mitigation_timeout_seconds": 300,
+      "action": "challenge"
+    },
+    {
+      "name": "FitLook OTP send",
+      "expression": "(http.host eq \"api.fitlook.example\" and http.request.uri.path eq \"/api/auth/otp/send\" and http.request.method eq \"POST\")",
+      "period_seconds": 600,
+      "requests_per_period": 5,
+      "mitigation_timeout_seconds": 900,
+      "action": "block"
+    },
+    {
+      "name": "FitLook AI Studio and Amazon search",
+      "expression": "(http.host eq \"api.fitlook.example\" and http.request.method eq \"POST\" and http.request.uri.path in {\"/api/recommendations/studio-chat\" \"/api/recommendations/stylist-chat\" \"/api/products/amazon-search\"})",
+      "period_seconds": 60,
+      "requests_per_period": 12,
+      "mitigation_timeout_seconds": 300,
+      "action": "block"
+    },
+    {
+      "name": "FitLook image try-on generation",
+      "expression": "(http.host eq \"api.fitlook.example\" and http.request.method eq \"POST\" and starts_with(http.request.uri.path, \"/api/tryons\") and not (http.request.uri.path matches \"^/api/tryons/[^/]+/video$\"))",
+      "period_seconds": 60,
+      "requests_per_period": 15,
+      "mitigation_timeout_seconds": 120,
+      "action": "block"
+    },
+    {
+      "name": "FitLook video try-on generation",
+      "expression": "(http.host eq \"api.fitlook.example\" and http.request.method eq \"POST\" and http.request.uri.path matches \"^/api/tryons/[^/]+/video$\")",
+      "period_seconds": 60,
+      "requests_per_period": 10,
+      "mitigation_timeout_seconds": 180,
+      "action": "block"
+    },
+    {
+      "name": "FitLook uploads",
+      "expression": "(http.host eq \"api.fitlook.example\" and http.request.method in {\"POST\" \"PATCH\"} and http.request.uri.path in {\"/api/auth/profile\" \"/api/auth/body-photo\" \"/api/closet/items\" \"/api/closet/items/analyze\"})",
+      "period_seconds": 3600,
+      "requests_per_period": 40,
+      "mitigation_timeout_seconds": 900,
+      "action": "block"
+    }
+  ]
+}

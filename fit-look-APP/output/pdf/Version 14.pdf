@@ -1,0 +1,577 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [7 0 R 9 0 R 11 0 R 13 0 R 15 0 R 17 0 R] /Count 6 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>
+endobj
+6 0 obj
+<< /Length 2972 >>
+stream
+q
+0.985 0.975 0.965 rg
+0.00 0.00 595.00 842.00 re f
+Q
+q
+0.100 0.100 0.100 rg
+0.00 700.00 595.00 142.00 re f
+Q
+BT /F2 27.00 Tf 1.000 1.000 1.000 rg 1 0 0 1 48.00 758.00 Tm (Lookmefy Android Build) Tj ET
+BT /F2 27.00 Tf 1.000 1.000 1.000 rg 1 0 0 1 48.00 727.00 Tm (Difference Report) Tj ET
+BT /F1 12.50 Tf 0.390 0.430 0.490 rg 1 0 0 1 48.00 682.00 Tm (Previous: 0.1.6 / versionCode 13) Tj ET
+BT /F1 12.50 Tf 0.390 0.430 0.490 rg 1 0 0 1 48.00 661.00 Tm (New: 0.1.7 / versionCode 14) Tj ET
+BT /F2 12.20 Tf 0.550 0.180 0.180 rg 1 0 0 1 48.00 628.00 Tm (Prepared for Android Play Store testing and APK handoff) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 606.00 Tm (Date: 29 August 2026) Tj ET
+q
+1.000 1.000 1.000 rg
+0.820 0.780 0.740 RG 0.70 w
+48.00 463.00 499.00 96.00 re B
+Q
+BT /F2 11.40 Tf 0.550 0.180 0.180 rg 1 0 0 1 62.00 535.00 Tm (Scope Note) Tj ET
+BT /F1 9.80 Tf 0.100 0.100 0.100 rg 1 0 0 1 62.00 517.00 Tm (This document explains the difference between the previous Android build and the new Android) Tj ET
+BT /F1 9.80 Tf 0.100 0.100 0.100 rg 1 0 0 1 62.00 504.00 Tm (build, the problems connected to the testing error, and why the version was increased. It) Tj ET
+BT /F1 9.80 Tf 0.100 0.100 0.100 rg 1 0 0 1 62.00 491.00 Tm (intentionally does not include repair commands, file-edit instructions, or step-by-step solution) Tj ET
+BT /F1 9.80 Tf 0.100 0.100 0.100 rg 1 0 0 1 62.00 478.00 Tm (details.) Tj ET
+BT /F2 12.20 Tf 0.550 0.180 0.180 rg 1 0 0 1 48.00 443.00 Tm (Final Artifact Identity) Tj ET
+q
+1.000 1.000 1.000 rg
+0.820 0.780 0.740 RG 0.40 w
+48.00 403.00 499.00 22.00 re B
+Q
+BT /F2 9.20 Tf 0.390 0.430 0.490 rg 1 0 0 1 56.00 410.00 Tm (AAB) Tj ET
+BT /F1 9.60 Tf 0.100 0.100 0.100 rg 1 0 0 1 190.00 410.00 Tm (mobile/release/lookmefy-0.1.7-vc14-release.aab) Tj ET
+q
+1.000 1.000 1.000 rg
+0.820 0.780 0.740 RG 0.40 w
+48.00 381.00 499.00 22.00 re B
+Q
+BT /F2 9.20 Tf 0.390 0.430 0.490 rg 1 0 0 1 56.00 388.00 Tm (APK) Tj ET
+BT /F1 9.60 Tf 0.100 0.100 0.100 rg 1 0 0 1 190.00 388.00 Tm (mobile/release/lookmefy-0.1.7-vc14-release.apk) Tj ET
+q
+1.000 1.000 1.000 rg
+0.820 0.780 0.740 RG 0.40 w
+48.00 359.00 499.00 22.00 re B
+Q
+BT /F2 9.20 Tf 0.390 0.430 0.490 rg 1 0 0 1 56.00 366.00 Tm (Package) Tj ET
+BT /F1 9.60 Tf 0.100 0.100 0.100 rg 1 0 0 1 190.00 366.00 Tm (com.lookmefy.app) Tj ET
+q
+1.000 1.000 1.000 rg
+0.820 0.780 0.740 RG 0.40 w
+48.00 326.00 499.00 33.00 re B
+Q
+BT /F2 9.20 Tf 0.390 0.430 0.490 rg 1 0 0 1 56.00 344.00 Tm (Release intent) Tj ET
+BT /F1 9.60 Tf 0.100 0.100 0.100 rg 1 0 0 1 190.00 344.00 Tm (Patch-level Android testing release for Play Store review and partner) Tj ET
+BT /F1 9.60 Tf 0.100 0.100 0.100 rg 1 0 0 1 190.00 332.00 Tm (testing.) Tj ET
+q 0.820 0.780 0.740 RG 0.60 w 48.00 48.00 m 547.00 48.00 l S Q
+BT /F1 7.60 Tf 0.390 0.430 0.490 rg 1 0 0 1 48.00 30.00 Tm (Prepared for Lookmefy Android testing - no solution steps included) Tj ET
+BT /F1 7.60 Tf 0.390 0.430 0.490 rg 1 0 0 1 504.00 30.00 Tm (Page 1 of 6) Tj ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 6 0 R >>
+endobj
+8 0 obj
+<< /Length 3992 >>
+stream
+BT /F2 8.60 Tf 0.390 0.430 0.490 rg 1 0 0 1 48.00 811.00 Tm (Lookmefy Android Version Report) Tj ET
+BT /F1 8.00 Tf 0.390 0.430 0.490 rg 1 0 0 1 418.00 811.00 Tm (0.1.6 to 0.1.7 / VC13 to VC14) Tj ET
+q 0.820 0.780 0.740 RG 0.60 w 48.00 800.00 m 547.00 800.00 l S Q
+BT /F2 17.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 768.00 Tm (Executive Summary) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 737.00 Tm (The previous Android testing build showed the catalog error because the installed mobile binary) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 722.50 Tm (was not aligned with the live production API domain used by Lookmefy. The backend service was) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 708.00 Tm (running, but an already-built mobile app keeps the API target that was bundled into it at build) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 693.50 Tm (time. Server deployment alone cannot rewrite a submitted or installed AAB/APK.) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 670.00 Tm (The new Android release is version 0.1.7 with Android versionCode 14. It preserves the same) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 655.50 Tm (Android application identity, but it gives Play Store and external testers a fresh binary that) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 641.00 Tm (can replace the previous 0.1.6 / versionCode 13 build.) Tj ET
+q
+0.985 0.975 0.965 rg
+0.820 0.780 0.740 RG 0.70 w
+48.00 543.50 499.00 83.00 re B
+Q
+BT /F2 11.40 Tf 0.550 0.180 0.180 rg 1 0 0 1 62.00 602.50 Tm (Main Point) Tj ET
+BT /F1 9.80 Tf 0.100 0.100 0.100 rg 1 0 0 1 62.00 584.50 Tm (The catalog problem was not simply a backend restart issue. The app binary under review needed) Tj ET
+BT /F1 9.80 Tf 0.100 0.100 0.100 rg 1 0 0 1 62.00 571.50 Tm (to be replaced because the old submitted file continued carrying old build-time production) Tj ET
+BT /F1 9.80 Tf 0.100 0.100 0.100 rg 1 0 0 1 62.00 558.50 Tm (configuration.) Tj ET
+BT /F2 12.20 Tf 0.550 0.180 0.180 rg 1 0 0 1 48.00 523.50 Tm (Short Answer) Tj ET
+BT /F2 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 505.50 Tm (-) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 505.50 Tm (Previous Android version: 0.1.6 with versionCode 13.) Tj ET
+BT /F2 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 489.30 Tm (-) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 489.30 Tm (New Android version: 0.1.7 with versionCode 14.) Tj ET
+BT /F2 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 473.10 Tm (-) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 473.10 Tm (The new version number is needed because Google Play requires every replacement Android) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 459.90 Tm (upload to have a higher versionCode than the previous upload.) Tj ET
+BT /F2 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 443.70 Tm (-) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 443.70 Tm (The user-visible issue was the All Products catalog card showing "Something needs attention") Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 430.50 Tm (because product data could not be reached from the installed build.) Tj ET
+BT /F2 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 414.30 Tm (-) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 414.30 Tm (The already submitted AAB/APK remains old until a new build is uploaded or sent to the) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 401.10 Tm (relevant testing team.) Tj ET
+BT /F2 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 384.90 Tm (-) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 384.90 Tm (This document avoids implementation steps by request.) Tj ET
+q 0.820 0.780 0.740 RG 0.60 w 48.00 48.00 m 547.00 48.00 l S Q
+BT /F1 7.60 Tf 0.390 0.430 0.490 rg 1 0 0 1 48.00 30.00 Tm (Prepared for Lookmefy Android testing - no solution steps included) Tj ET
+BT /F1 7.60 Tf 0.390 0.430 0.490 rg 1 0 0 1 504.00 30.00 Tm (Page 2 of 6) Tj ET
+endstream
+endobj
+9 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 8 0 R >>
+endobj
+10 0 obj
+<< /Length 11864 >>
+stream
+BT /F2 8.60 Tf 0.390 0.430 0.490 rg 1 0 0 1 48.00 811.00 Tm (Lookmefy Android Version Report) Tj ET
+BT /F1 8.00 Tf 0.390 0.430 0.490 rg 1 0 0 1 418.00 811.00 Tm (0.1.6 to 0.1.7 / VC13 to VC14) Tj ET
+q 0.820 0.780 0.740 RG 0.60 w 48.00 800.00 m 547.00 800.00 l S Q
+BT /F2 17.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 780.00 Tm (Version And Artifact Comparison) Tj ET
+q
+0.960 0.940 0.920 rg
+0.820 0.780 0.740 RG 0.80 w
+48.00 724.00 499.00 25.00 re B
+Q
+BT /F2 8.30 Tf 0.100 0.100 0.100 rg 1 0 0 1 53.00 733.00 Tm (Area) Tj ET
+BT /F2 8.30 Tf 0.100 0.100 0.100 rg 1 0 0 1 179.00 733.00 Tm (Previous build) Tj ET
+BT /F2 8.30 Tf 0.100 0.100 0.100 rg 1 0 0 1 321.00 733.00 Tm (New build) Tj ET
+BT /F2 8.30 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 733.00 Tm (Why it matters) Tj ET
+q
+1.000 1.000 1.000 rg
+0.820 0.780 0.740 RG 0.45 w
+48.00 648.00 499.00 76.00 re B
+Q
+q 0.820 0.780 0.740 RG 0.45 w 174.00 724.00 m 174.00 648.00 l S Q
+q 0.820 0.780 0.740 RG 0.45 w 316.00 724.00 m 316.00 648.00 l S Q
+q 0.820 0.780 0.740 RG 0.45 w 458.00 724.00 m 458.00 648.00 l S Q
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 53.00 713.00 Tm (App version) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 179.00 713.00 Tm (0.1.6) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 321.00 713.00 Tm (0.1.7) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 713.00 Tm (Human-readable patch) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 702.50 Tm (version increased so) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 692.00 Tm (reviewers and testers) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 681.50 Tm (can distinguish the) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 671.00 Tm (corrected build from the) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 660.50 Tm (old one.) Tj ET
+q
+1.000 1.000 1.000 rg
+0.820 0.780 0.740 RG 0.45 w
+48.00 561.50 499.00 86.50 re B
+Q
+q 0.820 0.780 0.740 RG 0.45 w 174.00 648.00 m 174.00 561.50 l S Q
+q 0.820 0.780 0.740 RG 0.45 w 316.00 648.00 m 316.00 561.50 l S Q
+q 0.820 0.780 0.740 RG 0.45 w 458.00 648.00 m 458.00 561.50 l S Q
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 53.00 637.00 Tm (Android versionCode) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 179.00 637.00 Tm (13) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 321.00 637.00 Tm (14) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 637.00 Tm (Play Store update) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 626.50 Tm (ordering depends on) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 616.00 Tm (versionCode. A new) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 605.50 Tm (upload must be higher) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 595.00 Tm (than the previous) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 584.50 Tm (accepted or submitted) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 574.00 Tm (build.) Tj ET
+q
+1.000 1.000 1.000 rg
+0.820 0.780 0.740 RG 0.45 w
+48.00 485.50 499.00 76.00 re B
+Q
+q 0.820 0.780 0.740 RG 0.45 w 174.00 561.50 m 174.00 485.50 l S Q
+q 0.820 0.780 0.740 RG 0.45 w 316.00 561.50 m 316.00 485.50 l S Q
+q 0.820 0.780 0.740 RG 0.45 w 458.00 561.50 m 458.00 485.50 l S Q
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 53.00 550.50 Tm (Android package ID) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 179.00 550.50 Tm (com.lookmefy.app) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 321.00 550.50 Tm (com.lookmefy.app) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 550.50 Tm (The package identity) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 540.00 Tm (stays the same, so) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 529.50 Tm (Android treats it as an) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 519.00 Tm (update to the same app) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 508.50 Tm (rather than a different) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 498.00 Tm (app.) Tj ET
+q
+1.000 1.000 1.000 rg
+0.820 0.780 0.740 RG 0.45 w
+48.00 441.00 499.00 44.50 re B
+Q
+q 0.820 0.780 0.740 RG 0.45 w 174.00 485.50 m 174.00 441.00 l S Q
+q 0.820 0.780 0.740 RG 0.45 w 316.00 485.50 m 316.00 441.00 l S Q
+q 0.820 0.780 0.740 RG 0.45 w 458.00 485.50 m 458.00 441.00 l S Q
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 53.00 474.50 Tm (Display name) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 179.00 474.50 Tm (Lookmefy) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 321.00 474.50 Tm (Lookmefy) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 474.50 Tm (No intentional branding) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 464.00 Tm (change in this Android) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 453.50 Tm (patch build.) Tj ET
+q
+1.000 1.000 1.000 rg
+0.820 0.780 0.740 RG 0.45 w
+48.00 375.50 499.00 65.50 re B
+Q
+q 0.820 0.780 0.740 RG 0.45 w 174.00 441.00 m 174.00 375.50 l S Q
+q 0.820 0.780 0.740 RG 0.45 w 316.00 441.00 m 316.00 375.50 l S Q
+q 0.820 0.780 0.740 RG 0.45 w 458.00 441.00 m 458.00 375.50 l S Q
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 53.00 430.00 Tm (Production API domain) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 179.00 430.00 Tm (Old review build was associated) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 179.00 419.50 Tm (with api.lookmefy.com or) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 179.00 409.00 Tm (non-current production target) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 179.00 398.50 Tm (risk.) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 321.00 430.00 Tm (New build contains) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 321.00 419.50 Tm (https://api.lookmefy.in/api.) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 430.00 Tm (Lookmefy web and API) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 419.50 Tm (domain are under .in.) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 409.00 Tm (The mobile client must) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 398.50 Tm (contact the same live) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 388.00 Tm (API family.) Tj ET
+q
+1.000 1.000 1.000 rg
+0.820 0.780 0.740 RG 0.45 w
+48.00 310.00 499.00 65.50 re B
+Q
+q 0.820 0.780 0.740 RG 0.45 w 174.00 375.50 m 174.00 310.00 l S Q
+q 0.820 0.780 0.740 RG 0.45 w 316.00 375.50 m 316.00 310.00 l S Q
+q 0.820 0.780 0.740 RG 0.45 w 458.00 375.50 m 458.00 310.00 l S Q
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 53.00 364.50 Tm (Catalog behavior) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 179.00 364.50 Tm (All Products could fail with) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 179.00 354.00 Tm ("Something needs attention".) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 321.00 364.50 Tm (Expected to request catalog data) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 321.00 354.00 Tm (from the live .in API.) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 364.50 Tm (The visible error) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 354.00 Tm (affects browsing,) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 343.50 Tm (product discovery, and) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 333.00 Tm (flows that depend on) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 322.50 Tm (product records.) Tj ET
+q
+1.000 1.000 1.000 rg
+0.820 0.780 0.740 RG 0.45 w
+48.00 244.50 499.00 65.50 re B
+Q
+q 0.820 0.780 0.740 RG 0.45 w 174.00 310.00 m 174.00 244.50 l S Q
+q 0.820 0.780 0.740 RG 0.45 w 316.00 310.00 m 316.00 244.50 l S Q
+q 0.820 0.780 0.740 RG 0.45 w 458.00 310.00 m 458.00 244.50 l S Q
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 53.00 299.00 Tm (Submitted file status) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 179.00 299.00 Tm (Already submitted or installed) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 179.00 288.50 Tm (file cannot be modified in place.) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 321.00 299.00 Tm (Fresh AAB/APK files generated for) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 321.00 288.50 Tm (replacement testing.) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 299.00 Tm (Reviewers only test the) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 288.50 Tm (binary they receive. A) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 278.00 Tm (repository or server) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 267.50 Tm (update does not mutate) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 257.00 Tm (old binaries.) Tj ET
+q
+1.000 1.000 1.000 rg
+0.820 0.780 0.740 RG 0.45 w
+48.00 200.00 499.00 44.50 re B
+Q
+q 0.820 0.780 0.740 RG 0.45 w 174.00 244.50 m 174.00 200.00 l S Q
+q 0.820 0.780 0.740 RG 0.45 w 316.00 244.50 m 316.00 200.00 l S Q
+q 0.820 0.780 0.740 RG 0.45 w 458.00 244.50 m 458.00 200.00 l S Q
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 53.00 233.50 Tm (Play Store artifact) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 179.00 233.50 Tm (Previous AAB with versionCode 13.) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 321.00 233.50 Tm (New AAB with versionCode 14.) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 233.50 Tm (The AAB is the correct) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 223.00 Tm (artifact type for Play) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 212.50 Tm (Store testing tracks.) Tj ET
+q
+1.000 1.000 1.000 rg
+0.820 0.780 0.740 RG 0.45 w
+48.00 134.50 499.00 65.50 re B
+Q
+q 0.820 0.780 0.740 RG 0.45 w 174.00 200.00 m 174.00 134.50 l S Q
+q 0.820 0.780 0.740 RG 0.45 w 316.00 200.00 m 316.00 134.50 l S Q
+q 0.820 0.780 0.740 RG 0.45 w 458.00 200.00 m 458.00 134.50 l S Q
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 53.00 189.00 Tm (Manual test artifact) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 179.00 189.00 Tm (Older APK, if shared, may still) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 179.00 178.50 Tm (show old behavior.) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 321.00 189.00 Tm (New APK with versionCode 14.) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 189.00 Tm (APK is useful for direct) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 178.50 Tm (install or partner) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 168.00 Tm (testing when they) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 157.50 Tm (request APK instead of) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 147.00 Tm (AAB.) Tj ET
+q
+1.000 1.000 1.000 rg
+0.820 0.780 0.740 RG 0.45 w
+48.00 79.50 499.00 55.00 re B
+Q
+q 0.820 0.780 0.740 RG 0.45 w 174.00 134.50 m 174.00 79.50 l S Q
+q 0.820 0.780 0.740 RG 0.45 w 316.00 134.50 m 316.00 79.50 l S Q
+q 0.820 0.780 0.740 RG 0.45 w 458.00 134.50 m 458.00 79.50 l S Q
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 53.00 123.50 Tm (Signing identity) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 179.00 123.50 Tm (Expected FitLook upload signing) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 179.00 113.00 Tm (lineage.) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 321.00 123.50 Tm (Verified FitLook signing) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 321.00 113.00 Tm (identity.) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 123.50 Tm (Signing continuity) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 113.00 Tm (matters for Android) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 102.50 Tm (updates and Play Console) Tj ET
+BT /F1 8.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 463.00 92.00 Tm (acceptance.) Tj ET
+q 0.820 0.780 0.740 RG 0.60 w 48.00 48.00 m 547.00 48.00 l S Q
+BT /F1 7.60 Tf 0.390 0.430 0.490 rg 1 0 0 1 48.00 30.00 Tm (Prepared for Lookmefy Android testing - no solution steps included) Tj ET
+BT /F1 7.60 Tf 0.390 0.430 0.490 rg 1 0 0 1 504.00 30.00 Tm (Page 3 of 6) Tj ET
+endstream
+endobj
+11 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 10 0 R >>
+endobj
+12 0 obj
+<< /Length 5575 >>
+stream
+BT /F2 8.60 Tf 0.390 0.430 0.490 rg 1 0 0 1 48.00 811.00 Tm (Lookmefy Android Version Report) Tj ET
+BT /F1 8.00 Tf 0.390 0.430 0.490 rg 1 0 0 1 418.00 811.00 Tm (0.1.6 to 0.1.7 / VC13 to VC14) Tj ET
+q 0.820 0.780 0.740 RG 0.60 w 48.00 800.00 m 547.00 800.00 l S Q
+BT /F2 17.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 780.00 Tm (Problems Connected To The Error) Tj ET
+BT /F2 12.20 Tf 0.550 0.180 0.180 rg 1 0 0 1 48.00 741.00 Tm (1. API Domain Mismatch) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 723.00 Tm (The mobile app displayed the catalog error on the Home screen under All Products. This happens) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 708.50 Tm (when the app cannot get usable product catalog data from the backend. The previous testing) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 694.00 Tm (binary was associated with the wrong production API domain path, specifically the .com API) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 679.50 Tm (target instead of the live .in API target used by Lookmefy.) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 656.00 Tm (The confusing part is that the backend could still be healthy while the mobile app failed. That) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 641.50 Tm (is possible because the app and the server are separate release units. A working backend does) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 627.00 Tm (not guarantee that an old mobile binary is pointing to it.) Tj ET
+BT /F2 12.20 Tf 0.550 0.180 0.180 rg 1 0 0 1 48.00 595.50 Tm (2. Already Submitted Mobile Files Are Immutable) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 577.50 Tm (Once an AAB or APK is built, uploaded, or sent to a testing team, the configuration inside that) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 563.00 Tm (file is frozen. Later code pushes, backend restarts, DNS changes, or local edits do not) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 548.50 Tm (automatically change what is inside that already distributed binary.) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 525.00 Tm (This is why testers can continue seeing the old error even after the backend deployment looks) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 510.50 Tm (successful. They may still be running the earlier binary.) Tj ET
+BT /F2 12.20 Tf 0.550 0.180 0.180 rg 1 0 0 1 48.00 479.00 Tm (3. Google Play Version Ordering) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 461.00 Tm (Google Play does not decide Android updates only from the visible app version. It uses the) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 446.50 Tm (numeric versionCode. If the previous submitted build used versionCode 13, a replacement build) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 432.00 Tm (must use a higher number. VersionCode 14 is the next valid update value.) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 408.50 Tm (The visible version was increased from 0.1.6 to 0.1.7 so the release also looks different to) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 394.00 Tm (humans, testers, and review teams. This is a patch-level version change, not necessarily a) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 379.50 Tm (feature release.) Tj ET
+BT /F2 12.20 Tf 0.550 0.180 0.180 rg 1 0 0 1 48.00 348.00 Tm (4. Local, Native, And Review Configuration Ambiguity) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 330.00 Tm (React Native and Expo Android apps can have more than one place where version and environment) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 315.50 Tm (information appears. The app configuration, native Android Gradle configuration, local) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 301.00 Tm (environment file, and cloud build profile can all influence builds depending on the build path.) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 277.50 Tm (The risk is that one build path may look correct while another still produces an old version or) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 263.00 Tm (old API target. This matters when trying to create files for Play Store review quickly.) Tj ET
+BT /F2 12.20 Tf 0.550 0.180 0.180 rg 1 0 0 1 48.00 231.50 Tm (5. AAB And APK Purpose Confusion) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 213.50 Tm (AAB and APK are not interchangeable for every audience. Play Store testing tracks expect an AAB) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 199.00 Tm (in most modern Android release flows. An APK is useful for direct installation or external) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 184.50 Tm (partner review when that team specifically requests an installable APK.) Tj ET
+BT /F2 17.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 147.00 Tm (Why The Version Was Changed) Tj ET
+BT /F2 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 116.00 Tm (-) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 116.00 Tm (VersionCode changed from 13 to 14 because Android and Google Play require a strictly higher) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 102.80 Tm (versionCode for replacement uploads.) Tj ET
+q 0.820 0.780 0.740 RG 0.60 w 48.00 48.00 m 547.00 48.00 l S Q
+BT /F1 7.60 Tf 0.390 0.430 0.490 rg 1 0 0 1 48.00 30.00 Tm (Prepared for Lookmefy Android testing - no solution steps included) Tj ET
+BT /F1 7.60 Tf 0.390 0.430 0.490 rg 1 0 0 1 504.00 30.00 Tm (Page 4 of 6) Tj ET
+endstream
+endobj
+13 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 12 0 R >>
+endobj
+14 0 obj
+<< /Length 7119 >>
+stream
+BT /F2 8.60 Tf 0.390 0.430 0.490 rg 1 0 0 1 48.00 811.00 Tm (Lookmefy Android Version Report) Tj ET
+BT /F1 8.00 Tf 0.390 0.430 0.490 rg 1 0 0 1 418.00 811.00 Tm (0.1.6 to 0.1.7 / VC13 to VC14) Tj ET
+q 0.820 0.780 0.740 RG 0.60 w 48.00 800.00 m 547.00 800.00 l S Q
+BT /F2 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 782.00 Tm (-) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 782.00 Tm (App version changed from 0.1.6 to 0.1.7 so humans can recognize this as a new patch build and) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 768.80 Tm (not confuse it with the already submitted package.) Tj ET
+BT /F2 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 752.60 Tm (-) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 752.60 Tm (The version change helps Play Store testers, internal testers, and partner teams confirm they) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 739.40 Tm (are testing the newer build.) Tj ET
+BT /F2 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 723.20 Tm (-) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 723.20 Tm (The change also gives a cleaner release trail: old testing build equals 0.1.6 / 13, new) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 710.00 Tm (testing build equals 0.1.7 / 14.) Tj ET
+BT /F2 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 693.80 Tm (-) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 693.80 Tm (The new version does not mean a large product feature release. It is best understood as a) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 680.60 Tm (production-readiness patch build for Android testing.) Tj ET
+q
+0.985 0.975 0.965 rg
+0.820 0.780 0.740 RG 0.70 w
+48.00 603.40 499.00 70.00 re B
+Q
+BT /F2 11.40 Tf 0.550 0.180 0.180 rg 1 0 0 1 62.00 649.40 Tm (Important) Tj ET
+BT /F1 9.80 Tf 0.100 0.100 0.100 rg 1 0 0 1 62.00 631.40 Tm (If the same versionCode were reused, Play Store would treat the upload as invalid or not newer.) Tj ET
+BT /F1 9.80 Tf 0.100 0.100 0.100 rg 1 0 0 1 62.00 618.40 Tm (This is the practical reason the Android versionCode had to move forward.) Tj ET
+BT /F2 17.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 577.40 Tm (Expected Difference In Behavior) Tj ET
+BT /F2 12.20 Tf 0.550 0.180 0.180 rg 1 0 0 1 48.00 538.40 Tm (Previous 0.1.6 / versionCode 13) Tj ET
+BT /F2 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 520.40 Tm (-) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 520.40 Tm (Static or bundled Home screen content could still appear, such as banners and categories.) Tj ET
+BT /F2 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 504.20 Tm (-) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 504.20 Tm (The product catalog request could fail, causing the All Products area to show the) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 491.00 Tm (attention/error card.) Tj ET
+BT /F2 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 474.80 Tm (-) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 474.80 Tm (Any flow that depends on live product records could become unreliable, including product) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 461.60 Tm (discovery, wishlist actions, recommendations, outfit generation, or checkout-linked browsing.) Tj ET
+BT /F2 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 445.40 Tm (-) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 445.40 Tm (Backend deployment status alone would not change this installed app behavior if the binary) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 432.20 Tm (kept the old API target.) Tj ET
+BT /F2 12.20 Tf 0.550 0.180 0.180 rg 1 0 0 1 48.00 408.00 Tm (New 0.1.7 / versionCode 14) Tj ET
+BT /F2 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 390.00 Tm (-) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 390.00 Tm (The Android package identity remains the same, so this is still the Lookmefy Android app.) Tj ET
+BT /F2 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 373.80 Tm (-) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 373.80 Tm (The build is expected to contact the live production API at https://api.lookmefy.in/api.) Tj ET
+BT /F2 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 357.60 Tm (-) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 357.60 Tm (The catalog should load when DNS, HTTPS, network access, and backend routes are healthy.) Tj ET
+BT /F2 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 341.40 Tm (-) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 341.40 Tm (Existing testers must actually receive or install the new build before this behavior is) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 328.20 Tm (visible on their devices.) Tj ET
+BT /F2 17.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 298.00 Tm (Production Impact And Safety Notes) Tj ET
+BT /F2 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 267.00 Tm (-) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 267.00 Tm (No Android package rename is intended. Keeping com.lookmefy.app avoids creating a separate) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 253.80 Tm (app identity.) Tj ET
+BT /F2 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 237.60 Tm (-) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 237.60 Tm (No database migration is implied by this mobile build difference report.) Tj ET
+BT /F2 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 221.40 Tm (-) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 221.40 Tm (No Play Store listing content change is implied by the Android version bump itself.) Tj ET
+BT /F2 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 205.20 Tm (-) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 205.20 Tm (No iOS App Store build is produced by an Android AAB/APK build. iOS has a separate build) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 192.00 Tm (number and review pipeline.) Tj ET
+BT /F2 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 175.80 Tm (-) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 175.80 Tm (If an existing iOS binary was also built with an old API target, iOS would need its own fresh) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 162.60 Tm (build and submission path.) Tj ET
+BT /F2 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 146.40 Tm (-) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 146.40 Tm (The new Android files were generated as release artifacts and are separate from backend) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 133.20 Tm (deployment.) Tj ET
+BT /F2 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 117.00 Tm (-) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 117.00 Tm (Users or reviewers who still have the old version installed may continue seeing the old error) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 103.80 Tm (until the installed app is updated or replaced.) Tj ET
+q 0.820 0.780 0.740 RG 0.60 w 48.00 48.00 m 547.00 48.00 l S Q
+BT /F1 7.60 Tf 0.390 0.430 0.490 rg 1 0 0 1 48.00 30.00 Tm (Prepared for Lookmefy Android testing - no solution steps included) Tj ET
+BT /F1 7.60 Tf 0.390 0.430 0.490 rg 1 0 0 1 504.00 30.00 Tm (Page 5 of 6) Tj ET
+endstream
+endobj
+15 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 14 0 R >>
+endobj
+16 0 obj
+<< /Length 6611 >>
+stream
+BT /F2 8.60 Tf 0.390 0.430 0.490 rg 1 0 0 1 48.00 811.00 Tm (Lookmefy Android Version Report) Tj ET
+BT /F1 8.00 Tf 0.390 0.430 0.490 rg 1 0 0 1 418.00 811.00 Tm (0.1.6 to 0.1.7 / VC13 to VC14) Tj ET
+q 0.820 0.780 0.740 RG 0.60 w 48.00 800.00 m 547.00 800.00 l S Q
+BT /F2 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 782.00 Tm (-) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 782.00 Tm (Any future outage in DNS, HTTPS certificate, backend health, product routes, or network) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 768.80 Tm (access can still cause a catalog error even with the newer app build.) Tj ET
+BT /F2 17.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 738.60 Tm (Verification Evidence) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 707.60 Tm (The new Android release artifacts were checked after generation. This section records) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 693.10 Tm (observable validation results only; it does not include build commands or repair instructions.) Tj ET
+q
+1.000 1.000 1.000 rg
+0.820 0.780 0.740 RG 0.40 w
+48.00 647.60 499.00 22.00 re B
+Q
+BT /F2 9.20 Tf 0.390 0.430 0.490 rg 1 0 0 1 56.00 654.60 Tm (APK metadata) Tj ET
+BT /F1 9.60 Tf 0.100 0.100 0.100 rg 1 0 0 1 190.00 654.60 Tm (Package com.lookmefy.app, versionCode 14, versionName 0.1.7.) Tj ET
+q
+1.000 1.000 1.000 rg
+0.820 0.780 0.740 RG 0.40 w
+48.00 602.60 499.00 45.00 re B
+Q
+BT /F2 9.20 Tf 0.390 0.430 0.490 rg 1 0 0 1 56.00 632.60 Tm (APK signing) Tj ET
+BT /F1 9.60 Tf 0.100 0.100 0.100 rg 1 0 0 1 190.00 632.60 Tm (Verified with Android signature scheme v2. Signing certificate) Tj ET
+BT /F1 9.60 Tf 0.100 0.100 0.100 rg 1 0 0 1 190.00 620.60 Tm (subject: CN=FitLook, OU=Mobile, O=FitLook, L=Mumbai, ST=Maharashtra,) Tj ET
+BT /F1 9.60 Tf 0.100 0.100 0.100 rg 1 0 0 1 190.00 608.60 Tm (C=IN.) Tj ET
+q
+1.000 1.000 1.000 rg
+0.820 0.780 0.740 RG 0.40 w
+48.00 580.60 499.00 22.00 re B
+Q
+BT /F2 9.20 Tf 0.390 0.430 0.490 rg 1 0 0 1 56.00 587.60 Tm (AAB signing) Tj ET
+BT /F1 9.60 Tf 0.100 0.100 0.100 rg 1 0 0 1 190.00 587.60 Tm (AAB jar verification passed and showed FitLook signing identity.) Tj ET
+q
+1.000 1.000 1.000 rg
+0.820 0.780 0.740 RG 0.40 w
+48.00 547.60 499.00 33.00 re B
+Q
+BT /F2 9.20 Tf 0.390 0.430 0.490 rg 1 0 0 1 56.00 565.60 Tm (Bundled API) Tj ET
+BT /F1 9.60 Tf 0.100 0.100 0.100 rg 1 0 0 1 190.00 565.60 Tm (Both generated Android artifacts contain https://api.lookmefy.in/api) Tj ET
+BT /F1 9.60 Tf 0.100 0.100 0.100 rg 1 0 0 1 190.00 553.60 Tm (in the bundled JavaScript assets.) Tj ET
+q
+1.000 1.000 1.000 rg
+0.820 0.780 0.740 RG 0.40 w
+48.00 514.60 499.00 33.00 re B
+Q
+BT /F2 9.20 Tf 0.390 0.430 0.490 rg 1 0 0 1 56.00 532.60 Tm (Old API strings) Tj ET
+BT /F1 9.60 Tf 0.100 0.100 0.100 rg 1 0 0 1 190.00 532.60 Tm (The generated Android JavaScript bundle did not show api.lookmefy.com) Tj ET
+BT /F1 9.60 Tf 0.100 0.100 0.100 rg 1 0 0 1 190.00 520.60 Tm (or the raw load balancer API URL.) Tj ET
+q
+1.000 1.000 1.000 rg
+0.820 0.780 0.740 RG 0.40 w
+48.00 492.60 499.00 22.00 re B
+Q
+BT /F2 9.20 Tf 0.390 0.430 0.490 rg 1 0 0 1 56.00 499.60 Tm (Artifact sizes) Tj ET
+BT /F1 9.60 Tf 0.100 0.100 0.100 rg 1 0 0 1 190.00 499.60 Tm (AAB approximately 56 MB. APK approximately 76 MB.) Tj ET
+BT /F2 12.20 Tf 0.550 0.180 0.180 rg 1 0 0 1 48.00 474.60 Tm (Checksums) Tj ET
+q
+1.000 1.000 1.000 rg
+0.820 0.780 0.740 RG 0.40 w
+48.00 434.60 499.00 22.00 re B
+Q
+BT /F2 9.20 Tf 0.390 0.430 0.490 rg 1 0 0 1 56.00 441.60 Tm (AAB SHA-256) Tj ET
+BT /F1 9.60 Tf 0.100 0.100 0.100 rg 1 0 0 1 190.00 441.60 Tm (e9092712bcb117b088f6617a302bfc38973e960e8dd6f01deac0609ad17c2f35) Tj ET
+q
+1.000 1.000 1.000 rg
+0.820 0.780 0.740 RG 0.40 w
+48.00 412.60 499.00 22.00 re B
+Q
+BT /F2 9.20 Tf 0.390 0.430 0.490 rg 1 0 0 1 56.00 419.60 Tm (APK SHA-256) Tj ET
+BT /F1 9.60 Tf 0.100 0.100 0.100 rg 1 0 0 1 190.00 419.60 Tm (f0d4aa6b2fc082536813af3d2d071e9d619c07db16a4ffc2ec9c6f8e479a511b) Tj ET
+BT /F2 17.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 388.60 Tm (What This Report Does Not Contain) Tj ET
+BT /F2 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 357.60 Tm (-) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 357.60 Tm (No terminal commands.) Tj ET
+BT /F2 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 341.40 Tm (-) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 341.40 Tm (No step-by-step fix instructions.) Tj ET
+BT /F2 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 325.20 Tm (-) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 325.20 Tm (No secret values, keystore passwords, or private deployment credentials.) Tj ET
+BT /F2 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 309.00 Tm (-) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 309.00 Tm (No backend implementation details beyond the high-level reason the mobile build needed) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 295.80 Tm (replacement.) Tj ET
+BT /F2 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 279.60 Tm (-) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 279.60 Tm (No guarantee that Play Store or PhonePe will complete review instantly; external review) Tj ET
+BT /F1 10.20 Tf 0.100 0.100 0.100 rg 1 0 0 1 64.00 266.40 Tm (timelines are outside the app binary itself.) Tj ET
+BT /F2 17.00 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 236.20 Tm (Final Conclusion) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 205.20 Tm (The previous Android build and the new Android build differ mainly in release identity and) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 190.70 Tm (production API alignment. The new build is version 0.1.7 with versionCode 14, which is) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 176.20 Tm (necessary for Play Store replacement testing after a versionCode 13 build. The catalog error) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 161.70 Tm (came from the mobile app failing to reach the correct live catalog service from the submitted) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 147.20 Tm (or installed binary, not from the Home screen design itself.) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 123.70 Tm (For testing and review identity, the key label is: Lookmefy Android 0.1.7, versionCode 14,) Tj ET
+BT /F1 10.50 Tf 0.100 0.100 0.100 rg 1 0 0 1 48.00 109.20 Tm (package com.lookmefy.app.) Tj ET
+q 0.820 0.780 0.740 RG 0.60 w 48.00 48.00 m 547.00 48.00 l S Q
+BT /F1 7.60 Tf 0.390 0.430 0.490 rg 1 0 0 1 48.00 30.00 Tm (Prepared for Lookmefy Android testing - no solution steps included) Tj ET
+BT /F1 7.60 Tf 0.390 0.430 0.490 rg 1 0 0 1 504.00 30.00 Tm (Page 6 of 6) Tj ET
+endstream
+endobj
+17 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> /Contents 16 0 R >>
+endobj
+xref
+0 18
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000155 00000 n 
+0000000225 00000 n 
+0000000300 00000 n 
+0000000368 00000 n 
+0000003391 00000 n 
+0000003537 00000 n 
+0000007580 00000 n 
+0000007726 00000 n 
+0000019643 00000 n 
+0000019791 00000 n 
+0000025418 00000 n 
+0000025566 00000 n 
+0000032737 00000 n 
+0000032885 00000 n 
+0000039548 00000 n 
+trailer
+<< /Size 18 /Root 1 0 R >>
+startxref
+39696
+%%EOF

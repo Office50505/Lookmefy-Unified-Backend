@@ -5,7 +5,6 @@ node_modules/
 dist/
 build/
 .vite/
-fit-look-APP/
 web/
 pruna-test-node/
 ai-studio-sandbox/
