@@ -57,7 +57,7 @@ const categoryKeywords = [
   ['bottoms', ['pant', 'pants', 'trouser', 'jean', 'denim', 'short', 'skirt', 'legging', 'palazzo']],
   ['tops', ['shirt', 'tshirt', 't-shirt', 'tee', 'top', 'kurti', 'blouse', 'hoodie', 'sweater', 'polo']],
   ['outerwear', ['jacket', 'coat', 'blazer', 'cardigan', 'shrug']],
-  ['shoes', ['shoe', 'sneaker', 'boot', 'loafer', 'heel', 'sandal', 'slipper']],
+  ['shoes', ['shoe', 'shoes', 'sneaker', 'sneakers', 'trainer', 'trainers', 'boot', 'boots', 'loafer', 'loafers', 'heel', 'heels', 'sandal', 'sandals', 'slipper', 'slippers', 'low-top', 'low top', 'footwear']],
   ['accessories', ['watch', 'bag', 'belt', 'cap', 'hat', 'sunglass', 'necklace', 'scarf', 'tie']],
   ['activewear', ['gym', 'track', 'jersey', 'sports', 'active']],
   ['ethnic', ['saree', 'lehenga', 'kurta', 'dupatta', 'ethnic']]
@@ -218,9 +218,12 @@ function selectFitRoomClosetPlan(items = []) {
 function normalizeCategory(value, sourceText = '') {
   const given = cleanWord(value).toLowerCase();
   const known = categoryKeywords.map(([category]) => category);
-  if (known.includes(given)) return given;
-  const haystack = `${given} ${sourceText}`.toLowerCase();
+  const evidence = String(sourceText || '').toLowerCase();
+  const evidenceMatch = categoryKeywords.find(([, words]) => words.some((word) => evidence.includes(word)));
+  if (evidenceMatch && known.includes(given) && evidenceMatch[0] !== given) return evidenceMatch[0];
+  const haystack = `${given} ${evidence}`.toLowerCase();
   const match = categoryKeywords.find(([, words]) => words.some((word) => haystack.includes(word)));
+  if (known.includes(given)) return given;
   return match?.[0] || 'other';
 }
 
@@ -481,8 +484,17 @@ function cleanScalar(value, limit = 120) {
   return cleanWord(value).slice(0, limit);
 }
 
-function normalizedDetectedCategory(value) {
-  return normalizeCategory(value);
+function visualCategoryEvidence(profile = {}) {
+  return [
+    profile.subcategory,
+    profile.rawDescription || profile.description,
+    ...(Array.isArray(profile.styleTags) ? profile.styleTags : []),
+    ...(Array.isArray(profile.tags) ? profile.tags : [])
+  ].filter(Boolean).join(' ');
+}
+
+function normalizedDetectedCategory(value, profile = {}) {
+  return normalizeCategory(value, visualCategoryEvidence(profile));
 }
 
 function normalizedDetectedFormality(value) {
@@ -519,7 +531,7 @@ function normalizeVisualProfile(value = {}, meta = {}) {
     pairingNotes: cleanScalar(profile.pairingNotes, 500),
     rawDescription: cleanScalar(profile.rawDescription || profile.description, 700),
     nameSuggestion: cleanScalar(profile.nameSuggestion || profile.name),
-    category: normalizedDetectedCategory(profile.category)
+    category: normalizedDetectedCategory(profile.category, profile)
   };
 }
 

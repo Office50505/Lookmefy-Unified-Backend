@@ -1970,21 +1970,44 @@ async function generateProductTryOnImage({ user, product, tryOnModel, timer }) {
   const selectedModel = tryOnModel || tryOnModelForProduct(product);
   const productPromptKey = promptKeyForProduct(product, 'full_outfit');
   timer?.mark('image generator selected', { tryOnModel: selectedModel, promptKey: productPromptKey });
+  const withFallback = async (primary, fallback) => {
+    try {
+      return await primary();
+    } catch (error) {
+      const message = readableError(error, 'Primary try-on provider failed');
+      timer?.mark('primary try-on provider failed, trying fallback', { error: message, fallback: imageModel() });
+      try {
+        return await fallback();
+      } catch (fallbackError) {
+        const nextMessage = readableError(fallbackError, 'Fallback try-on provider failed');
+        throw new Error(`${message}; fallback also failed: ${nextMessage}`);
+      }
+    }
+  };
   if (productPromptKey === 'saree') {
     timer?.mark('pruna saree try-on selected', { promptKey: productPromptKey });
-    return callPrunaTryOn({ user, product, promptKey: productPromptKey, fallbackPromptKey: 'full_outfit', timer });
+    return withFallback(
+      () => callPrunaTryOn({ user, product, promptKey: productPromptKey, fallbackPromptKey: 'full_outfit', timer }),
+      () => callFalImageEdit({ user, product, quality: 'medium', timer })
+    );
   }
   if (requiresPreciseTryOnEdit(product, productPromptKey)) {
     timer?.mark('precise garment image edit selected', { promptKey: productPromptKey });
     return callFalImageEdit({ user, product, quality: 'medium', timer });
   }
   if (usePrunaProvider()) {
-    return callPrunaTryOn({ user, product, timer });
+    return withFallback(
+      () => callPrunaTryOn({ user, product, timer }),
+      () => callFalImageEdit({ user, product, quality: 'medium', timer })
+    );
   }
   if (selectedModel === 'fitroom/tryon-v2') {
     const clothType = fitRoomClothTypeForProduct(product);
     timer?.mark('fitroom cloth type selected', { clothType });
-    return callFitRoomTryOn({ user, product, clothType, timer });
+    return withFallback(
+      () => callFitRoomTryOn({ user, product, clothType, timer }),
+      () => callFalImageEdit({ user, product, quality: 'medium', timer })
+    );
   }
   const falModel = normalizeTryOnModel(selectedModel);
   if (falModel === 'wan-v2.6-image-to-image') {

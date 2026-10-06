@@ -3,6 +3,8 @@ function clean(value = '') {
 }
 
 const womenSpecificFashionPattern = /\b(bras?|bralettes?|sports?\s+bras?|lingerie|pant(?:y|ies)|bikinis?|swimsuits?|swimwear|one\s*piece\s+swimsuits?|monokinis?)\b/i;
+const womenCodedFashionPattern = /\b(women'?s?|woman'?s?|female|lad(?:y|ies)|girls?|bras?|bralettes?|lingerie|pant(?:y|ies)|bikinis?|swimsuits?|swimwear|monokinis?|sarees?|saris?|lehengas?|kurtis?|anarkali|dupattas?|gowns?|frocks?|bodycon|skirts?|blouses?|jewellery|jewelry|earrings?)\b/i;
+const menCodedFashionPattern = /\b(men'?s?|man'?s?|male|gentlemen|boys?|shirts?|t-?shirts?|polos?|pants?|trousers?|jeans?|chinos?|shorts?|jackets?|blazers?|suits?|sherwanis?|kurtas?|boxers?|briefs?|loafers?|sneakers?|watches?)\b/i;
 const malePreferencePattern = /\b(?:men'?s?|man'?s?|male|gentlemen|boys?)\b/gi;
 const femalePreferencePattern = /\b(?:women'?s?|woman'?s?|female|lad(?:y|ies)|girls?)\b/gi;
 
@@ -61,14 +63,16 @@ export function genderCompatibility(product = {}, preference = '') {
   ].filter(Boolean).join(' ');
   const isMens = /\b(men'?s?|male|boys?|gentlemen)\b/i.test(text);
   const isWomens = /\b(women'?s?|female|girls?|ladies)\b/i.test(text);
+  const womenCoded = womenCodedFashionPattern.test(text);
+  const menCoded = menCodedFashionPattern.test(text);
   const isUnisex = ['unisex', 'other'].includes(productGender) || /\bunisex\b/i.test(text) || (isMens && isWomens);
 
-  if (isUnisex) return { compatible: true };
+  if (isUnisex && !(target === 'men' && womenCoded && !menCoded) && !(target === 'women' && menCoded && !womenCoded)) return { compatible: true };
 
-  if (target === 'women' && (productGender === 'men' || isMens)) {
+  if (target === 'women' && (productGender === 'men' || isMens || (menCoded && !womenCoded))) {
     return { compatible: false, reason: 'This result is for men, but your profile preference is female.' };
   }
-  if (target === 'men' && (productGender === 'women' || isWomens)) {
+  if (target === 'men' && (productGender === 'women' || isWomens || (womenCoded && !menCoded))) {
     return { compatible: false, reason: 'This result is for women, but your profile preference is male.' };
   }
 

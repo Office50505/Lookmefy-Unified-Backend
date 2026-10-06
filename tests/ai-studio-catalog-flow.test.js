@@ -148,6 +148,41 @@ test("an explicit men's catalog request overrides a female profile", async (t) =
   assert.ok(result.products.every((product) => product.source === 'lookmefy_catalog'));
 });
 
+test("a men's style setup carries into a later catalog source choice", async (t) => {
+  const rows = [
+    ...catalogFixtures(),
+    {
+      _id: 'mens-party-shirt',
+      name: 'Men Navy Party Shirt',
+      brand: 'Catalog Brand',
+      category: 'shirts',
+      gender: 'men',
+      price: 999,
+      colors: ['navy'],
+      tags: ['men', 'party', 'shirt'],
+      description: 'Party shirt for men',
+      image: { url: '/uploads/products/mens-party-shirt.jpg' },
+      isActive: true,
+      availabilityStatus: 'available'
+    }
+  ];
+  const { user, requests } = mockCatalogFlow(t, rows);
+
+  const setup = await orchestrateAiStudio({
+    user,
+    message: 'show me mens outfits'
+  });
+  const result = await orchestrateAiStudio({
+    user,
+    conversationId: setup.conversationId,
+    message: 'Search Lookmefy catalog for I thinking for party so tell me what to were today'
+  });
+
+  assert.equal(result.filters.gender, 'male');
+  assert.deepEqual(result.products.map((product) => product.id), ['mens-party-shirt']);
+  assert.ok(result.products.every((product) => product.gender === 'men'));
+});
+
 test('catalog watches with affiliate links remain visible to AI Studio', async (t) => {
   const rows = [{
     _id: 'catalog-watch',

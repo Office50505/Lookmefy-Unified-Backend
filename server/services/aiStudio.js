@@ -534,6 +534,12 @@ function extractFilters(message = '', profile = {}) {
   };
 }
 
+function filtersWithConversationGender(filters = {}, conversation = {}, message = '') {
+  if (explicitGenderPreferenceForText(message)) return filters;
+  const rememberedGender = normalizeGenderPreference(conversation?.lastGenderPreference || '');
+  return rememberedGender ? { ...filters, gender: rememberedGender } : filters;
+}
+
 function aiStudioIntent(message = '', knowledge = []) {
   const lower = normalize(message);
   const filters = extractFilters(message);
@@ -1674,6 +1680,23 @@ function rankCatalogProducts(products = [], { query = '', filters = {}, eventPro
     .slice(0, productResultLimit);
 }
 
+function enforceProductGenderFilters(products = [], filters = {}, query = '') {
+  const genderPreference = genderPreferenceForQuery(query, filters.gender || '');
+  return (Array.isArray(products) ? products : [])
+    .filter((product) => genderCompatibility(product, genderPreference).compatible);
+}
+
+function enforcePlanGenderFilters(plan = {}, filters = {}, query = '') {
+  return {
+    ...plan,
+    products: enforceProductGenderFilters(plan.products || [], filters, query),
+    outfits: (plan.outfits || []).map((outfit) => ({
+      ...outfit,
+      products: enforceProductGenderFilters(outfit.products || [], filters, query)
+    }))
+  };
+}
+
 function catalogApiBaseUrl() {
   const raw = cleanText(
     process.env.LOOKMEFY_CATALOG_API_BASE_URL ||
@@ -1710,6 +1733,7 @@ async function fetchRemoteCatalogBatch({ query = '', filters = {}, limit = 96 } 
   if (!baseUrl) return [];
   const params = new URLSearchParams({ limit: String(Math.min(Math.max(Number(limit) || 48, 1), 96)) });
   if (query) params.set('q', query);
+  if (filters.gender) params.set('gender', catalogGenderParam(filters.gender));
   if (filters.budget) params.set('maxPrice', String(filters.budget));
 
   const { response, text } = await safeFetchText(`${catalogApiProductsUrl(baseUrl)}?${params.toString()}`, {
@@ -2424,8 +2448,22 @@ function outfitMatchesRequestedCategory(outfit = {}, filters = {}) {
     || (outfit.products || []).some((item) => categoryMatchesFilter(item, filters));
 }
 
+function sourceChoiceTopic(message = '') {
+  let topic = cleanText(message || 'this look', 180) || 'this look';
+  for (let index = 0; index < 4; index += 1) {
+    const next = topic
+      .replace(/^(?:search|find|shop|buy)\s+(?:online|amazon|web|internet)\s*(?:for\s+)?/i, '')
+      .replace(/^(?:search|find|shop|buy)\s+(?:lookmefy\s+)?(?:catalog|products?|shop|store)\s*(?:for\s+)?/i, '')
+      .replace(/^(?:search|check|find|look\s+in)\s+(?:(?:my|your)\s+)?(?:wardrobe|closet)\s*(?:for\s+)?/i, '')
+      .trim();
+    if (!next || next === topic) break;
+    topic = next;
+  }
+  return topic || 'this look';
+}
+
 function sourceChoiceActions(message = '') {
-  const topic = cleanText(message || 'this look', 140) || 'this look';
+  const topic = sourceChoiceTopic(message);
   return [
     { type: 'check_wardrobe', label: 'Search wardrobe', prompt: `Search wardrobe for ${topic}` },
     { type: 'search_catalog', label: 'Search Lookmefy catalog', prompt: `Search Lookmefy catalog for ${topic}` },
@@ -2434,9 +2472,7 @@ function sourceChoiceActions(message = '') {
 }
 
 function productRequestTopic(message = '') {
-  return cleanText(message, 140)
-    .replace(/^(?:search|check|find|look\s+in)\s+(?:(?:my|your)\s+)?(?:wardrobe|closet)\s*(?:for\s+)?/i, '')
-    .trim() || 'this item';
+  return sourceChoiceTopic(message || 'this item');
 }
 
 function wardrobeFallbackActions(message = '') {
@@ -3295,9 +3331,11 @@ async function orchestrateAiStudio({ user, message, conversationId = '', history
     ? conversation.pendingProductChoice.message
     : fallbackSearchMessage || (budgetFollowUpMessage ? `${budgetFollowUpMessage} ${prompt}` : prompt);
   const pendingChoiceKind = conversation.pendingProductChoice?.kind || 'product';
-  const filters = pendingChoice && conversation.pendingProductChoice.filters
+  const extractedFilters = pendingChoice && conversation.pendingProductChoice.filters
     ? { ...conversation.pendingProductChoice.filters }
     : extractFilters(planningMessage, profile);
+  const filters = filtersWithConversationGender(extractedFilters, conversation, planningMessage);
+  if (filters.gender) conversation.lastGenderPreference = filters.gender;
   const selectedSource = pendingChoice || explicitPath;
   const contextScope = selectedSource === 'wardrobe'
     ? 'wardrobe'
@@ -3434,6 +3472,7 @@ async function orchestrateAiStudio({ user, message, conversationId = '', history
   }
 
   plan = enforceSelectedSource(plan, selectedSource);
+  plan = enforcePlanGenderFilters(plan, filters, planningMessage);
   plan = neutralizeWebPlanCopy(antiRepeatReply(plan, conversation), productSearch);
   plan = annotateVisibleSources(plan, productSearch);
   rememberVisibleResults(conversation, plan, prompt);

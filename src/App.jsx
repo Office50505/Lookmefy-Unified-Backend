@@ -540,9 +540,40 @@ const categories = [
 const featuredSearchCategories = categories.slice(0, 8);
 const popularSearchTerms = ['shirts', 'jeans', 'innerwear', 'ethnic wear', 'shoes', 'sleepwear'];
 const suggestedSearchTerms = ['shirts', 't-shirts', 'dresses', 'jeans', 'shoes', 'accessories'];
+const categoryDisplayOrder = [
+  'shirts',
+  'tshirts',
+  'dresses',
+  'pants',
+  'jeans',
+  'jackets',
+  'shoes',
+  'watches',
+  'accessories',
+  'ethnicwear',
+  'eyewear',
+  'innerwear',
+  'sleepwear',
+  'shorts',
+  'tops'
+];
 
 function categorySlug(value) {
   return String(value || 'uncategorized').trim().toLowerCase();
+}
+
+function categoryOrderKey(value) {
+  return categorySlug(value).replace(/[^a-z0-9]/g, '');
+}
+
+function categoryDisplayRank(category) {
+  const rank = categoryDisplayOrder.indexOf(categoryOrderKey(category));
+  return rank === -1 ? Number.MAX_SAFE_INTEGER : rank;
+}
+
+function sortCategoriesByDisplayOrder(a, b) {
+  return categoryDisplayRank(a.category) - categoryDisplayRank(b.category)
+    || a.label.localeCompare(b.label);
 }
 
 function categoryVisualKey(value) {
@@ -3937,8 +3968,7 @@ const categoryAudienceOptions = [
   { label: 'Girls', value: 'girls', aliases: ['girls', 'girl'] },
   { label: 'Boys', value: 'boys', aliases: ['boys', 'boy'] },
   { label: 'Teens', value: 'teens', aliases: ['teens', 'teen'] },
-  { label: 'Kids', value: 'kids', aliases: ['kids', 'kid', 'children', 'child'] },
-  { label: 'Unisex', value: 'unisex', aliases: ['unisex'], image: 'category-icons/unisex-section.png' }
+  { label: 'Kids', value: 'kids', aliases: ['kids', 'kid', 'children', 'child'] }
 ];
 
 function categoryAudienceForProduct(product) {
@@ -4097,8 +4127,8 @@ function AtelierCategoriesPage() {
           });
     });
     const quickCategories = activeAudience === requestedAudience
-      ? [...completeCategoryMap.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
-      : selectedCategorySections;
+      ? [...completeCategoryMap.values()].sort(sortCategoriesByDisplayOrder)
+      : [...selectedCategorySections].sort(sortCategoriesByDisplayOrder);
 
     return {
       audienceCards,
@@ -6391,7 +6421,7 @@ function ClosetAddPage({ user, setUser }) {
           <section className="atelier-closet-specifications">
             <header><span>Archive Entry: {categoryLabel(detectedProfile?.category || 'New Item')}</span><h2>Item Specifications</h2></header>
             <div className="atelier-closet-form-grid">
-              <label><span>Dress Name</span><input name="name" placeholder="e.g. Moonlight Silk Slip" /></label>
+              <label><span>Item Name</span><input name="name" placeholder="e.g. Blue Low-Top Sneakers" /></label>
               <label><span>Type</span><select name="category" defaultValue=""><option value="">Select type</option>{closetCategories.slice(1).map(([label, value]) => <option key={value} value={value}>{label}</option>)}</select></label>
               <label className="atelier-closet-color-field"><span>Color</span><div><i aria-hidden="true" /><input name="color" placeholder="Stone / Ivory" /></div></label>
               <label><span>Fabric</span><input name="fabric" placeholder="Silk, linen, cotton" /></label>
@@ -9610,7 +9640,7 @@ function ProductPage({ id, user, setUser, demoEcommerceMode = false }) {
         setTryOnCreditNotice(`${tryOnCost} credit used. ${Number(data.user.tokens || 0)} credits remaining.`);
       }
     } catch (err) {
-      setTryOnError('We couldn\'t create this try-on.');
+      setTryOnError(readableError(err, 'We couldn\'t create this try-on.'));
     } finally {
       setTryOnLoading(false);
     }
