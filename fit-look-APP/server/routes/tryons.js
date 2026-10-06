@@ -1536,24 +1536,28 @@ async function callPrunaGlassesTryOn({ user, product, garmentFile, timer, intent
   };
 }
 
-async function callPrunaTryOn({ user, product = {}, garmentFile, timer, custom = false }) {
-  const intent = tryOnIntentForProduct(product, { custom });
+async function callPrunaTryOn({ user, personImageFile, product = {}, garmentFile, garmentFiles, prompt: promptOverride, intent: intentOverride, timer, custom = false }) {
+  const selectedGarmentFiles = Array.isArray(garmentFiles) ? garmentFiles.filter(Boolean).slice(0, 5) : [];
+  const intent = intentOverride || tryOnIntentForProduct(product, { custom });
   if (intent.key === 'unsupported') throw new Error(intent.unsupportedMessage);
-  if (intent.key === 'eyewear') return callPrunaGlassesTryOn({ user, product, garmentFile, timer, intent });
+  if (intent.key === 'eyewear' && !selectedGarmentFiles.length) return callPrunaGlassesTryOn({ user, product, garmentFile, timer, intent });
 
-  const [personFile, garment] = await Promise.all([
-    filePartFromUpload(user.bodyPhoto, 'person', timer),
-    garmentFile ? filePartFromMemoryFile(garmentFile, 'garment', timer) : filePartFromProduct(product, timer)
+  const [personFile, garmentParts] = await Promise.all([
+    personImageFile ? filePartFromMemoryFile(personImageFile, 'person', timer) : filePartFromUpload(user.bodyPhoto, 'person', timer),
+    selectedGarmentFiles.length
+      ? Promise.all(selectedGarmentFiles.map((file, index) => filePartFromMemoryFile(file, `garment ${index + 1}`, timer)))
+      : Promise.all([garmentFile ? filePartFromMemoryFile(garmentFile, 'garment', timer) : filePartFromProduct(product, timer)])
   ]);
-  const [personImage, garmentImage] = await Promise.all([
+  const [personImage, ...garmentImages] = await Promise.all([
     uploadPrunaFile(personFile, 'person', timer),
-    uploadPrunaFile(garment, 'garment', timer)
+    ...garmentParts.map((file, index) => uploadPrunaFile(file, `garment ${index + 1}`, timer))
   ]);
-  const prompt = prunaTryOnPrompt(product, intent, { custom, fallbackName: garmentFile?.originalname || '' });
+  const fallbackName = selectedGarmentFiles.map((file) => file.originalname).filter(Boolean).join(', ') || garmentFile?.originalname || '';
+  const prompt = promptOverride || prunaTryOnPrompt(product, intent, { custom, fallbackName });
   const turbo = prunaTurboForIntent(intent);
   const input = {
     person_image: personImage,
-    garment_images: [garmentImage],
+    garment_images: garmentImages,
     prompt,
     turbo,
     preserve_input_size: prunaPreserveInputSize(),
@@ -2768,4 +2772,4 @@ function registerTryOnJobHandlers() {
 }
 
 export default router;
-export { registerTryOnJobHandlers };
+export { registerTryOnJobHandlers, callPrunaTryOn };

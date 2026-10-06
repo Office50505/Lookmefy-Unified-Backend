@@ -27,8 +27,8 @@ JOB_STALE_LOCK_MS=600000
 JOB_RESULT_TTL_MS=86400000
 
 # App rate limits.
-# Test-only emergency switch. Keep this 0 in normal production.
-RATE_LIMIT_DISABLED=0
+# Set false only for controlled load tests or emergency debugging.
+RATE_LIMIT_ENABLED=true
 RATE_LIMIT_ANONYMOUS_MAX=120
 RATE_LIMIT_AUTHENTICATED_MAX=300
 RATE_LIMIT_OTP_PHONE_MAX=3
@@ -121,7 +121,11 @@ PHONEPE_REDEMPTION_RETRY_STRATEGY=STANDARD
 # Apple StoreKit / App Store Server API for production iOS in-app purchases.
 # Product IDs must match App Store Connect exactly:
 #   com.lookmefy.premium.monthly
-#   com.lookmefy.credits150
+#   com.lookmefy.credits50
+#   com.lookmefy.credits75
+#   com.lookmefy.credits110
+#   com.lookmefy.credits135
+#   com.lookmefy.credits400
 APPLE_IAP_ENVIRONMENT=production
 APPLE_BUNDLE_ID=com.kratikdhote.lookmefy
 APPLE_APP_APPLE_ID=

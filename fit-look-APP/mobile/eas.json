@@ -1,7 +1,7 @@
 {
   "cli": {
     "version": ">= 20.1.0",
-    "appVersionSource": "remote"
+    "appVersionSource": "local"
   },
   "build": {
     "development": {
@@ -18,11 +18,10 @@
       }
     },
     "production": {
-      "autoIncrement": true,
+      "autoIncrement": false,
       "distribution": "store",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.lookmefy.in/api",
-        "EXPO_PUBLIC_API_FALLBACK_URLS": ""
+        "EXPO_PUBLIC_API_URL": "https://api.lookmefy.in/api"
       },
       "android": {
         "buildType": "app-bundle"
@@ -35,8 +34,7 @@
       "autoIncrement": false,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.lookmefy.in/api",
-        "EXPO_PUBLIC_API_FALLBACK_URLS": ""
+        "EXPO_PUBLIC_API_URL": "https://api.lookmefy.in/api"
       },
       "android": {
         "buildType": "apk"

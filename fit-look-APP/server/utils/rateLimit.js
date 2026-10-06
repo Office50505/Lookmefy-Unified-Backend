@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { getRedisClient, keyPrefix, ttlSeconds, withTimeout } from './cache.js';
+import { envFlag } from './devMode.js';
 
 const localWindows = new Map();
 const localLocks = new Map();
@@ -78,6 +79,15 @@ function retrySeconds(resetMs) {
   return Math.max(1, Math.ceil((Number(resetMs) || 1000) / 1000));
 }
 
+function hasEnvValue(name) {
+  return String(process.env[name] ?? '').trim() !== '';
+}
+
+function rateLimitsEnabled() {
+  if (hasEnvValue('RATE_LIMIT_ENABLED')) return envFlag(process.env.RATE_LIMIT_ENABLED, true);
+  return !envFlag(process.env.RATE_LIMIT_DISABLED, false);
+}
+
 function createRateLimiter(options = {}) {
   const name = options.name || 'default';
   const windowMs = options.windowMs || 60_000;
@@ -87,6 +97,7 @@ function createRateLimiter(options = {}) {
   const failClosed = Boolean(options.failClosed);
 
   return async function rateLimiter(req, res, next) {
+    if (!rateLimitsEnabled()) return next();
     if (options.skip?.(req)) return next();
 
     const resolvedMax = Math.max(1, Number(limitValue(max, req)) || 1);
@@ -152,6 +163,7 @@ function createConcurrencyLimiter(options = {}) {
   const failClosed = Boolean(options.failClosed);
 
   return async function concurrencyLimiter(req, res, next) {
+    if (!rateLimitsEnabled()) return next();
     if (options.skip?.(req)) return next();
 
     const key = `${keyPrefix()}:lock:${name}:${hashKey(keyGenerator(req))}`;
@@ -198,4 +210,4 @@ function createConcurrencyLimiter(options = {}) {
 
 const rateLimitKeys = { clientIp, phonePrincipal, principal, tokenUserId };
 
-export { createConcurrencyLimiter, createRateLimiter, rateLimitKeys };
+export { createConcurrencyLimiter, createRateLimiter, rateLimitKeys, rateLimitsEnabled };

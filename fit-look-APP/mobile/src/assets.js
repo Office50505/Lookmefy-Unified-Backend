@@ -4,6 +4,8 @@ export const images = {
   homeSliderAtelier: require('../assets/home-slider-atelier.jpg'),
   homeSliderNaturalLight: require('../assets/home-slider-natural-light.jpg'),
   homeSliderArchway: require('../assets/home-slider-archway.jpg'),
+  homeStarterExplore: require('../assets/home-starter-explore.png'),
+  homeStarterWardrobe: require('../assets/home-starter-wardrobe.png'),
   shopHeroConfidence: require('../assets/shop-hero-confidence.png'),
   locked: require('../assets/search-locked-preview.jpg'),
   'arrival-1.jpg': require('../assets/arrival-1.jpg'),

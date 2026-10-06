@@ -2,6 +2,7 @@
   "expo": {
     "name": "Lookmefy",
     "slug": "lookmefy",
+    "icon": "./assets/icon-ios.png",
     "scheme": "lookmefy",
     "version": "1.0.1",
     "orientation": "portrait",
@@ -13,7 +14,7 @@
       "supportsTablet": true,
       "icon": "./assets/icon-ios.png",
       "bundleIdentifier": "com.kratikdhote.lookmefy",
-      "buildNumber": "19",
+      "buildNumber": "23",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Lookmefy needs camera access so you can take profile photos for virtual try-ons.",
@@ -22,8 +23,15 @@
     },
     "android": {
       "package": "com.lookmefy.app",
-      "versionCode": 19,
+      "versionCode": 23,
       "icon": "./assets/icon-android.png",
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon-android.png",
         "backgroundColor": "#101820"
@@ -35,11 +43,27 @@
     "plugins": [
       "expo-video",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Lookmefy accesses only the photos you choose for profile, wardrobe, and virtual try-on features.",
+          "cameraPermission": "Lookmefy uses the camera only when you choose to take a profile or clothing photo.",
+          "microphonePermission": false
+        }
+      ],
+      [
         "expo-iap",
         {
           "module": "expo-iap"
         }
-      ]
-    ]
+      ],
+      "expo-font",
+      "./plugins/withAndroidBuildCompatibility"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "45cb4281-c3a1-4277-b30f-8815df247407"
+      }
+    },
+    "owner": "office50505"
   }
 }
