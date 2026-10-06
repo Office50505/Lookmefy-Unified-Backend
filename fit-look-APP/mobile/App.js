@@ -8,6 +8,7 @@ import { Component, memo, useCallback, useEffect, useMemo, useRef, useState } fr
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   AppState,
   BackHandler,
   FlatList,
@@ -51,6 +52,23 @@ const aiPreviewDisclaimer = 'Note: AI previews can make mistakes. Check fit, col
 const appTopInset = Platform.OS === 'android' ? Math.max(76, NativeStatusBar.currentHeight || 0) : 0;
 const bottomNavigationHeight = Platform.OS === 'ios' ? 86 : 78;
 const screenBottomInset = 40;
+const homeHeroShowcaseSlides = [
+  {
+    key: 'black-coat',
+    model: images.homeSliderAtelier,
+    garment: images['category-generated/jackets.png']
+  },
+  {
+    key: 'denim-shirt',
+    model: images.homeSliderArchway,
+    garment: images['category-generated/men-shirts.png']
+  },
+  {
+    key: 'light-suiting',
+    model: images.homeSliderNaturalLight,
+    garment: images['category-generated/tops.png']
+  }
+];
 const screenScrollProps = {
   showsVerticalScrollIndicator: false,
   keyboardShouldPersistTaps: 'handled',
@@ -75,7 +93,7 @@ const horizontalScrollProps = {
 const homeCategorySnapInterval = 70;
 const productImageAspectRatio = 0.8;
 const avatarCropReferenceSize = 132;
-const homeHeroSlideIntervalMs = 4000;
+const homeHeroSlideIntervalMs = 4200;
 const homeHeroSlides = [
   { key: 'summer', title: 'SUMMER ESSENTIALS', cta: 'SHOP NOW', image: 'homeSliderAtelier', route: 'shop' },
   { key: 'natural-light', title: 'LIGHT LAYERING', cta: 'EXPLORE', image: 'homeSliderNaturalLight', route: 'shop' },
@@ -1053,10 +1071,10 @@ function BottomNav({ route = { name: 'home' }, onNavigate = () => {} }) {
         : routeName;
   const items = [
     ['home', 'home-outline', 'Home'],
-    ['shop', 'grid-outline', 'Categories'],
+    ['shop', 'search-outline', 'Categories'],
+    ['tryon', 'camera-outline', 'Try-On'],
     ['closet', 'shirt-outline', 'Wardrobe'],
-    ['tryon', 'sparkles-outline', 'AI Studio'],
-    ['custom', 'color-wand-outline', 'Custom']
+    ['profile', 'person-outline', 'Profile']
   ];
   return (
     <View style={styles.bottomNav}>
@@ -1065,7 +1083,7 @@ function BottomNav({ route = { name: 'home' }, onNavigate = () => {} }) {
         return (
           <TouchableOpacity key={name} activeOpacity={0.82} accessibilityRole="tab" accessibilityState={{ selected: active }} style={styles.navItem} onPress={() => onNavigate(name)}>
             <View style={[styles.navIconWrap, active && styles.navIconWrapCenter]}>
-              <Ionicons name={icon} size={active ? 20 : 21} color={active ? '#111111' : '#8d8682'} />
+              <Ionicons name={icon} size={active ? 13 : 12} color={active ? '#111111' : '#6f6f6f'} />
             </View>
             <Text style={[styles.navText, active && styles.navTextActive]}>{label}</Text>
             <View style={[styles.navActiveUnderline, active && styles.navActiveUnderlineVisible]} />
@@ -1591,7 +1609,7 @@ const categoryPageContent = {
     ]
   }
 };
-const homeProductFeedPageSize = 24;
+const homeProductFeedPageSize = 96;
 const shopProductGridLimit = 50;
 const searchQuickSuggestions = ['short kurti', 'saree', 'kurti', 'tshirt', 'earring', 'top for women', 'slipper', 'watch', 'top', 'kurti set', 'shoes', 'eyewear'];
 
@@ -1691,6 +1709,191 @@ function CurationProductCard({ product, onPress, onAddToWishlist, isWishlisted }
   );
 }
 
+function productMixKey(product = {}, index = 0) {
+  const seed = String(product.id || product._id || product.title || product.name || index);
+  let hash = 0;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = ((hash << 5) - hash + seed.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash * 2654435761);
+}
+
+function productMixCategory(product = {}) {
+  const text = `${product.category || ''} ${product.title || ''} ${product.name || ''}`.toLowerCase();
+  if (/shoe|sneaker|boot|sandal|slipper|footwear/.test(text)) return 'footwear';
+  if (/accessor|jewel|earring|necklace|bracelet|watch|belt|tie|necktie|bag|purse|eyewear|glass|sunglass|cap|hat|wallet/.test(text)) return 'accessories';
+  if (/jean|pant|trouser|bottom|short/.test(text)) return 'bottoms';
+  if (/dress|saree|kurti|ethnic/.test(text)) return 'dresses';
+  if (/jacket|blazer|coat|suit|outerwear/.test(text)) return 'outerwear';
+  if (/shirt|tee|t-shirt|top|sweater|hoodie/.test(text)) return 'tops';
+  return product.category || 'other';
+}
+
+function mixedProducts(products = []) {
+  const seen = new Set();
+  const grouped = new Map();
+  products
+    .filter((product) => {
+      const id = product?.id || product?._id || product?.title || product?.name;
+      if (!id || seen.has(id)) return false;
+      seen.add(id);
+      return product?.imageUrl || product?.imageUrls?.length;
+    })
+    .forEach((product, index) => {
+      const category = productMixCategory(product);
+      if (!grouped.has(category)) grouped.set(category, []);
+      grouped.get(category).push({ product, sortKey: productMixKey(product, index) });
+    });
+
+  const groups = Array.from(grouped.entries())
+    .map(([category, items]) => ({
+      category,
+      items: items.sort((left, right) => left.sortKey - right.sortKey),
+      sortKey: productMixKey({ id: category }, grouped.size)
+    }))
+    .sort((left, right) => left.sortKey - right.sortKey);
+
+  const mixed = [];
+  let added = true;
+  while (added) {
+    added = false;
+    groups.forEach((group) => {
+      const next = group.items.shift();
+      if (next) {
+        mixed.push(next.product);
+        added = true;
+      }
+    });
+  }
+  return mixed;
+}
+
+function HomeLookCard({ product, fallbackImage, title, meta, onPress }) {
+  return (
+    <TouchableOpacity style={styles.homeLookCard} activeOpacity={0.88} onPress={onPress}>
+      <View style={styles.homeLookImageWrap}>
+        {product ? (
+          <ProductImage product={product} style={styles.homeLookImage} resizeMode="cover" alt={product.title || product.name} />
+        ) : (
+          <Image source={fallbackImage} style={styles.homeLookImage} resizeMode="cover" />
+        )}
+      </View>
+      <View style={styles.homeLookBody}>
+        <View style={styles.homeLookTextBlock}>
+          <Text style={styles.homeLookTitle} numberOfLines={1}>{title}</Text>
+          <Text style={styles.homeLookMeta} numberOfLines={1}>{meta}</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={22} color="#34302e" />
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+function HomeWardrobeTile({ item, onPress }) {
+  return (
+    <TouchableOpacity style={styles.homeWardrobeTile} activeOpacity={0.86} onPress={onPress}>
+      <View style={styles.homeWardrobeImageWrap}>
+        <Image source={images[item.image]} style={styles.homeWardrobeImage} resizeMode="contain" />
+      </View>
+      <Text style={styles.homeWardrobeLabel} numberOfLines={1}>{item.label}</Text>
+    </TouchableOpacity>
+  );
+}
+
+function HomeTryOnProductCard({ product, fallbackImage, fallbackTitle, fallbackPrice, onPress, onTryOn, onAddToWishlist, isWishlisted, grid }) {
+  const price = Number(product?.price);
+  return (
+    <TouchableOpacity style={[styles.homeTryOnCard, grid && styles.homeTryOnGridCard]} activeOpacity={0.88} onPress={onPress || onTryOn}>
+      <View style={[styles.homeTryOnImageWrap, grid && styles.homeTryOnGridImageWrap]}>
+        {product ? (
+          <ProductImage product={product} style={styles.homeTryOnImage} alt={product.title || product.name} />
+        ) : (
+          <Image source={fallbackImage} style={styles.homeTryOnImage} resizeMode="cover" />
+        )}
+      </View>
+      <Text style={styles.homeTryOnTitle} numberOfLines={2}>{product?.title || product?.name || fallbackTitle}</Text>
+      <Text style={styles.homeTryOnPrice}>{product ? (Number.isFinite(price) ? formatMoney(price, product.currency) : 'Price unavailable') : fallbackPrice}</Text>
+      <View style={styles.homeTryOnActions}>
+        <TouchableOpacity style={styles.homeTryOnButton} activeOpacity={0.86} onPress={onTryOn || onPress}>
+          <Ionicons name="shirt-outline" size={16} color="#ffffff" />
+          <Text style={styles.homeTryOnButtonText}>Try On</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel={isWishlisted ? 'Remove product from wishlist' : 'Add product to wishlist'}
+          style={styles.homeTryOnHeart}
+          activeOpacity={0.84}
+          onPress={(event) => {
+            event?.stopPropagation?.();
+            if (product) onAddToWishlist?.(product);
+          }}
+        >
+          <Ionicons name={isWishlisted ? 'heart' : 'heart-outline'} size={21} color="#111111" />
+        </TouchableOpacity>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+function HomeHeroShowcase() {
+  const progress = useRef(new Animated.Value(0)).current;
+  const slideCount = homeHeroShowcaseSlides.length;
+
+  useEffect(() => {
+    progress.setValue(0);
+    const animation = Animated.loop(
+      Animated.timing(progress, {
+        toValue: slideCount,
+        duration: homeHeroSlideIntervalMs * slideCount,
+        useNativeDriver: true
+      })
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [progress, slideCount]);
+
+  return (
+    <View style={styles.homeHeroRightPane} pointerEvents="box-none">
+      {homeHeroShowcaseSlides.map((slide, index) => {
+        const inputRange = [
+          index - 1,
+          index - 0.1,
+          index,
+          index + 0.82,
+          index + 1,
+          index + 1.1
+        ];
+        const firstSlideInputRange = index === 0
+          ? [0, 0.82, 1, slideCount - 0.18, slideCount, slideCount + 0.1]
+          : inputRange;
+        const opacity = progress.interpolate({
+          inputRange: firstSlideInputRange,
+          outputRange: index === 0 ? [1, 1, 0, 0, 1, 1] : [0, 0, 1, 1, 0, 0],
+          extrapolate: 'clamp'
+        });
+        const translateX = progress.interpolate({
+          inputRange: firstSlideInputRange,
+          outputRange: index === 0 ? [0, 0, -14, 16, 0, 0] : [16, 16, 0, 0, -14, -14],
+          extrapolate: 'clamp'
+        });
+        const translateY = progress.interpolate({
+          inputRange: firstSlideInputRange,
+          outputRange: index === 0 ? [0, 0, 6, -8, 0, 0] : [-8, -8, 0, 0, 6, 6],
+          extrapolate: 'clamp'
+        });
+        return (
+          <Animated.View key={slide.key} pointerEvents="none" style={[styles.homeHeroVisualLayer, { opacity, transform: [{ translateX }] }]}>
+            <Image source={slide.model} style={styles.homeHeroModel} resizeMode="cover" />
+            <View style={styles.homeHeroGarmentPanel} pointerEvents="none">
+              <Animated.Image source={slide.garment} style={[styles.homeHeroGarment, { opacity, transform: [{ translateY }] }]} resizeMode="contain" />
+            </View>
+          </Animated.View>
+        );
+      })}
+    </View>
+  );
+}
+
 function ProductTopBar({ onNavigate, user }) {
   return <AppHeader onNavigate={onNavigate} user={user} compact />;
 }
@@ -1757,180 +1960,153 @@ function ConciergeSuggestionCard({ product, fallback, featured, onShop, onTryOn,
 }
 
 function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, registerTourTarget, tourFocusRequest }) {
-  const { width } = useWindowDimensions();
-  const homeHeroWidth = Math.max(1, width - 32);
-  const heroCarouselRef = useRef(null);
   const homeScrollRef = useRef(null);
-  const [heroIndex, setHeroIndex] = useState(0);
   const preferredGender = productGenderForUser(user);
-  const preferredHomeCategories = homeCategoryItemsByGender[preferredGender] || homeCategoryItems;
-  const curated = useProducts({ sort: 'newest', limit: homeProductFeedPageSize, gender: preferredGender }, token);
+  const curated = useProducts({ sort: 'newest', limit: homeProductFeedPageSize, all: true }, token);
   const shopLookQuery = preferredGender === 'women'
-    ? { category: 'dresses', gender: 'women', sort: 'newest', limit: 8 }
+    ? { gender: 'women', sort: 'newest', limit: 24 }
     : preferredGender === 'men'
-      ? { gender: 'men', sort: 'newest', limit: 8 }
-      : { sort: 'newest', limit: 8 };
+      ? { gender: 'men', sort: 'newest', limit: 24 }
+      : { sort: 'newest', limit: 24 };
   const shopLooks = useProducts(shopLookQuery, token);
   const curatedProducts = curated.products;
-  const lookCategories = preferredGender === 'men'
-    ? new Set(['shirts', 't-shirts', 'pants', 'jeans', 'jackets', 'suits', 'shoes'])
-    : preferredGender === 'women'
-      ? new Set(['dresses', 'tops', 'ethnic wear', 'ethnic', 'shoes', 'accessories', 'jeans', 't-shirts'])
-      : null;
-  const shopLookProducts = shopLooks.products.filter((product) => (!lookCategories || lookCategories.has(product.category)) && (product.imageUrl || product.imageUrls?.length));
-  const lookLabels = preferredGender === 'men'
-    ? ['Office Sharp', 'Weekend Fit', 'Denim Day', 'Sneaker Edit', 'Layered Look', 'Evening Ready']
-    : ['Dinner Ready', 'Soft Floral', 'Denim Day', 'Party Edit', 'Vacation', 'Weekend'];
-  const homeCurationTitle = preferredGender === 'men' ? "Men's New Arrivals" : preferredGender === 'women' ? "Women's New Arrivals" : 'All Products';
-  const journalTitle = preferredGender === 'men' ? "Men's Style Edit" : 'Shop by Look';
-  const journalKicker = preferredGender === 'men' ? 'MENSWEAR EDIT' : 'DRESS EDIT';
-  const journalIntro = preferredGender === 'men'
-    ? 'Sharp menswear picks from the live catalog, selected for quick outfit discovery.'
-    : preferredGender === 'women'
-      ? 'Real dress picks from the live catalog, selected for quick outfit discovery.'
-      : 'Live catalog picks selected for quick outfit discovery.';
-  const journalViewParams = preferredGender === 'women'
-    ? { category: 'dresses', gender: 'women' }
-    : preferredGender === 'men'
-      ? { gender: 'men', sort: 'newest' }
-      : { sort: 'newest' };
+  const shopLookProducts = shopLooks.products.filter((product) => product.imageUrl || product.imageUrls?.length);
+  const recommendedProducts = useMemo(() => mixedProducts([...curatedProducts, ...shopLookProducts]), [curatedProducts, shopLookProducts]);
+  const continueLooks = [
+    {
+      title: preferredGender === 'men' ? 'Tailored Day Look' : 'Casual Day Look',
+      meta: '3 items  -  2 days ago',
+      product: null,
+      fallbackImage: images.homeSliderNaturalLight
+    },
+    {
+      title: 'Denim Vibes',
+      meta: '4 items  -  4 days ago',
+      product: null,
+      fallbackImage: images.homeSliderArchway
+    }
+  ];
+  const wardrobeItems = [
+    { label: 'Black Shirt', image: 'category-generated/men-shirts.png', params: { category: 'shirts', gender: preferredGender } },
+    { label: 'Denim Jacket', image: 'category-generated/jackets.png', params: { category: 'jackets', gender: preferredGender } },
+    { label: 'White Tee', image: 'category-generated/tshirts.png', params: { category: 't-shirts', gender: preferredGender } },
+    { label: 'Black Trousers', image: 'category-generated/bottomwear.png', params: { category: 'bottoms', gender: preferredGender } }
+  ];
+  const fallbackTryOnProducts = [
+    ['Oversized Blazer', '$129', images['category-generated/jackets.png']],
+    ['Satin Midi Dress', '$89', images['category-generated/dresses.png']],
+    ['Knit Sweater', '$79', images['category-generated/tops.png']]
+  ];
   const catalogTourTarget = useTourTarget('home-catalog', registerTourTarget, { request: tourFocusRequest, scrollRef: homeScrollRef, scrollOffset: 92 });
-  const handleHeroMomentumEnd = useCallback((event) => {
-    const nextIndex = Math.round(event.nativeEvent.contentOffset.x / homeHeroWidth);
-    setHeroIndex(Math.min(homeHeroSlides.length - 1, Math.max(0, nextIndex)));
-  }, [homeHeroWidth]);
-
-  useEffect(() => {
-    if (homeHeroSlides.length < 2) return undefined;
-    const timer = setInterval(() => {
-      setHeroIndex((currentIndex) => {
-        const nextIndex = (currentIndex + 1) % homeHeroSlides.length;
-        heroCarouselRef.current?.scrollTo({ x: nextIndex * homeHeroWidth, animated: true });
-        return nextIndex;
-      });
-    }, homeHeroSlideIntervalMs);
-    return () => clearInterval(timer);
-  }, [homeHeroWidth]);
 
   return (
     <View style={styles.homeScreen}>
-      <AppHeader onNavigate={onNavigate} user={user} compact />
       <ScrollView ref={homeScrollRef} style={styles.homeScroll} contentContainerStyle={styles.homeContent} {...screenScrollProps}>
-      <View style={styles.homeHero}>
-        <ScrollView
-          ref={heroCarouselRef}
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          bounces={false}
-          overScrollMode="never"
-          scrollEventThrottle={16}
-          onMomentumScrollEnd={handleHeroMomentumEnd}
-        >
-          {homeHeroSlides.map((slide) => (
-            <View key={slide.key} style={[styles.homeHeroSlide, { width: homeHeroWidth }]}>
-              <Image source={images[slide.image]} style={styles.homeHeroImage} resizeMode="cover" />
-              <View style={styles.homeHeroShade} />
-              <View style={styles.homeHeroCopy}>
-                <Text style={styles.homeHeroTitle}>{slide.title}</Text>
-                <TouchableOpacity style={styles.homeHeroButton} onPress={() => onNavigate(slide.route)}>
-                  <Text style={styles.homeHeroButtonText}>{slide.cta}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ))}
-        </ScrollView>
-        <View pointerEvents="none" style={styles.homeHeroDots}>
-          {homeHeroSlides.map((slide, index) => (
-            <View key={`${slide.key}-dot`} style={[styles.homeHeroDot, index === heroIndex && styles.homeHeroDotActive]} />
-          ))}
-        </View>
-      </View>
-
-      <View ref={catalogTourTarget.ref} onLayout={catalogTourTarget.onLayout} style={styles.homeSection}>
-        <View style={styles.homeSectionHead}>
-          <Text style={styles.homeSectionTitle}>Categories</Text>
-          <TouchableOpacity onPress={() => onNavigate('shop')}>
-            <Text style={styles.homeViewAll}>VIEW ALL</Text>
-          </TouchableOpacity>
-        </View>
-        <ScrollView
-          {...horizontalScrollProps}
-          contentContainerStyle={styles.homeCategoryTrack}
-          decelerationRate="fast"
-          snapToInterval={homeCategorySnapInterval}
-          snapToAlignment="start"
-        >
-          {preferredHomeCategories.map((item) => (
-            <TouchableOpacity key={item.label} activeOpacity={0.86} style={styles.homeCategoryItem} onPress={() => onNavigate('shop', item.params || {})}>
-              <View style={styles.homeCategoryImageFrame}>
-                <Image source={images[item.image]} style={styles.homeCategoryImage} resizeMode="contain" />
-              </View>
-              <Text style={styles.homeCategoryLabel} numberOfLines={1}>{item.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-
-      <Text style={styles.homeCurationTitle}>{homeCurationTitle}</Text>
-      <View style={styles.homeCuratedGrid}>
-        {curated.loading ? (
-          <HomeProductSkeletonGrid />
-        ) : curated.error || !curatedProducts.length ? (
-          <StatusPanel error={curated.error} empty={!curatedProducts.length} text="No products found yet." />
-        ) : curatedProducts.map((product) => {
-          return (
-            <CurationProductCard
-              key={product.id}
-              product={product}
-              onPress={() => onNavigate('product', { id: product.id })}
-              onAddToWishlist={onAddToWishlist}
-              isWishlisted={wishlistIds?.has(product.id)}
-            />
-          );
-        })}
-      </View>
-
-      <View style={styles.homeJournalBand}>
-        <View style={styles.homeJournalHead}>
+        <View style={styles.homeEditorialHeader}>
           <View>
-            <Text style={styles.homeJournalKicker}>{journalKicker}</Text>
-            <Text style={styles.homeJournalTitle}>{journalTitle}</Text>
+            <Text style={styles.homeEditorialBrand}>Lookmefy</Text>
+            <Text style={styles.homeEditorialTagline}>AI STYLES A BRIGHTER YOU</Text>
           </View>
-          <TouchableOpacity style={styles.homeJournalLink} activeOpacity={0.82} onPress={() => onNavigate('shop', journalViewParams)}>
-            <Text style={styles.homeJournalLinkText}>View all</Text>
-            <Ionicons name="arrow-forward" size={14} color="#9b5658" />
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Open notifications" style={styles.homeBellButton} onPress={() => onNavigate('orders')}>
+            <Ionicons name="notifications-outline" size={26} color="#0f0f0f" />
           </TouchableOpacity>
         </View>
-        <Text style={styles.homeJournalIntro}>{journalIntro}</Text>
-        {shopLooks.loading ? (
-          <HomeJournalSkeletonGrid />
-        ) : shopLooks.error || !shopLookProducts.length ? (
-          <StatusPanel error={shopLooks.error} empty={!shopLookProducts.length} text={preferredGender === 'men' ? 'No men looks found yet.' : 'No looks found yet.'} />
-        ) : (
-          <View style={styles.homeJournalGrid}>
-            {shopLookProducts.slice(0, 6).map((product, index) => {
-              const price = Number(product.price);
-              return (
-                <TouchableOpacity key={product.id} style={styles.homeJournalProductCard} activeOpacity={0.86} onPress={() => onNavigate('product', { id: product.id })}>
-                  <View style={styles.homeJournalImageFrame}>
-                    <ProductImage product={product} style={styles.homeJournalImage} resizeMode="cover" alt={product.title || product.name} />
-                    {onAddToWishlist ? <WishlistDoneButton saved={wishlistIds?.has(product.id)} compact onPress={() => onAddToWishlist(product)} /> : null}
-                    <View style={styles.homeJournalOverlay}>
-                      <Text style={styles.homeJournalLookLabel} numberOfLines={1}>{lookLabels[index % lookLabels.length]}</Text>
-                    </View>
-                  </View>
-                  <View style={styles.homeJournalProductBody}>
-                    <Text style={styles.homeJournalProductLabel} numberOfLines={1}>{product.displayLabel || titleCase(product.category || 'Catalog')}</Text>
-                    <Text style={styles.homeJournalProductTitle} numberOfLines={2}>{product.title || product.name}</Text>
-                    <Text style={styles.homeJournalProductPrice}>{Number.isFinite(price) ? formatMoney(price, product.currency) : 'Price unavailable'}</Text>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
+
+        <View style={styles.homeTryOnHero}>
+          <HomeHeroShowcase />
+          <View pointerEvents="none" style={styles.homeHeroLeftBase} />
+          <View pointerEvents="none" style={styles.homeHeroLeftSlantFill} />
+          <View pointerEvents="none" style={styles.homeHeroDivider} />
+          <TouchableOpacity style={styles.homeHeroRoundAction} activeOpacity={0.88} onPress={() => onNavigate('tryon')}>
+            <Ionicons name="arrow-forward" size={26} color="#111111" />
+          </TouchableOpacity>
+          <View style={styles.homeHeroLeftPane}>
+            <Text style={styles.homeHeroKicker}>VIRTUAL TRY-ON</Text>
+            <Text style={styles.homeHeroEditorialTitle}>See it. Try it.{'\n'}Love it.</Text>
+            <Text style={styles.homeHeroEditorialText}>Try fashion on yourself before you shop.</Text>
+            <TouchableOpacity style={styles.homePrimaryTryOnButton} activeOpacity={0.88} onPress={() => onNavigate('tryon')}>
+              <Ionicons name="camera-outline" size={19} color="#ffffff" />
+              <Text style={styles.homePrimaryTryOnText}>AI Try On</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.homeSecondaryWardrobeButton} activeOpacity={0.88} onPress={() => onNavigate('closet')}>
+              <Ionicons name="shirt-outline" size={19} color="#111111" />
+              <Text style={styles.homeSecondaryWardrobeText}>Open Wardrobe</Text>
+            </TouchableOpacity>
           </View>
-        )}
-      </View>
+        </View>
+
+        <View style={styles.homeSectionBlock}>
+          <View style={styles.homeEditorialSectionHead}>
+            <Text style={styles.homeEditorialSectionTitle}>Continue Your Looks</Text>
+            <TouchableOpacity style={styles.homeEditorialSeeAll} onPress={() => onNavigate('generation-history')}>
+              <Text style={styles.homeEditorialSeeAllText}>See All</Text>
+              <Ionicons name="arrow-forward" size={19} color="#5f5c58" />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.homeLookGrid}>
+            {continueLooks.map((look) => (
+              <HomeLookCard
+                key={look.title}
+                product={look.product}
+                fallbackImage={look.fallbackImage}
+                title={look.title}
+                meta={look.meta}
+                onPress={() => look.product ? onNavigate('product', { id: look.product.id }) : onNavigate('generation-history')}
+              />
+            ))}
+          </View>
+        </View>
+
+        <View ref={catalogTourTarget.ref} onLayout={catalogTourTarget.onLayout} style={styles.homeSectionBlock}>
+          <View style={styles.homeEditorialSectionHead}>
+            <Text style={styles.homeEditorialSectionTitle}>My Wardrobe</Text>
+            <TouchableOpacity style={styles.homeEditorialSeeAll} onPress={() => onNavigate('closet')}>
+              <Text style={styles.homeEditorialSeeAllText}>See All</Text>
+              <Ionicons name="arrow-forward" size={19} color="#5f5c58" />
+            </TouchableOpacity>
+          </View>
+          <ScrollView {...horizontalScrollProps} contentContainerStyle={styles.homeWardrobeTrack}>
+            {wardrobeItems.map((item) => (
+              <HomeWardrobeTile key={item.label} item={item} onPress={() => onNavigate('shop', item.params || {})} />
+            ))}
+            <TouchableOpacity style={styles.homeWardrobeAddTile} activeOpacity={0.86} onPress={() => onNavigate('closet', { add: true })}>
+              <Ionicons name="add-outline" size={38} color="#111111" />
+              <Text style={styles.homeWardrobeAddText}>Add Item</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+
+        <View style={styles.homeSectionBlock}>
+          <View style={styles.homeEditorialSectionHead}>
+            <Text style={styles.homeEditorialSectionTitle}>Recommended to Try On</Text>
+          </View>
+          {curated.loading && !recommendedProducts.length ? (
+            <HomeProductSkeletonGrid />
+          ) : curated.error && !recommendedProducts.length ? (
+            <StatusPanel error={curated.error} empty text="No products found yet." />
+          ) : (
+            <View style={styles.homeTryOnGrid}>
+              {(recommendedProducts.length ? recommendedProducts : fallbackTryOnProducts).map((item, index) => {
+                const product = Array.isArray(item) ? null : item;
+                const fallback = Array.isArray(item) ? item : fallbackTryOnProducts[index % fallbackTryOnProducts.length];
+                return (
+                  <HomeTryOnProductCard
+                    key={product?.id || fallback[0]}
+                    product={product}
+                    fallbackTitle={fallback[0]}
+                    fallbackPrice={fallback[1]}
+                    fallbackImage={fallback[2]}
+                    onPress={() => product ? onNavigate('product', { id: product.id }) : onNavigate('shop')}
+                    onTryOn={() => product ? onNavigate('tryon', { productId: product.id }) : onNavigate('tryon')}
+                    onAddToWishlist={onAddToWishlist}
+                    isWishlisted={product ? wishlistIds?.has(product.id) : false}
+                    grid
+                  />
+                );
+              })}
+            </View>
+          )}
+        </View>
       </ScrollView>
     </View>
   );
@@ -7719,55 +7895,65 @@ const styles = StyleSheet.create({
     lineHeight: 16
   },
   bottomNavFrame: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: Platform.OS === 'ios' ? 28 : 22,
+    zIndex: 40,
     width: '100%',
     alignItems: 'center',
-    backgroundColor: '#fbf7f6',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(236, 229, 225, 0.72)',
+    backgroundColor: 'transparent',
+    paddingHorizontal: 18,
+    paddingTop: 8,
+    paddingBottom: 0,
     shadowColor: '#1f1714',
-    shadowOpacity: 0.08,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: -8 },
-    elevation: 10
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 12
   },
   bottomNav: {
     width: '100%',
-    maxWidth: 520,
+    maxWidth: 560,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingTop: 10,
-    paddingBottom: Platform.OS === 'ios' ? 22 : 12,
-    paddingHorizontal: 10,
-    backgroundColor: '#fffdfb'
+    alignItems: 'center',
+    minHeight: 54,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: '#dedede',
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.96)'
   },
   navItem: {
     flex: 1,
     minWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
-    minHeight: 60
+    gap: 3,
+    minHeight: 40
   },
   navIconWrap: {
-    width: 44,
-    height: 30,
-    borderRadius: 18,
+    width: 24,
+    height: 22,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'transparent'
   },
   navIconWrapCenter: {
-    width: 44,
-    height: 30,
-    borderRadius: 0,
+    width: 24,
+    height: 22,
+    borderRadius: 11,
     borderWidth: 0,
-    backgroundColor: 'transparent'
+    backgroundColor: '#f2f2f2'
   },
   navText: {
     ...typography.nav,
-    fontSize: 11,
-    lineHeight: 14,
-    color: '#8d8682',
+    fontSize: 8,
+    lineHeight: 10,
+    color: '#6f6f6f',
     fontWeight: '600'
   },
   navTextActive: {
@@ -7776,26 +7962,483 @@ const styles = StyleSheet.create({
     fontWeight: '700'
   },
   navActiveUnderline: {
-    width: 42,
-    height: 3,
-    borderRadius: 2,
-    marginTop: 5,
+    width: 0,
+    height: 0,
+    marginTop: 0,
     backgroundColor: 'transparent'
   },
   navActiveUnderlineVisible: {
-    backgroundColor: '#111111'
+    backgroundColor: 'transparent'
   },
   homeScreen: {
     flex: 1,
-    backgroundColor: '#fbf7f6'
+    backgroundColor: '#ffffff'
   },
   homeScroll: {
     flex: 1,
-    backgroundColor: '#fbf7f6'
+    backgroundColor: '#ffffff'
   },
   homeContent: {
-    paddingBottom: screenBottomInset,
-    backgroundColor: '#fbf7f6'
+    paddingTop: Platform.OS === 'ios' ? 10 : appTopInset + 10,
+    paddingBottom: bottomNavigationHeight + screenBottomInset + 56,
+    backgroundColor: '#ffffff'
+  },
+  homeEditorialHeader: {
+    paddingHorizontal: 24,
+    paddingTop: 4,
+    paddingBottom: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  homeEditorialBrand: {
+    fontFamily: fontFamilies.logo,
+    color: '#050505',
+    fontSize: 31,
+    lineHeight: 36,
+    fontWeight: '400',
+    letterSpacing: 0
+  },
+  homeEditorialTagline: {
+    ...typography.label,
+    marginTop: 3,
+    color: '#7d8189',
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: '600',
+    letterSpacing: 4
+  },
+  homeBellButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff'
+  },
+  homeTryOnHero: {
+    height: 258,
+    marginHorizontal: 15,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: '#f3f0ec',
+    borderWidth: 1,
+    borderColor: '#eee9e4',
+    position: 'relative'
+  },
+  homeHeroLeftPane: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: '47%',
+    paddingTop: 16,
+    paddingLeft: 13,
+    paddingRight: 9,
+    paddingBottom: 12,
+    zIndex: 6
+  },
+  homeHeroKicker: {
+    ...typography.label,
+    color: '#6f737c',
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: '500',
+    letterSpacing: 5
+  },
+  homeHeroEditorialTitle: {
+    fontFamily: fontFamilies.logo,
+    marginTop: 11,
+    color: '#050505',
+    fontSize: 26,
+    lineHeight: 29,
+    fontWeight: '400',
+    letterSpacing: 0
+  },
+  homeHeroEditorialText: {
+    ...typography.body,
+    marginTop: 8,
+    maxWidth: 162,
+    color: '#707782',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '500'
+  },
+  homePrimaryTryOnButton: {
+    marginTop: 12,
+    height: 36,
+    width: 146,
+    borderRadius: 7,
+    backgroundColor: '#161719',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 8,
+    shadowColor: '#000000',
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4
+  },
+  homePrimaryTryOnText: {
+    ...typography.button,
+    color: '#ffffff',
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: '700'
+  },
+  homeSecondaryWardrobeButton: {
+    marginTop: 8,
+    height: 36,
+    width: 146,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: '#2b2b2b',
+    backgroundColor: 'rgba(255, 255, 255, 0.86)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 10
+  },
+  homeSecondaryWardrobeText: {
+    ...typography.button,
+    color: '#111111',
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '700'
+  },
+  homeHeroRightPane: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    width: '56%',
+    overflow: 'hidden',
+    backgroundColor: '#ddd8d2',
+    zIndex: 1
+  },
+  homeHeroVisualLayer: {
+    ...StyleSheet.absoluteFillObject
+  },
+  homeHeroLeftBase: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: '49%',
+    backgroundColor: '#f3f0ec',
+    zIndex: 4
+  },
+  homeHeroLeftSlantFill: {
+    position: 'absolute',
+    top: -34,
+    bottom: -34,
+    left: '42.5%',
+    width: 44,
+    backgroundColor: '#f3f0ec',
+    transform: [{ rotate: '8deg' }],
+    zIndex: 5
+  },
+  homeHeroDivider: {
+    position: 'absolute',
+    top: -16,
+    bottom: -16,
+    left: '49.8%',
+    width: 4,
+    borderRadius: 2,
+    backgroundColor: '#ffffff',
+    transform: [{ rotate: '8deg' }],
+    zIndex: 5
+  },
+  homeHeroGarmentPanel: {
+    position: 'absolute',
+    left: 50,
+    top: 162,
+    width: 74,
+    height: 80,
+    borderRadius: 7,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.82)',
+    backgroundColor: 'rgba(255, 255, 255, 0.88)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 3
+  },
+  homeHeroGarment: {
+    position: 'absolute',
+    width: '88%',
+    height: '88%'
+  },
+  homeHeroModel: {
+    width: '150%',
+    height: '100%',
+    marginLeft: -70,
+    backgroundColor: '#ddd8d2'
+  },
+  homeHeroRoundAction: {
+    position: 'absolute',
+    left: '50.5%',
+    top: 108,
+    width: 46,
+    height: 46,
+    marginLeft: -23,
+    borderRadius: 23,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 7,
+    shadowColor: '#1e1a18',
+    shadowOpacity: 0.14,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4
+  },
+  homeHeroHandwriting: {
+    position: 'absolute',
+    right: 12,
+    top: 64,
+    alignItems: 'center',
+    gap: 7,
+    zIndex: 6
+  },
+  homeHeroHandwritingText: {
+    fontFamily: fontFamilies.logo,
+    color: '#3f3b38',
+    fontSize: 14,
+    lineHeight: 17,
+    textAlign: 'center',
+    transform: [{ rotate: '-9deg' }]
+  },
+  homeSectionBlock: {
+    marginTop: 26,
+    paddingHorizontal: 17
+  },
+  homeEditorialSectionHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12
+  },
+  homeEditorialSectionTitle: {
+    fontFamily: fontFamilies.logo,
+    color: '#0b0b0b',
+    fontSize: 23,
+    lineHeight: 29,
+    fontWeight: '400',
+    letterSpacing: 0
+  },
+  homeEditorialSeeAll: {
+    minHeight: 34,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
+  },
+  homeEditorialSeeAllText: {
+    ...typography.body,
+    color: '#5f5c58',
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: '500'
+  },
+  homeLookGrid: {
+    marginTop: 15,
+    flexDirection: 'row',
+    gap: 11
+  },
+  homeLookCard: {
+    flex: 1,
+    minWidth: 0,
+    borderRadius: 8,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#e5e5e5',
+    backgroundColor: '#ffffff'
+  },
+  homeLookImageWrap: {
+    width: '100%',
+    height: 86,
+    overflow: 'hidden',
+    backgroundColor: '#eeeae5'
+  },
+  homeLookImage: {
+    width: '100%',
+    height: '100%'
+  },
+  homeLookBody: {
+    minHeight: 74,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8
+  },
+  homeLookTextBlock: {
+    flex: 1,
+    minWidth: 0
+  },
+  homeLookTitle: {
+    ...typography.productTitle,
+    color: '#111111',
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '500'
+  },
+  homeLookMeta: {
+    ...typography.smallBody,
+    marginTop: 4,
+    color: '#7a7a7a',
+    fontSize: 13,
+    lineHeight: 17,
+    fontWeight: '400'
+  },
+  homeWardrobeTrack: {
+    paddingTop: 16,
+    paddingRight: 16,
+    gap: 12
+  },
+  homeWardrobeTile: {
+    width: 84,
+    borderRadius: 8,
+    backgroundColor: '#f6f6f6',
+    overflow: 'hidden'
+  },
+  homeWardrobeImageWrap: {
+    height: 82,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 8
+  },
+  homeWardrobeImage: {
+    width: '100%',
+    height: '100%'
+  },
+  homeWardrobeLabel: {
+    ...typography.caption,
+    paddingHorizontal: 6,
+    paddingBottom: 10,
+    color: '#111111',
+    fontSize: 12,
+    lineHeight: 15,
+    textAlign: 'center',
+    fontWeight: '500'
+  },
+  homeWardrobeAddTile: {
+    width: 84,
+    minHeight: 116,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#c7c7c7',
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 9
+  },
+  homeWardrobeAddText: {
+    ...typography.body,
+    color: '#111111',
+    fontSize: 15,
+    lineHeight: 19,
+    fontWeight: '500',
+    textAlign: 'center'
+  },
+  homeTryOnTrack: {
+    paddingTop: 14,
+    paddingRight: 18,
+    gap: 10
+  },
+  homeTryOnGrid: {
+    marginTop: 14,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 14
+  },
+  homeTryOnCard: {
+    width: 126,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e9e4df',
+    backgroundColor: '#ffffff',
+    padding: 7,
+    shadowColor: '#1f1a17',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 1
+  },
+  homeTryOnGridCard: {
+    width: '48%',
+    padding: 8
+  },
+  homeTryOnImageWrap: {
+    height: 98,
+    borderRadius: 8,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff'
+  },
+  homeTryOnGridImageWrap: {
+    height: 132
+  },
+  homeTryOnImage: {
+    width: '100%',
+    height: '100%'
+  },
+  homeTryOnTitle: {
+    ...typography.productTitle,
+    marginTop: 8,
+    color: '#111111',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '500',
+    minHeight: 32
+  },
+  homeTryOnPrice: {
+    ...typography.price,
+    marginTop: 2,
+    color: '#111111',
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '700'
+  },
+  homeTryOnActions: {
+    marginTop: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7
+  },
+  homeTryOnButton: {
+    flex: 1,
+    height: 34,
+    borderRadius: 8,
+    backgroundColor: '#111214',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5
+  },
+  homeTryOnButtonText: {
+    ...typography.button,
+    color: '#ffffff',
+    fontSize: 12,
+    lineHeight: 15,
+    fontWeight: '600'
+  },
+  homeTryOnHeart: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e2e2',
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   homeTopBar: {
     height: 52,
