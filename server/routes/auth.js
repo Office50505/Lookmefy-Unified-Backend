@@ -698,6 +698,16 @@ async function localTestLoginUser(phone, password) {
   const now = new Date();
   const email = `test_${testPhone}@fitlook.local`;
   const username = `test_${testPhone}`;
+  const testProfilePhotoUrl = String(process.env.LOCAL_TEST_PROFILE_PHOTO_URL || 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=900&q=80').trim();
+  const testPhoto = testProfilePhotoUrl ? {
+    url: testProfilePhotoUrl,
+    storage: 'remote',
+    mimetype: 'image/jpeg',
+    source: 'local-test',
+    status: 'ready',
+    uploadedAt: now,
+    generatedAt: now
+  } : undefined;
   let user = await User.findOne({ $or: [{ phone: testPhone }, { email }] }).select('+passwordHash');
   const passwordHash = await hashPassword(testPassword);
 
@@ -712,7 +722,11 @@ async function localTestLoginUser(phone, password) {
       passwordHash,
       passwordSetAt: now,
       accountStatus: 'active',
-      onboardingSeenAt: now
+      onboardingSeenAt: now,
+      tokens: 50,
+      devMode: true,
+      avatarPhoto: testPhoto,
+      bodyPhoto: testPhoto
     });
     return user;
   }
@@ -727,6 +741,10 @@ async function localTestLoginUser(phone, password) {
   user.passwordSetAt = now;
   user.accountStatus = 'active';
   user.onboardingSeenAt = user.onboardingSeenAt || now;
+  user.tokens = Math.max(Number(user.tokens) || 0, 50);
+  user.devMode = true;
+  if (testPhoto && !user.bodyPhoto?.path && !user.bodyPhoto?.url) user.bodyPhoto = testPhoto;
+  if (testPhoto && !user.avatarPhoto?.path && !user.avatarPhoto?.url) user.avatarPhoto = testPhoto;
   await user.save();
   return user;
 }

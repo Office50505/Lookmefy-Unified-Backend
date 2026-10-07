@@ -478,7 +478,7 @@ function aiFeatureErrorMessage(error, fallback = 'AI request could not be comple
 }
 
 function userAvatarUrl(user) {
-  const avatarUrl = user?.avatarPhotoUrl || '';
+  const avatarUrl = user?.avatarPhotoUrl || user?.profilePhotoUrl || user?.photoUrl || user?.imageUrl || '';
   const bodyUrl = user?.bodyPhotoUrl || '';
   if (user?.bodyPhotoSource === 'fal-full-body' && bodyUrl) return bodyUrl;
   return avatarUrl || bodyUrl || '';
@@ -1340,6 +1340,25 @@ function Header({ user, canGoBack, onBack, onNavigate, onLogout }) {
   );
 }
 
+function userCreditBalance(user) {
+  if (!user) return 0;
+  const rawCredits = Number(
+    user?.credits?.remaining ??
+    user?.tokens ??
+    user?.remainingCredits ??
+    user?.creditBalance ??
+    0
+  );
+  if (!Number.isFinite(rawCredits) || rawCredits < 0) return 0;
+  return Math.floor(rawCredits);
+}
+
+function headerCreditLabel(user) {
+  const rawCredits = userCreditBalance(user);
+  if (rawCredits > 999) return '999+';
+  return String(rawCredits);
+}
+
 function AppHeader({ onNavigate, title = 'Lookmefy', leftIcon = 'menu-outline', leftRoute = 'profile', rightIcon = 'receipt-outline', rightRoute = 'orders', user, showAvatar = false, hideLeft = true, brandAlign = 'left', compact = false, showWishlist = true, showSearch = true, registerTourTarget, tourTargetKeys = {} }) {
   const openLeft = () => leftRoute && onNavigate(leftRoute);
   const openRight = () => rightRoute && onNavigate(rightRoute);
@@ -1353,6 +1372,8 @@ function AppHeader({ onNavigate, title = 'Lookmefy', leftIcon = 'menu-outline', 
   const avatarResizeMode = userAvatarResizeMode(user);
   const avatarImageStyle = avatarImageStyleForUser(user, 32);
   const avatarImageBaseStyle = avatarImageBaseStyleForUser(user);
+  const creditLabel = headerCreditLabel(user);
+  const creditAccessibilityLabel = `Open credits, ${creditLabel} credits available`;
   return (
     <View style={[styles.appHeader, compact && styles.appHeaderCompact]}>
       {!brandLeft ? (
@@ -1376,6 +1397,12 @@ function AppHeader({ onNavigate, title = 'Lookmefy', leftIcon = 'menu-outline', 
         {showWishlistAction ? (
           <TouchableOpacity accessibilityRole="button" accessibilityLabel="Open wishlist" style={styles.appHeaderAction} onPress={() => onNavigate('wishlist')}>
             <Ionicons name="heart-outline" size={21} color="#171412" />
+          </TouchableOpacity>
+        ) : null}
+        {!showAvatar ? (
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel={creditAccessibilityLabel} style={[styles.appHeaderAction, styles.appHeaderCreditAction]} onPress={() => onNavigate('tokens')}>
+            <Ionicons name="sparkles-outline" size={15} color="#171412" />
+            <Text style={styles.appHeaderCreditText} numberOfLines={1}>{creditLabel}</Text>
           </TouchableOpacity>
         ) : null}
         <TouchableOpacity ref={avatarTourTarget.ref} onLayout={avatarTourTarget.onLayout} accessibilityRole="button" accessibilityLabel={rightRoute === 'orders' ? 'Open orders' : 'Open bag'} style={styles.appHeaderAction} onPress={openRight}>
@@ -1420,7 +1447,7 @@ function BottomNav({ route = { name: 'home' }, onNavigate = () => {} }) {
             onPress={() => onNavigate(name)}
           >
             <View style={[styles.navIconWrap, active && styles.navIconWrapCenter]}>
-              <Ionicons name={icon} size={active ? 13 : 12} color={active ? '#111111' : '#6f6f6f'} />
+              <Ionicons name={icon} size={active ? 22 : 20} color={active ? '#050505' : '#4d4a48'} />
             </View>
             <Text style={[styles.navText, active && styles.navTextActive]}>{label}</Text>
             <View style={[styles.navActiveUnderline, active && styles.navActiveUnderlineVisible]} />
@@ -2192,6 +2219,7 @@ function HomeWardrobeTile({ item, onPress }) {
         <Image source={images[item.image]} style={styles.homeWardrobeImage} resizeMode="contain" />
       </View>
       <Text style={styles.homeWardrobeLabel} numberOfLines={1}>{item.label}</Text>
+      {Number.isFinite(Number(item.count)) ? <Text style={styles.homeWardrobeCount} numberOfLines={1}>{Number(item.count)} ITEMS</Text> : null}
     </TouchableOpacity>
   );
 }
@@ -2497,12 +2525,7 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
       fallbackImage: images.homeSliderArchway
     }
   ];
-  const wardrobeItems = [
-    { label: 'Black Shirt', image: 'category-generated/men-shirts.png', params: { category: 'shirts', gender: preferredGender } },
-    { label: 'Denim Jacket', image: 'category-generated/jackets.png', params: { category: 'jackets', gender: preferredGender } },
-    { label: 'White Tee', image: 'category-generated/tshirts.png', params: { category: 't-shirts', gender: preferredGender } },
-    { label: 'Black Trousers', image: 'category-generated/bottomwear.png', params: { category: 'bottoms', gender: preferredGender } }
-  ];
+  const wardrobeItems = homeCategoryItemsByGender[preferredGender] || homeCategoryItems;
   const catalogTourTarget = useTourTarget('home-catalog', registerTourTarget, { request: tourFocusRequest, scrollRef: homeScrollRef, scrollOffset: 92 });
 
   return (
@@ -2565,8 +2588,8 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
 
         <View ref={catalogTourTarget.ref} onLayout={catalogTourTarget.onLayout} style={styles.homeSectionBlock}>
           <View style={styles.homeEditorialSectionHead}>
-            <Text style={styles.homeEditorialSectionTitle}>My Wardrobe</Text>
-            <TouchableOpacity style={styles.homeEditorialSeeAll} onPress={() => onNavigate('closet')}>
+            <Text style={styles.homeEditorialSectionTitle}>Find Your Style</Text>
+            <TouchableOpacity style={styles.homeEditorialSeeAll} onPress={() => onNavigate('shop')}>
               <Text style={styles.homeEditorialSeeAllText}>See All</Text>
               <Ionicons name="arrow-forward" size={19} color="#5f5c58" />
             </TouchableOpacity>
@@ -2575,10 +2598,6 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
             {wardrobeItems.map((item) => (
               <HomeWardrobeTile key={item.label} item={item} onPress={() => onNavigate('shop', item.params || {})} />
             ))}
-            <TouchableOpacity style={styles.homeWardrobeAddTile} activeOpacity={0.86} onPress={() => onNavigate('closet', { add: true })}>
-              <Ionicons name="add-outline" size={38} color="#111111" />
-              <Text style={styles.homeWardrobeAddText}>Add Item</Text>
-            </TouchableOpacity>
           </ScrollView>
         </View>
 
@@ -5415,6 +5434,9 @@ function CustomTryOnScreen({ user, setUser, setToken, token, onNavigate, onBack,
   const avatarProfileUri = avatarUri ? imageUrl(avatarUri) : '';
   const profilePreviewUri = bodyProfileUri || avatarProfileUri;
   const profilePreviewIsFullBody = Boolean(bodyProfileUri && user.bodyPhotoSource === 'fal-full-body');
+  const profilePreviewResizeMode = profilePreviewIsFullBody ? 'contain' : userAvatarResizeMode(user);
+  const profilePreviewImageStyle = profilePreviewIsFullBody ? null : avatarImageStyleForUser(user, 116);
+  const profilePreviewBaseStyle = profilePreviewIsFullBody ? null : avatarImageBaseStyleForUser(user);
   const generatedUri = result?.imageUrl ? imageUrl(result.imageUrl) : '';
   const hasGenerated = Boolean(generatedUri);
   const latestCustomTryOn = latestCustom.data?.tryOn;
@@ -5481,7 +5503,7 @@ function CustomTryOnScreen({ user, setUser, setToken, token, onNavigate, onBack,
       <View style={[styles.customUploadRow, layout.isTablet && styles.customUploadRowTablet]}>
         <Pressable style={[styles.customProfileCard, layout.isTablet && styles.customProfileCardTablet]} onPress={() => profilePreviewUri && setLightbox(profilePreviewUri)}>
           {profilePreviewUri ? (
-            <ResilientImage source={{ uri: profilePreviewUri }} style={styles.customProfileImage} resizeMode={profilePreviewIsFullBody ? 'contain' : 'cover'} fallbackIcon="person-outline" />
+            <ResilientImage source={{ uri: profilePreviewUri }} style={styles.customProfileImage} imageStyle={profilePreviewImageStyle} imageBaseStyle={profilePreviewBaseStyle} resizeMode={profilePreviewResizeMode} fallbackIcon="person-outline" />
           ) : (
             <View style={styles.customProfileEmpty}>
               <Ionicons name="person-outline" size={24} color="#8d8682" />
@@ -7156,7 +7178,7 @@ function ProfileScreen({ user, setUser, setToken, token, onNavigate, onBack, onL
   const displayEmail = /@phone\.(?:fitlook|lookmefy)\.local$/i.test(user.email || '') ? '' : user.email;
   const accountPhone = normalizePhoneInput(user.phone || '');
   const accountPhoneLabel = accountPhone.length === 10 ? `mobile ending ${accountPhone.slice(-4)}` : 'your saved mobile number';
-  const remainingCredits = Math.max(0, Number(user.tokens) || 0);
+  const remainingCredits = userCreditBalance(user);
   const monthlyAllowance = Number(user.subscription?.tokensPerMonth) || 0;
   const creditTotal = monthlyAllowance > 0 ? Math.max(monthlyAllowance, remainingCredits) : null;
   const creditProgress = `${creditTotal ? calculateCreditPercentage(remainingCredits, creditTotal) : 100}%`;
@@ -8423,7 +8445,7 @@ export default function App() {
   const guardedNavigate = useCallback((name, params = {}) => {
     const protectedMessages = {
       closet: 'Log in with your mobile number to use your wardrobe.',
-      tryon: 'Log in with your mobile number to use AI Studio.',
+      tryon: 'Log in with your mobile number to use Try-On.',
       stylebot: 'Log in with your mobile number to use AI Studio.',
       profile: 'Log in with your mobile number to open your profile.',
       wishlist: 'Log in with your mobile number to view your wishlist.',
@@ -8639,7 +8661,7 @@ export default function App() {
       case 'search':
         return <SearchScreen initial={routeParams} user={user} token={token} onNavigate={guardedNavigate} onBack={goBack} onAddToWishlist={addToWishlist} wishlistIds={wishlistIds} />;
       case 'tryon':
-        return user ? <StyleBotScreen user={user} setUser={setUser} setToken={setToken} token={token} onNavigate={guardedNavigate} onBack={routeStack.length > 1 ? goBack : null} onRequireAuth={requestAuth} registerTourTarget={registerTourTarget} tourFocusRequest={tourFocusRequest} aiStudioConversationId={aiStudioConversationId} setAiStudioConversationId={setAiStudioConversationId} aiStudioMessages={aiStudioMessages} setAiStudioMessages={setAiStudioMessages} aiStudioTryOns={aiStudioTryOns} setAiStudioTryOns={setAiStudioTryOns} aiStudioTryOnErrors={aiStudioTryOnErrors} setAiStudioTryOnErrors={setAiStudioTryOnErrors} /> : <AuthScreen mode="signup" setUser={setUser} setToken={setToken} onNavigate={navigate} />;
+        return <CustomTryOnScreen user={user} setUser={setUser} setToken={setToken} token={token} onNavigate={guardedNavigate} onBack={routeStack.length > 1 ? goBack : null} refreshUser={refreshUser} />;
       case 'closet':
         return <ClosetScreen initial={routeParams} user={user} setUser={setUser} setToken={setToken} token={token} onNavigate={guardedNavigate} onBack={routeStack.length > 1 ? goBack : null} registerTourTarget={registerTourTarget} tourFocusRequest={tourFocusRequest} />;
       case 'custom':
@@ -8692,7 +8714,7 @@ export default function App() {
   const closetRoute = currentRoute.name === 'closet';
   const closetAddRoute = closetRoute && currentRoute.params?.view === 'add';
   const productRoute = currentRoute.name === 'product';
-  const aiStudioRoute = currentRoute.name === 'tryon';
+  const aiStudioRoute = currentRoute.name === 'stylebot';
   const tokensRoute = currentRoute.name === 'tokens';
   const profileRoute = currentRoute.name === 'profile';
   const generationHistoryRoute = currentRoute.name === 'generation-history';
@@ -8866,8 +8888,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center'
   },
+  appHeaderCreditAction: {
+    width: 54,
+    paddingHorizontal: 8,
+    flexDirection: 'row',
+    backgroundColor: '#fff3df',
+    borderWidth: 1,
+    borderColor: '#ead8bf'
+  },
+  appHeaderCreditText: {
+    marginLeft: 4,
+    color: '#171412',
+    fontSize: 12,
+    lineHeight: 14,
+    fontWeight: '800',
+    letterSpacing: 0,
+    maxWidth: 30
+  },
   appHeaderSide: {
-    width: 168,
+    width: 190,
     minHeight: 42,
     flexDirection: 'row',
     alignItems: 'center'
@@ -9028,12 +9067,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    minHeight: 54,
-    borderRadius: 28,
+    minHeight: 68,
+    borderRadius: 34,
     borderWidth: 1,
     borderColor: '#dedede',
-    paddingVertical: 7,
-    paddingHorizontal: 14,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
     backgroundColor: 'rgba(255, 255, 255, 0.96)'
   },
   bottomNavTablet: {
@@ -9044,44 +9083,45 @@ const styles = StyleSheet.create({
     minWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 3,
-    minHeight: 40
+    gap: 4,
+    minHeight: 52
   },
   navIconWrap: {
-    width: 24,
-    height: 22,
-    borderRadius: 11,
+    width: 34,
+    height: 30,
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'transparent'
   },
   navIconWrapCenter: {
-    width: 24,
-    height: 22,
-    borderRadius: 11,
+    width: 34,
+    height: 30,
+    borderRadius: 15,
     borderWidth: 0,
     backgroundColor: '#f2f2f2'
   },
   navText: {
     ...typography.nav,
-    fontSize: 8,
-    lineHeight: 10,
-    color: '#6f6f6f',
-    fontWeight: '600'
-  },
-  navTextActive: {
-    color: '#111111',
-    fontFamily: fontFamilies.bodyBold,
+    fontSize: 10,
+    lineHeight: 12,
+    color: '#4d4a48',
     fontWeight: '700'
   },
+  navTextActive: {
+    color: '#050505',
+    fontFamily: fontFamilies.bodyBold,
+    fontWeight: '800'
+  },
   navActiveUnderline: {
-    width: 0,
-    height: 0,
-    marginTop: 0,
+    width: 18,
+    height: 2,
+    borderRadius: 1,
+    marginTop: 1,
     backgroundColor: 'transparent'
   },
   navActiveUnderlineVisible: {
-    backgroundColor: 'transparent'
+    backgroundColor: '#050505'
   },
   homeScreen: {
     flex: 1,
@@ -9396,55 +9436,57 @@ const styles = StyleSheet.create({
     fontWeight: '400'
   },
   homeWardrobeTrack: {
-    paddingTop: 16,
-    paddingRight: 16,
-    gap: 12
+    paddingTop: 12,
+    paddingBottom: 8,
+    paddingRight: 18,
+    gap: 13
   },
   homeWardrobeTile: {
-    width: 84,
-    borderRadius: 8,
-    backgroundColor: '#f6f6f6',
-    overflow: 'hidden'
+    width: 76,
+    alignItems: 'center'
   },
   homeWardrobeImageWrap: {
-    height: 82,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 8
+    padding: 3,
+    borderWidth: 1,
+    borderColor: '#e7ddd8',
+    backgroundColor: '#fffdfb',
+    shadowColor: '#2a211d',
+    shadowOpacity: 0.11,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 3
   },
   homeWardrobeImage: {
     width: '100%',
-    height: '100%'
+    height: '100%',
+    borderRadius: 34,
+    backgroundColor: '#f4eee9'
   },
   homeWardrobeLabel: {
     ...typography.caption,
-    paddingHorizontal: 6,
-    paddingBottom: 10,
+    width: '100%',
+    marginTop: 7,
     color: '#111111',
-    fontSize: 12,
-    lineHeight: 15,
+    fontSize: 10,
+    lineHeight: 12,
     textAlign: 'center',
-    fontWeight: '500'
+    fontWeight: '800'
   },
-  homeWardrobeAddTile: {
-    width: 84,
-    minHeight: 116,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: '#c7c7c7',
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 9
-  },
-  homeWardrobeAddText: {
-    ...typography.body,
-    color: '#111111',
-    fontSize: 15,
-    lineHeight: 19,
-    fontWeight: '500',
-    textAlign: 'center'
+  homeWardrobeCount: {
+    ...typography.caption,
+    width: '100%',
+    marginTop: 3,
+    color: '#4a4542',
+    fontSize: 9,
+    lineHeight: 11,
+    fontWeight: '800',
+    textAlign: 'center',
+    letterSpacing: 0.3
   },
   homeTopBar: {
     height: 52,
