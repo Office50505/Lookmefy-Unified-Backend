@@ -2102,16 +2102,24 @@ function CategoryLandingScreen({ selectedCategory, onSelectCategory, onNavigate,
   );
 }
 
-function CurationProductCard({ product, onPress, onAddToWishlist, isWishlisted, rail = false }) {
+function CurationProductCard({ product, onPress, onTryOn, onAddToWishlist, isWishlisted, rail = false }) {
   const layout = useResponsiveLayout();
   const price = Number(product.price);
   const discount = productDiscountPercent(product);
+  const handleTryOnPress = (event) => {
+    event?.stopPropagation?.();
+    onTryOn?.();
+  };
+  const handleWishlistPress = (event) => {
+    event?.stopPropagation?.();
+    onAddToWishlist?.(product);
+  };
   return (
     <TouchableOpacity style={[styles.homeProductCard, rail && styles.homeProductCardRail, !rail && layout.productGridWidthStyle]} onPress={onPress}>
       <View style={styles.homeProductImageWrap}>
         <ProductImage product={product} style={styles.homeProductImage} alt={product.title || product.name} />
         {discount ? <Text style={styles.homeDealBadge}>{discount}% OFF</Text> : product.isNew ? <Text style={styles.homeNewBadge}>NEW</Text> : null}
-        {onAddToWishlist ? <WishlistDoneButton saved={isWishlisted} compact onPress={() => onAddToWishlist(product)} /> : null}
+        {onAddToWishlist && !rail ? <WishlistDoneButton saved={isWishlisted} compact onPress={() => onAddToWishlist(product)} /> : null}
       </View>
       <Text style={styles.homeProductEyebrow} numberOfLines={1}>{product.displayLabel || titleCase(product.category || 'Catalog')}</Text>
       <Text style={styles.homeProductTitle} numberOfLines={2}>{product.title || product.name}</Text>
@@ -2119,6 +2127,21 @@ function CurationProductCard({ product, onPress, onAddToWishlist, isWishlisted, 
         <Text style={styles.homeProductPrice}>{Number.isFinite(price) ? formatMoney(price, product.currency) : 'Price unavailable'}</Text>
         {discount && Number.isFinite(Number(product.compareAtPrice)) ? <Text style={styles.homeProductComparePrice}>{formatMoney(product.compareAtPrice, product.currency)}</Text> : null}
       </View>
+      {onTryOn || (onAddToWishlist && rail) ? (
+        <View style={styles.homeProductActionRow}>
+          {onTryOn ? (
+            <TouchableOpacity style={styles.homeProductTryOnButton} activeOpacity={0.86} onPress={handleTryOnPress}>
+              <Ionicons name="shirt-outline" size={15} color="#ffffff" />
+              <Text style={styles.homeProductTryOnText}>Try On</Text>
+            </TouchableOpacity>
+          ) : null}
+          {onAddToWishlist && rail ? (
+            <TouchableOpacity style={[styles.homeProductHeartButton, isWishlisted && styles.homeProductHeartButtonSaved]} activeOpacity={0.86} onPress={handleWishlistPress}>
+              <Ionicons name={isWishlisted ? 'heart' : 'heart-outline'} size={18} color={isWishlisted ? '#ffffff' : '#171412'} />
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      ) : null}
     </TouchableOpacity>
   );
 }
@@ -2154,8 +2177,8 @@ function HomeOfferCards({ offers = [], onNavigate }) {
   );
 }
 
-function HomeProductRail({ title, subtitle, products = [], loading, error, viewParams = {}, onNavigate, onAddToWishlist, wishlistIds }) {
-  const visibleProducts = uniqueProductsWithImages(products).slice(0, 8);
+function HomeProductRail({ title, subtitle, products = [], loading, error, onNavigate, onAddToWishlist, wishlistIds }) {
+  const visibleProducts = uniqueProductsWithImages(products).slice(0, 4);
   if (!loading && (error || !visibleProducts.length)) return null;
   return (
     <View style={styles.homeCommerceSection}>
@@ -2164,28 +2187,24 @@ function HomeProductRail({ title, subtitle, products = [], loading, error, viewP
           <Text style={styles.homeCommerceTitle}>{title}</Text>
           {subtitle ? <Text style={styles.homeCommerceSubtitle}>{subtitle}</Text> : null}
         </View>
-        <TouchableOpacity style={styles.homeCommerceViewAll} activeOpacity={0.78} onPress={() => onNavigate('shop', viewParams)}>
-          <Text style={styles.homeCommerceViewAllText}>VIEW ALL</Text>
-          <Ionicons name="arrow-forward" size={13} color="#1f1b19" />
-        </TouchableOpacity>
       </View>
       {loading ? (
         <HorizontalProductSkeleton count={4} />
       ) : error || !visibleProducts.length ? (
         <StatusPanel error={error} empty={!visibleProducts.length} text="No products found yet." />
       ) : (
-        <ScrollView {...horizontalScrollProps} contentContainerStyle={styles.homeCommerceTrack}>
+        <View style={styles.homeCommerceTrack}>
           {visibleProducts.map((product) => (
             <CurationProductCard
-              rail
               key={`${title}-${product.id}`}
               product={product}
               onPress={() => onNavigate('product', { id: product.id })}
+              onTryOn={() => onNavigate('product', { id: product.id })}
               onAddToWishlist={onAddToWishlist}
               isWishlisted={wishlistIds?.has(product.id)}
             />
           ))}
-        </ScrollView>
+        </View>
       )}
     </View>
   );
@@ -2525,21 +2544,12 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
       fallbackImage: images.homeSliderArchway
     }
   ];
-  const wardrobeItems = homeCategoryItemsByGender[preferredGender] || homeCategoryItems;
   const catalogTourTarget = useTourTarget('home-catalog', registerTourTarget, { request: tourFocusRequest, scrollRef: homeScrollRef, scrollOffset: 92 });
 
   return (
     <View style={styles.homeScreen}>
       <ScrollView ref={homeScrollRef} style={styles.homeScroll} contentContainerStyle={[styles.homeContent, layout.isTablet && styles.homeContentTablet]} {...screenScrollProps}>
-        <View style={styles.homeEditorialHeader}>
-          <View>
-            <Text style={styles.homeEditorialBrand}>Lookmefy</Text>
-            <Text style={styles.homeEditorialTagline}>AI STYLES A BRIGHTER YOU</Text>
-          </View>
-          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Open notifications" style={styles.homeBellButton} onPress={() => onNavigate('orders')}>
-            <Ionicons name="notifications-outline" size={26} color="#0f0f0f" />
-          </TouchableOpacity>
-        </View>
+        <AppHeader onNavigate={onNavigate} user={user} compact />
 
         <View style={styles.homeTryOnHero}>
           <HomeHeroShowcase />
@@ -2567,10 +2577,6 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
         <View style={styles.homeSectionBlock}>
           <View style={styles.homeEditorialSectionHead}>
             <Text style={styles.homeEditorialSectionTitle}>Continue Your Looks</Text>
-            <TouchableOpacity style={styles.homeEditorialSeeAll} onPress={() => onNavigate('generation-history')}>
-              <Text style={styles.homeEditorialSeeAllText}>See All</Text>
-              <Ionicons name="arrow-forward" size={19} color="#5f5c58" />
-            </TouchableOpacity>
           </View>
           <View style={styles.homeLookGrid}>
             {continueLooks.map((look) => (
@@ -2586,20 +2592,7 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
           </View>
         </View>
 
-        <View ref={catalogTourTarget.ref} onLayout={catalogTourTarget.onLayout} style={styles.homeSectionBlock}>
-          <View style={styles.homeEditorialSectionHead}>
-            <Text style={styles.homeEditorialSectionTitle}>Find Your Style</Text>
-            <TouchableOpacity style={styles.homeEditorialSeeAll} onPress={() => onNavigate('shop')}>
-              <Text style={styles.homeEditorialSeeAllText}>See All</Text>
-              <Ionicons name="arrow-forward" size={19} color="#5f5c58" />
-            </TouchableOpacity>
-          </View>
-          <ScrollView {...horizontalScrollProps} contentContainerStyle={styles.homeWardrobeTrack}>
-            {wardrobeItems.map((item) => (
-              <HomeWardrobeTile key={item.label} item={item} onPress={() => onNavigate('shop', item.params || {})} />
-            ))}
-          </ScrollView>
-        </View>
+        <View ref={catalogTourTarget.ref} onLayout={catalogTourTarget.onLayout} />
 
       <HomeProductRail
         title="Recommended for You"
@@ -9132,7 +9125,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff'
   },
   homeContent: {
-    paddingTop: Platform.OS === 'ios' ? 10 : appTopInset + 10,
+    paddingTop: 0,
     paddingBottom: bottomNavigationHeight + screenBottomInset + 56,
     backgroundColor: '#ffffff'
   },
@@ -9790,6 +9783,45 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0
   },
+  homeProductActionRow: {
+    marginTop: 8,
+    minHeight: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7
+  },
+  homeProductTryOnButton: {
+    flex: 1,
+    height: 32,
+    borderRadius: 7,
+    backgroundColor: '#050505',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6
+  },
+  homeProductTryOnText: {
+    ...typography.caption,
+    color: '#ffffff',
+    fontSize: 12,
+    lineHeight: 15,
+    fontWeight: '800',
+    letterSpacing: 0
+  },
+  homeProductHeartButton: {
+    width: 34,
+    height: 32,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: '#e4dbd5',
+    backgroundColor: '#fffdfb',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  homeProductHeartButtonSaved: {
+    borderColor: '#050505',
+    backgroundColor: '#050505'
+  },
   homeOfferSection: {
     marginTop: 26
   },
@@ -9881,8 +9913,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     flexDirection: 'row',
     alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    gap: 12
+    justifyContent: 'flex-start'
   },
   homeCommerceTitleWrap: {
     flex: 1,
@@ -9906,26 +9937,13 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0
   },
-  homeCommerceViewAll: {
-    minHeight: 32,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingLeft: 8
-  },
-  homeCommerceViewAllText: {
-    ...typography.caption,
-    color: '#1f1b19',
-    fontSize: 10,
-    lineHeight: 13,
-    fontWeight: '700',
-    textDecorationLine: 'underline',
-    letterSpacing: 0
-  },
   homeCommerceTrack: {
     paddingTop: 18,
     paddingHorizontal: 18,
-    paddingRight: 4
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 22
   },
   homeJournalBand: {
     marginTop: 34,
