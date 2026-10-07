@@ -4,8 +4,8 @@ import { imagePrunaCostUsd } from './prunaClient.js';
 export function prunaTryOnRequest({ product = {}, personUrl, garmentUrl, promptKey, turbo = true, outputFormat = 'jpg', outputQuality = 95, preserveInputSize = true, personWidth = 2, personHeight = 3 }) {
   const key = promptKey || promptKeyForProduct(product, 'upper');
   const title = String(product.name || '');
-  const ethnic = /\b(kurtas?|kurtis?|lehengas?|lehngas?|dupattas?)\b/i.test(title);
-  const edit = ethnic || ['glasses', 'accessory'].includes(key)
+  const ethnic = /\b(kurtas?|kurtis?|lehengas?|lehngas?|dupattas?|sarees?|saris?|kanjivarams?|kanchipurams?)\b/i.test(title);
+  const edit = key === 'saree' || ethnic || ['glasses', 'accessory'].includes(key)
     || (key === 'lower' && /\bjeans\b/i.test(title) && /\b(?:flared?|bootcut|bell[ -]?bottom)\b/i.test(title))
     || (key === 'lower' && /\b(?:wrap\s?skirts?|skirts?|bikini|panties|briefs?|thongs?|boxers?|underwear)\b/i.test(title))
     || (key === 'full_outfit' && !/\bt[\s\u2010-\u2015-]?shirts?\b/i.test(title));

@@ -1355,8 +1355,7 @@ function userCreditBalance(user) {
 
 function headerCreditLabel(user) {
   const rawCredits = userCreditBalance(user);
-  if (rawCredits > 999) return '999+';
-  return String(rawCredits);
+  return rawCredits.toLocaleString('en-IN');
 }
 
 function AppHeader({ onNavigate, title = 'Lookmefy', leftIcon = 'menu-outline', leftRoute = 'profile', rightIcon = 'receipt-outline', rightRoute = 'orders', user, showAvatar = false, hideLeft = true, brandAlign = 'left', compact = false, showWishlist = true, showSearch = true, registerTourTarget, tourTargetKeys = {} }) {
@@ -2998,7 +2997,6 @@ function ShopScreen({ initial = {}, tryOnMode, user, setUser, token, onNavigate,
   }, [JSON.stringify(initial || {}), preferredCategorySection]);
 
   const hasSearchIntent = Boolean(filters.q || filters.category || filters.brand || filters.gender || filters.newArrival || filters.maxPrice || filters.discounted || filters.sale);
-  const allowTryOnTrial = tryOnMode || hasSearchIntent;
   const visibleProducts = state.products;
 
   const runSearch = () => {
@@ -3125,7 +3123,7 @@ function ShopScreen({ initial = {}, tryOnMode, user, setUser, token, onNavigate,
         <>
           <StatusPanel error={state.error} empty={!state.products.length} text="Try a different search or browse another category." />
           <View style={styles.productGrid}>
-            {visibleProducts.map((product, index) => (
+            {visibleProducts.map((product) => (
               <ProductCard
                 key={product.id}
                 variant="homeFrame"
@@ -3138,8 +3136,8 @@ function ShopScreen({ initial = {}, tryOnMode, user, setUser, token, onNavigate,
                 onPress={() => onNavigate('product', { id: product.id })}
                 onAddToWishlist={onAddToWishlist}
                 isWishlisted={wishlistIds?.has(product.id)}
-                onTryOn={allowTryOnTrial && index < 4 ? () => generateTryOn(product) : undefined}
-                onTryOnVideo={allowTryOnTrial && tryOns[product.id]?.imageUrl ? () => generateTryOnVideo(product) : undefined}
+                onTryOn={() => generateTryOn(product)}
+                onTryOnVideo={tryOns[product.id]?.imageUrl ? () => generateTryOnVideo(product) : undefined}
               />
             ))}
           </View>
@@ -8882,8 +8880,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center'
   },
   appHeaderCreditAction: {
-    width: 54,
-    paddingHorizontal: 8,
+    width: 96,
+    paddingHorizontal: 9,
     flexDirection: 'row',
     backgroundColor: '#fff3df',
     borderWidth: 1,
@@ -8896,7 +8894,7 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     fontWeight: '800',
     letterSpacing: 0,
-    maxWidth: 30
+    maxWidth: 72
   },
   appHeaderSide: {
     width: 190,
@@ -12882,7 +12880,7 @@ const styles = StyleSheet.create({
   },
   aiStudioContent: {
     paddingTop: 18,
-    paddingBottom: screenBottomInset + 86,
+    paddingBottom: bottomNavigationHeight + screenBottomInset + 104,
     paddingHorizontal: 16,
     backgroundColor: '#fbf7f6'
   },
@@ -13364,7 +13362,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 14,
     right: 14,
-    bottom: Platform.OS === 'ios' ? 14 : 12,
+    bottom: Platform.OS === 'ios' ? bottomNavigationHeight + 34 : bottomNavigationHeight + 28,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
