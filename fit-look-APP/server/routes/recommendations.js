@@ -13,7 +13,7 @@ import { requireUser } from './auth.js';
 import { requireAdmin } from '../utils/adminAuth.js';
 import { createHybridCache } from '../utils/cache.js';
 import { inlineOrQueue, registerJobHandler } from '../utils/jobs.js';
-import { productGenderForPreference } from '../utils/genderPreference.js';
+import { genderCompatibility, productGenderForPreference } from '../utils/genderPreference.js';
 import { wearableCompatibility } from '../utils/wearable.js';
 
 const router = express.Router();
@@ -47,7 +47,19 @@ const EVENT_WEIGHTS = {
 };
 
 function catalogFilter(extra = {}) {
-  const botAmazonRecord = { badge: 'Amazon', $or: [{ sourceUrl: /amazon\.[a-z.]+\/dp\//i }, { affiliateLink: /amazon\.[a-z.]+\/dp\//i }] };
+  const amazonUrl = /(amazon\.[a-z.]+|amzn\.to|a\.co)\//i;
+  const botAmazonRecord = {
+    catalogApproved: { $ne: true },
+    availabilityStatus: { $ne: 'draft' },
+    $or: [
+      { badge: /amazon/i },
+      { source: /amazon/i },
+      { sourceLabel: /amazon/i },
+      { searchSource: /amazon/i },
+      { sourceUrl: amazonUrl },
+      { affiliateLink: amazonUrl }
+    ]
+  };
   return { isActive: true, $nor: [botAmazonRecord], ...extra };
 }
 
@@ -151,6 +163,95 @@ function textHasFashionTerm(text = '', term = '') {
   return new RegExp(`\\b${escaped}\\b`).test(normalizeChat(text));
 }
 
+function defaultAiStudioTimeZone() {
+  const configured = process.env.AI_STUDIO_DEFAULT_TIME_ZONE || process.env.TZ || 'Asia/Kolkata';
+  try {
+    new Intl.DateTimeFormat('en-IN', { timeZone: configured }).format(new Date());
+    return configured;
+  } catch {
+    return 'Asia/Kolkata';
+  }
+}
+
+function currentDateTimeReply(message = '') {
+  if (isWeatherQuestion(message)) return '';
+  const lower = normalizeChat(message);
+  const asksTime = /\b(time|clock)\b/.test(lower);
+  const asksDate = /\b(date|day|today)\b/.test(lower);
+  if (!asksTime && !asksDate) return '';
+  const timeZone = defaultAiStudioTimeZone();
+  const now = new Date();
+  const dateText = new Intl.DateTimeFormat('en-IN', {
+    timeZone,
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  }).format(now);
+  const timeText = new Intl.DateTimeFormat('en-IN', {
+    timeZone,
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  }).format(now);
+  if (asksTime && asksDate) return `Current server date and time is ${dateText}, ${timeText} (${timeZone}).`;
+  if (asksTime) return `Current server time is ${timeText} (${timeZone}).`;
+  return `Today is ${dateText} (${timeZone}).`;
+}
+
+function isWeatherQuestion(message = '') {
+  return /\b(weather|temperature|forecast|rain|raining|humidity)\b/i.test(String(message || ''));
+}
+
+function weatherLocationFromMessage(message = '') {
+  const text = String(message || '').replace(/\s+/g, ' ').trim().slice(0, 180);
+  const match = text.match(/\b(?:weather|temperature|forecast|rain|raining|humidity)\s+(?:in|for|at|near)?\s*([a-z][a-z\s,.'-]{1,80})/i)
+    || text.match(/\b(?:in|for|at|near)\s+([a-z][a-z\s,.'-]{1,80})\s+(?:weather|temperature|forecast|rain|raining|humidity)\b/i);
+  return match?.[1]
+    ?.replace(/\b(today|tomorrow|now|right now|please|pls|outside|there)\b/gi, '')
+    .replace(/[?.!,]+$/g, '')
+    .trim() || '';
+}
+
+function weatherCodeLabel(code) {
+  const value = Number(code);
+  if (value === 0) return 'clear';
+  if ([1, 2, 3].includes(value)) return 'partly cloudy';
+  if ([45, 48].includes(value)) return 'foggy';
+  if ([51, 53, 55, 56, 57].includes(value)) return 'drizzly';
+  if ([61, 63, 65, 66, 67, 80, 81, 82].includes(value)) return 'rainy';
+  if ([71, 73, 75, 77, 85, 86].includes(value)) return 'snowy';
+  if ([95, 96, 99].includes(value)) return 'stormy';
+  return 'cloudy';
+}
+
+async function currentWeatherReply(message = '') {
+  if (!isWeatherQuestion(message)) return '';
+  const location = weatherLocationFromMessage(message);
+  if (!location) return 'Tell me the city or place and I can check the weather. For example: "weather in Mumbai" or "weather in New York".';
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try {
+    const geocodeUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1&language=en&format=json`;
+    const geoResponse = await fetch(geocodeUrl, { signal: controller.signal });
+    const geo = await geoResponse.json().catch(() => ({}));
+    const place = Array.isArray(geo.results) ? geo.results[0] : null;
+    if (!geoResponse.ok || !place) return `I could not find a weather location for "${location}". Try a city name.`;
+    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(place.latitude)}&longitude=${encodeURIComponent(place.longitude)}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m&timezone=auto`;
+    const weatherResponse = await fetch(weatherUrl, { signal: controller.signal });
+    const weather = await weatherResponse.json().catch(() => ({}));
+    if (!weatherResponse.ok || !weather.current) return `I could not fetch live weather for ${place.name} right now.`;
+    const current = weather.current;
+    const units = weather.current_units || {};
+    const placeLabel = [place.name, place.admin1, place.country].filter(Boolean).join(', ');
+    return `Current weather in ${placeLabel}: ${Math.round(Number(current.temperature_2m))}${units.temperature_2m || 'C'}, ${weatherCodeLabel(current.weather_code)}, feels like ${Math.round(Number(current.apparent_temperature))}${units.apparent_temperature || 'C'}, humidity ${Math.round(Number(current.relative_humidity_2m))}${units.relative_humidity_2m || '%'}, wind ${Math.round(Number(current.wind_speed_10m))} ${units.wind_speed_10m || 'km/h'}.`;
+  } catch {
+    return 'I could not fetch live weather right now. Try again with a city name in a moment.';
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function canonicalGreetingToken(token = '') {
   return normalizeChat(token).replace(/[^a-z0-9]/g, '').replace(/(.)\1+/g, '$1');
 }
@@ -221,6 +322,14 @@ function visibleSourceQuestion(message = '') {
 }
 
 function productSourceType(product = {}, fallback = '') {
+  const fallbackText = normalizeChat(fallback);
+  const explicitSourceText = normalizeChat([
+    product.source,
+    product.searchSource,
+    product.sourceLabel
+  ].filter(Boolean).join(' '));
+  if (/catalog|lookmefy|fitlook/.test(explicitSourceText) || /catalog|lookmefy|fitlook/.test(fallbackText)) return 'lookmefy_catalog';
+
   const sourceText = normalizeChat([
     product.source,
     product.searchSource,
@@ -232,7 +341,6 @@ function productSourceType(product = {}, fallback = '') {
   ].filter(Boolean).join(' '));
   if (/wardrobe|closet/.test(sourceText)) return 'wardrobe';
   if (/amazon|amzn\.in/.test(sourceText)) return 'amazon';
-  if (/catalog|lookmefy|fitlook/.test(sourceText)) return 'lookmefy_catalog';
   if (/external/.test(sourceText)) return 'external';
   return fallback || '';
 }
@@ -253,7 +361,7 @@ function withSourceMetadata(product = {}, source = '') {
   return {
     ...product,
     source: type || product.source || source || '',
-    sourceLabel: product.sourceLabel || sourceLabel(type),
+    sourceLabel: sourceLabel(type) || product.sourceLabel || '',
     searchSource: product.searchSource || source || product.searchSource || ''
   };
 }
@@ -544,11 +652,11 @@ router.get('/recent-searches', requireUser, async (req, res) => {
   res.json({ searches });
 });
 
-const wearableProductPattern = /\b(dresses?|gowns?|frocks?|bodycon|maxi|midi|mini\s*dress|a-line\s*dress|wrap\s*dress|party\s*dress|cocktail\s*dress|slip\s*dress|shirt\s*dress|skater\s*dress|sarees?|saris?|lehengas?|dupattas?|kurtas?|kurtis?|salwars?|churidars?|anarkali|palazzos?|shararas?|ethnic\s*wear|shirts?|t\s*-?\s*shirts?|tshirts?|tees?|tops?|blouses?|tunics?|pants?|trousers?|trackpants?|joggers?|leggings?|jeans?|denims?|bottomwear|shorts?|skirts?|jackets?|coats?|blazers?|hoodies?|sweatshirts?|sweaters?|suits?|waistcoats?|vests?|shoes?|sneakers?|heels?|sandals?|boots?|slippers?|footwear|loafers?|pumps?|flats?|watches?|smart\s*watches?|bags?|handbags?|wallets?|purses?|belts?|caps?|hats?|scarves?|sunglasses?|eyewear|glasses|jewellery|jewelry|earrings?|necklaces?|bracelets?|accessories|loungewear|sleepwear|nightwear|pajamas?|pyjamas?|swimwear|bikinis?|cover\s*ups?|beachwear)\b/i;
+const wearableProductPattern = /\b(costumes?|cosplay|fancy\s*dress|dresses?|gowns?|frocks?|bodycon|maxi|midi|mini\s*dress|a-line\s*dress|wrap\s*dress|party\s*dress|cocktail\s*dress|slip\s*dress|shirt\s*dress|skater\s*dress|sarees?|saris?|lehengas?|dupattas?|kurtas?|kurtis?|salwars?|churidars?|anarkali|palazzos?|shararas?|ethnic\s*wear|shirts?|t\s*-?\s*shirts?|tshirts?|tees?|tops?|blouses?|tunics?|pants?|trousers?|trackpants?|joggers?|leggings?|jeans?|denims?|bottomwear|shorts?|skirts?|jackets?|coats?|blazers?|hoodies?|sweatshirts?|sweaters?|suits?|waistcoats?|vests?|shoes?|sneakers?|heels?|sandals?|boots?|slippers?|footwear|loafers?|pumps?|flats?|watches?|smart\s*watches?|bags?|handbags?|wallets?|purses?|belts?|caps?|hats?|scarves?|sunglasses?|eyewear|glasses|jewellery|jewelry|earrings?|necklaces?|bracelets?|accessories|loungewear|sleepwear|nightwear|pajamas?|pyjamas?|swimwear|bikinis?|cover\s*ups?|beachwear)\b/i;
 const nonWearableSearchPattern = /\b(beauty|makeup|cosmetics?|perfume|fragrance|skincare|serum|lipsticks?|cookware|kitchen|home\s*decor|furniture|appliances?|toys?|books?|electronics?|phones?|laptops?|groceries|food|medicine|kids?\s*toys?)\b/i;
 const fashionSignalPattern = /\b(black|white|red|pink|blue|green|yellow|beige|brown|maroon|purple|lavender|grey|gray|cream|linen|cotton|denim|silk|wool|leather|formal|casual|classy|streetwear|old\s*money|minimal|oversized|slim|regular|under|below|upto|up\s*to|budget|rs\.?|inr|₹|men|women|male|female|unisex)\b/i;
 const occasionOnlyPattern = /\b(beach|pool|vacation|holiday|resort|travel|airport|wedding|engagement|reception|sangeet|haldi|diwali|festival|festive|eid|christmas|halloween|party|club|concert|brunch|date|dinner|office|work|interview|college|campus|gym|workout|summer|winter|rainy|monsoon)\b/i;
-const sourceChoicePattern = /^(?:check\s+(?:my\s+)?wardrobe|wardrobe|closet|my\s+closet|search\s+online|search\s+amazon|shop\s+online|online|amazon|show\s+products?)$/i;
+const sourceChoicePattern = /^(?:check\s+(?:my\s+)?wardrobe|search\s+(?:in\s+)?(?:my\s+)?wardrobe|wardrobe|closet|my\s+closet|search\s+(?:in\s+)?(?:lookmefy\s+)?catalog|lookmefy\s+catalog|catalog|search\s+online|search\s+amazon|shop\s+online|online|amazon|show\s+products?)(?:\s+for\s+.+)?$/i;
 
 function fashionSearchBlock(message = '') {
   const lower = String(message || '').toLowerCase();
@@ -558,13 +666,26 @@ function fashionSearchBlock(message = '') {
 
 function aiStudioChoiceAction(message = '') {
   const normalized = String(message || '').toLowerCase().replace(/\s+/g, ' ').trim();
-  if (/^(?:check\s+(?:my\s+)?wardrobe|wardrobe|closet|my closet)$/.test(normalized)) return 'wardrobe';
-  if (/^(?:search\s+online|search\s+amazon|shop\s+online|online|amazon|show products?)$/.test(normalized)) return 'online';
+  if (/^(?:check\s+(?:my\s+)?wardrobe|search\s+(?:in\s+)?(?:my\s+)?wardrobe|wardrobe|closet|my closet)(?:\s+for\s+.+)?$/.test(normalized)) return 'wardrobe';
+  if (/^(?:search\s+(?:in\s+)?(?:lookmefy\s+)?catalog|lookmefy catalog|catalog)(?:\s+for\s+.+)?$/.test(normalized)) return 'catalog';
+  if (/^(?:search\s+online|search\s+amazon|shop\s+online|online|amazon|show products?)(?:\s+for\s+.+)?$/.test(normalized)) return 'online';
   return '';
+}
+
+function sourceChoiceTopic(message = '') {
+  return String(message || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^(?:check|search|find|look)\s+(?:in\s+)?(?:my\s+)?(?:wardrobe|closet|lookmefy\s+catalog|catalog|online|amazon|products?)(?:\s+for)?\s*/i, '')
+    .replace(/^(?:shop\s+online|show\s+products?)(?:\s+for)?\s*/i, '')
+    .trim()
+    .slice(0, 600);
 }
 
 function latestUserContext(history = [], fallback = '') {
   const currentAction = aiStudioChoiceAction(fallback);
+  const inlineContext = currentAction ? sourceChoiceTopic(fallback) : '';
+  if (inlineContext) return inlineContext;
   const entries = Array.isArray(history) ? history : [];
   for (let index = entries.length - 1; index >= 0; index -= 1) {
     const entry = entries[index];
@@ -694,9 +815,29 @@ function outOfScopeReply() {
   return 'I can only help with Lookmefy, fashion, wardrobe, shopping, products, tokens, profile, and AI try-on. Try “beach outfit”, “kurta for wedding”, “black shirt under INR 1000”, or “how do Lookmefy tokens work?”';
 }
 
+function isGeneralUtilityQuestion(message = '') {
+  const lower = normalizeChat(message);
+  const fashionContext = /\b(outfit|wear|style|dress|look|shirt|top|pants|trouser|jeans|shoe|sneaker|jacket|blazer|wardrobe|date\s+night)\b/.test(lower);
+  if (isWeatherQuestion(message)) return true;
+  if (/\b(time|clock)\b/.test(lower) && !fashionContext) return true;
+  if (/\b(?:what(?:'s| is)?\s+(?:the\s+)?date|today'?s?\s+date|current\s+date|which\s+day|what\s+day)\b/.test(lower)) return true;
+  return false;
+}
+
+function shouldAnswerGeneralQuestion(message = '') {
+  const lower = normalizeChat(message);
+  if (!lower || isLookmefyHelpQuestion(message)) return false;
+  if (isGeneralUtilityQuestion(message)) return true;
+  if (hasFashionSignal(message)) return false;
+  return isGeneralUtilityQuestion(message)
+    || lower.endsWith('?')
+    || /\b(who|what|where|when|why|how|tell me|explain|write|summarize|calculate|solve|capital|president|prime minister|minister|news|stock|crypto|recipe|movie|song|joke|story|poem|translate)\b/.test(lower);
+}
+
 function shouldBlockOutOfScopeQuestion(message = '') {
   const lower = normalizeChat(message);
   if (!lower || isGreetingOnly(message) || isCasualGreetingPrefix(message) || isLookmefyHelpQuestion(message) || hasFashionSignal(message)) return false;
+  if (shouldAnswerGeneralQuestion(message)) return false;
   return /\b(who|what|where|when|why|how|tell me|explain|write|code|solve|calculate|capital|president|prime minister|pm|minister|weather|news|stock|crypto|recipe|movie|song)\b/.test(lower)
     || lower.endsWith('?');
 }
@@ -704,17 +845,32 @@ function shouldBlockOutOfScopeQuestion(message = '') {
 function shouldAskSourceChoice(message = '') {
   const value = String(message || '').trim();
   if (!value || sourceChoicePattern.test(value)) return false;
-  if (wearableProductPattern.test(value)) return false;
-  if (budgetCeiling(value)) return false;
-  return occasionOnlyPattern.test(value) || /\b(outfit|look|wear|style|dress me|what should i wear)\b/i.test(value);
+  return hasFashionSignal(value) || /\b(outfit|look|wear|style|dress me|what should i wear)\b/i.test(value);
 }
 
 function sourceChoiceReply(message = '') {
   const context = String(message || 'this').replace(/\s+/g, ' ').trim();
   return {
-    reply: `For ${context}, do you want me to build from your wardrobe first or search online for product options?`,
+    reply: `For ${context}, do you want me to search your wardrobe, search the Lookmefy catalog, or search online?`,
     products: [],
-    suggestions: ['Check wardrobe', 'Search online']
+    suggestions: ['Search wardrobe', 'Search Lookmefy catalog', 'Search online'],
+    actions: [
+      action('check_wardrobe', 'Search wardrobe', {
+        endpoint: '/api/recommendations/studio-chat',
+        method: 'POST',
+        message: `Search wardrobe for ${context}`
+      }),
+      action('search_catalog', 'Search Lookmefy catalog', {
+        endpoint: '/api/recommendations/studio-chat',
+        method: 'POST',
+        message: `Search Lookmefy catalog for ${context}`
+      }),
+      action('search_online', 'Search online', {
+        endpoint: '/api/recommendations/studio-chat',
+        method: 'POST',
+        message: `Search online for ${context}`
+      })
+    ]
   };
 }
 
@@ -724,7 +880,7 @@ function onlineSearchPromptForContext(message = '', user = {}) {
   if (wearableProductPattern.test(prompt)) return prompt;
   const genderWord = user?.genderPreference === 'male' ? 'men' : user?.genderPreference === 'female' ? 'women' : '';
   const lower = prompt.toLowerCase();
-  if (/\bbeach|pool|resort\b/.test(lower)) return `${genderWord} beach outfit beachwear swimwear sandals`.trim();
+  if (/\bbeach|pool|resort\b/.test(lower)) return `${genderWord} beach dress summer dress vacation dress resort wear`.trim();
   if (/\bdiwali|festival|festive|eid\b/.test(lower)) return `${genderWord} festive ethnic outfit kurta saree lehenga`.trim();
   if (/\bwedding|engagement|reception|sangeet|haldi\b/.test(lower)) return `${genderWord} wedding guest outfit ethnic wear`.trim();
   if (/\bhalloween\b/.test(lower)) return `${genderWord} halloween costume outfit`.trim();
@@ -753,6 +909,7 @@ function extractFashionFilters(message = '', user = {}) {
   const lower = normalizeChat(message);
   const budget = budgetCeiling(message);
   const categoryMap = [
+    ['costumes', /\b(halloween\s+costumes?|costumes?|cosplay|fancy\s*dress)\b/],
     ['dresses', /\b(dress(?:es)?|gowns?|frocks?|bodycon|maxi|midi|mini)\b/],
     ['ethnic', /\b(kurtas?|kurtis?|sarees?|saris?|lehengas?|salwars?|anarkali|ethnic|festive)\b/],
     ['tops', /\b(shirts?|t-?shirts?|tshirts?|tees?|tops?|blouses?|tunics?|hoodies?)\b/],
@@ -768,10 +925,81 @@ function extractFashionFilters(message = '', user = {}) {
     gender: productGenderForPreference(user?.genderPreference) || '',
     color: lower.match(/\b(black|white|red|pink|blue|green|yellow|beige|brown|maroon|purple|lavender|grey|gray|cream|gold|silver|navy)\b/)?.[1] || '',
     material: lower.match(/\b(cotton|linen|denim|silk|leather|wool|georgette|chiffon|satin)\b/)?.[1] || '',
-    occasion: lower.match(/\b(beach|pool|vacation|holiday|resort|travel|airport|wedding|engagement|reception|sangeet|haldi|diwali|festival|festive|eid|christmas|halloween|party|club|concert|brunch|date|dinner|office|work|interview|college|campus|gym|workout|summer|winter|rainy|monsoon)\b/)?.[1] || '',
+    occasion: lower.match(/\b(beach|pool|vacation|holiday|resort|travel|airport|wedding|engagement|reception|sangeet|haldi|diwali|festival|festive|eid|christmas|halloween|party|club|concert|brunch|date|dinner|office|work|interview|college|campus|casual|formal|gym|workout|summer|winter|rainy|monsoon)\b/)?.[1] || '',
     style: detectCelebrityStyleRequest(message) ? 'celebrity-inspired' : (lower.match(/\b(classy|casual|formal|minimal|streetwear|old\s*money|glam|party|oversized|slim|regular)\b/)?.[1] || ''),
     budget
   };
+}
+
+const occasionProductProfiles = {
+  christmas: {
+    categories: ['dresses', 'tops', 'bottoms', 'shoes', 'outerwear', 'accessories'],
+    primaryCategories: ['dresses', 'tops', 'shoes'],
+    signals: ['christmas', 'holiday', 'festive', 'party', 'red', 'green', 'velvet', 'sequin', 'sparkle', 'glitter', 'satin'],
+    excludedTerms: ['lingerie', 'underwear', 'innerwear', 'bra', 'bralette', 'sleepwear', 'nightwear', 'night suit', 'night dress', 'pajama', 'pyjama', 'babydoll', 'negligee', 'robe', 'saree', 'sari', 'lehenga', 'kurta', 'kurti', 'dupatta', 'ethnic']
+  },
+  halloween: {
+    categories: ['costumes', 'dresses', 'tops', 'bottoms', 'shoes', 'outerwear', 'accessories'],
+    primaryCategories: ['costumes', 'dresses', 'tops', 'shoes'],
+    signals: ['halloween', 'costume', 'cosplay', 'black', 'orange', 'goth', 'lace', 'leather', 'velvet', 'boots', 'party'],
+    excludedTerms: ['lingerie', 'underwear', 'innerwear', 'bra', 'bralette', 'sleepwear', 'nightwear', 'night suit', 'night dress', 'pajama', 'pyjama', 'babydoll', 'negligee', 'robe', 'saree', 'sari', 'lehenga', 'kurta', 'kurti', 'dupatta', 'ethnic']
+  },
+  beach: {
+    categories: ['dresses', 'tops', 'bottoms', 'shoes', 'accessories', 'swimwear'],
+    primaryCategories: ['dresses', 'tops', 'shoes'],
+    signals: ['beach', 'vacation', 'resort', 'pool', 'linen', 'summer', 'sandals', 'shorts', 'breathable', 'swimwear'],
+    excludedTerms: ['lingerie', 'underwear', 'innerwear', 'bra', 'bralette', 'sleepwear', 'nightwear', 'night suit', 'night dress', 'pajama', 'pyjama', 'babydoll', 'negligee', 'robe', 'saree', 'sari', 'lehenga', 'kurta', 'kurti', 'dupatta', 'ethnic']
+  },
+  pool: {
+    categories: ['swimwear', 'dresses', 'tops', 'bottoms', 'shoes', 'accessories'],
+    signals: ['pool', 'beach', 'swimwear', 'bikini', 'summer', 'sandals']
+  },
+  wedding: {
+    categories: ['ethnic', 'dresses', 'shoes', 'accessories'],
+    signals: ['wedding', 'festive', 'ethnic', 'kurta', 'saree', 'lehenga', 'embroidered', 'silk']
+  },
+  diwali: {
+    categories: ['ethnic', 'dresses', 'shoes', 'accessories'],
+    signals: ['diwali', 'festival', 'festive', 'ethnic', 'kurta', 'saree', 'lehenga', 'embroidered']
+  },
+  party: {
+    categories: ['dresses', 'tops', 'bottoms', 'shoes', 'outerwear', 'accessories'],
+    signals: ['party', 'classy', 'satin', 'velvet', 'sequin', 'gown', 'cocktail', 'statement']
+  },
+  office: {
+    categories: ['tops', 'bottoms', 'shoes', 'outerwear', 'accessories'],
+    signals: ['office', 'work', 'formal', 'classic', 'tailored', 'blazer', 'loafer', 'trouser']
+  },
+  gym: {
+    categories: ['activewear', 'tops', 'bottoms', 'shoes'],
+    signals: ['gym', 'workout', 'training', 'active', 'sport', 'running', 'stretch']
+  },
+  travel: {
+    categories: ['tops', 'bottoms', 'shoes', 'outerwear', 'accessories'],
+    signals: ['travel', 'airport', 'comfortable', 'casual', 'sneaker', 'relaxed']
+  },
+  casual: {
+    categories: ['tops', 'bottoms', 'dresses', 'shoes', 'outerwear', 'accessories'],
+    primaryCategories: ['tops', 'bottoms', 'dresses', 'shoes'],
+    signals: ['casual', 'comfortable', 'denim', 'sneaker', 'relaxed', 'brunch', 'college', 'campus'],
+    excludedTerms: ['lingerie', 'underwear', 'innerwear', 'bra', 'bralette', 'sleepwear', 'nightwear', 'night suit', 'night dress', 'pajama', 'pyjama', 'babydoll', 'negligee', 'robe']
+  }
+};
+
+function occasionProfileForFilters(filters = {}) {
+  const occasion = normalizeKey(filters.occasion);
+  if (!occasion) return null;
+  if (occasionProductProfiles[occasion]) return occasionProductProfiles[occasion];
+  if (['holiday'].includes(occasion)) return occasionProductProfiles.christmas;
+  if (['vacation', 'resort', 'summer'].includes(occasion)) return occasionProductProfiles.beach;
+  if (['festival', 'festive', 'eid'].includes(occasion)) return occasionProductProfiles.diwali;
+  if (['work', 'interview'].includes(occasion)) return occasionProductProfiles.office;
+  if (['date', 'dinner', 'club', 'concert', 'cocktail'].includes(occasion)) return occasionProductProfiles.party;
+  if (['college', 'campus', 'brunch'].includes(occasion)) return occasionProductProfiles.casual;
+  if (['formal'].includes(occasion)) return occasionProductProfiles.office;
+  if (['workout'].includes(occasion)) return occasionProductProfiles.gym;
+  if (['airport'].includes(occasion)) return occasionProductProfiles.travel;
+  return null;
 }
 
 function desiredOutfitGroups(filters = {}) {
@@ -921,8 +1149,12 @@ function productLooksWearable(product = {}, query = '') {
 function productSearchText(product = {}) {
   return [
     product.name,
+    product.title,
     product.brand,
     product.category,
+    product.subcategory,
+    product.type,
+    product.color,
     product.description,
     product.gender,
     ...(Array.isArray(product.tags) ? product.tags : []),
@@ -930,19 +1162,66 @@ function productSearchText(product = {}) {
   ].filter(Boolean).join(' ').toLowerCase();
 }
 
+function productIdentitySearchText(product = {}) {
+  return [
+    product.name,
+    product.title,
+    product.category,
+    product.subcategory,
+    product.type,
+    product.color,
+    ...(Array.isArray(product.colors) ? product.colors : [])
+  ].filter(Boolean).join(' ').toLowerCase();
+}
+
 function productMatchesRequestedCategory(product = {}, filters = {}) {
   if (!filters.category) return true;
-  const text = productSearchText(product);
+  const text = productIdentitySearchText(product);
   const category = normalizeKey(product.category);
   if (category === normalizeKey(filters.category)) return true;
-  if (filters.category === 'dresses') return /\b(dress|gown|frock|maxi|midi|bodycon|a-line)\b/.test(text);
-  if (filters.category === 'ethnic') return /\b(kurta|kurti|saree|sari|lehenga|salwar|anarkali|ethnic)\b/.test(text);
-  if (filters.category === 'tops') return /\b(shirt|tshirt|t-shirt|tee|top|blouse|tunic|hoodie)\b/.test(text);
-  if (filters.category === 'bottoms') return /\b(pant|trouser|jean|denim|jogger|legging|short|skirt)\b/.test(text);
-  if (filters.category === 'shoes') return /\b(shoe|sneaker|heel|sandal|boot|loafer|pump|flat|footwear)\b/.test(text);
-  if (filters.category === 'outerwear') return /\b(jacket|coat|blazer|sweater|sweatshirt)\b/.test(text);
-  if (filters.category === 'accessories') return /\b(watch|bag|belt|scarf|sunglass|jewel|earring|necklace|bracelet|accessor)\b/.test(text);
+  if (filters.category === 'dresses') return /\b(dress(?:es)?|gowns?|frocks?|maxi|midi|bodycon|a-line)\b/.test(text);
+  if (filters.category === 'ethnic') return /\b(kurtas?|kurtis?|sarees?|saris?|lehengas?|salwars?|anarkali|ethnic)\b/.test(text);
+  if (filters.category === 'tops') return /\b(shirts?|tshirts?|t-shirts?|tees?|tops?|blouses?|tunics?|hoodies?)\b/.test(text);
+  if (filters.category === 'bottoms') return /\b(pants?|trousers?|jeans?|denims?|joggers?|leggings?|shorts?|skirts?)\b/.test(text);
+  if (filters.category === 'shoes') return /\b(shoes?|sneakers?|heels?|sandals?|boots?|loafers?|pumps?|flats?|footwear)\b/.test(text);
+  if (filters.category === 'outerwear') return /\b(jackets?|coats?|blazers?|sweaters?|sweatshirts?)\b/.test(text);
+  if (filters.category === 'accessories') return /\b(watches?|bags?|handbags?|belts?|scarves?|sunglasses?|jewellery|jewelry|earrings?|necklaces?|bracelets?|accessories?)\b/.test(text);
+  if (filters.category === 'activewear') return /\b(activewear|gym|workout|sports?|trackpants?|leggings?|sports?\s+bras?)\b/.test(text);
+  if (filters.category === 'costumes') return /\b(halloween|costumes?|cosplay|fancy\s+dress)\b/.test(text);
   return text.includes(filters.category);
+}
+
+function productMatchesRequestedColor(product = {}, color = '') {
+  if (!color) return true;
+  const explicitColors = [
+    product.color,
+    ...(Array.isArray(product.colors) ? product.colors : [])
+  ].filter(Boolean).join(' ').toLowerCase();
+  if (explicitColors && textHasFashionTerm(explicitColors, color)) return true;
+  return textHasFashionTerm(productIdentitySearchText(product), color);
+}
+
+function productMatchesRequestedOccasion(product = {}, filters = {}) {
+  if (!filters.occasion) return true;
+  const profile = occasionProfileForFilters(filters);
+  if (!profile) return textHasFashionTerm(productSearchText(product), filters.occasion);
+  if (!filters.category && profile.categories?.length && !profile.categories.some((category) => productMatchesRequestedCategory(product, { category }))) {
+    return false;
+  }
+  const identityText = productIdentitySearchText(product);
+  if (!filters.category && profile.excludedTerms?.some((term) => textHasFashionTerm(identityText, term))) return false;
+  if (!profile.requireSignal) return true;
+  return (profile.signals || []).some((signal) => textHasFashionTerm(productSearchText(product), signal));
+}
+
+function productHasDisallowedDefaultUse(product = {}, filters = {}) {
+  const identityText = productIdentitySearchText(product);
+  const requestedIntimate = filters.category === 'innerwear';
+  const requestedSwim = filters.category === 'swimwear';
+  if (!requestedIntimate && !requestedSwim && /\b(underwear|innerwear|lingerie|bras?|bralettes?|panty|panties|briefs?|boxers?|camisoles?|shapewear|babydoll|negligee)\b/.test(identityText)) {
+    return true;
+  }
+  return /\b(sleepwear|nightwear|night\s*(?:suit|dress|shirt|gown)|pajamas?|pyjamas?|loungewear|robe)\b/.test(identityText);
 }
 
 function readFashionPrice(value) {
@@ -959,9 +1238,12 @@ function productPriceMatchesBudget(product = {}, filters = {}) {
 }
 
 function productMatchesRequiredFashionFilters(product = {}, filters = {}) {
-  const text = productSearchText(product);
+  if (productHasDisallowedDefaultUse(product, filters)) return false;
+  if (!genderCompatibility(product, filters.gender || '').compatible) return false;
   if (filters.category && !productMatchesRequestedCategory(product, filters)) return false;
-  if (filters.color && !textHasFashionTerm(text, filters.color)) return false;
+  if (filters.color && !productMatchesRequestedColor(product, filters.color)) return false;
+  if (filters.occasion && !productMatchesRequestedOccasion(product, filters)) return false;
+  const text = productSearchText(product);
   if (filters.material && !textHasFashionTerm(text, filters.material)) return false;
   if (!productPriceMatchesBudget(product, filters)) return false;
   return true;
@@ -981,7 +1263,7 @@ function scoreFashionProductCandidate(product = {}, message = '', user = {}, sou
   if (filters.budget && Number.isFinite(price)) {
     score += price <= filters.budget ? 16 : -Math.min(18, Math.ceil((price - filters.budget) / Math.max(filters.budget, 1) * 20));
   }
-  if (filters.color && text.includes(filters.color)) score += 10;
+  if (filters.color && productMatchesRequestedColor(product, filters.color)) score += 10;
   if (filters.material && text.includes(filters.material)) score += 8;
   if (filters.occasion && text.includes(filters.occasion)) score += 7;
   if (filters.style && filters.style !== 'celebrity-inspired' && text.includes(filters.style)) score += 6;
@@ -1039,6 +1321,13 @@ function scoreCatalogFashion(product = {}, message = '', user = {}) {
   let score = scoreFashionProductCandidate(product, message, user, 'catalog-fallback');
   if (productLooksWearable(product, message)) score += 18;
   if (filters.category) score += productMatchesRequestedCategory(product, filters) ? 12 : -20;
+  if (!filters.category && filters.occasion) {
+    const profile = occasionProfileForFilters(filters);
+    const categoryIndex = profile?.categories?.findIndex((category) => productMatchesRequestedCategory(product, { category })) ?? -1;
+    if (categoryIndex >= 0) score += Math.max(5, 22 - categoryIndex * 3);
+    const primaryCategoryIndex = profile?.primaryCategories?.findIndex((category) => productMatchesRequestedCategory(product, { category })) ?? -1;
+    if (primaryCategoryIndex >= 0) score += Math.max(8, 24 - primaryCategoryIndex * 4);
+  }
   if (preferredGender && String(product.gender || '').toLowerCase() === preferredGender) score += 10;
   if (preferredGender && String(product.gender || '').toLowerCase() === 'unisex') score += 4;
   if (budget && Number.isFinite(price) && price <= budget) score += 12;
@@ -1052,6 +1341,106 @@ function scoreCatalogFashion(product = {}, message = '', user = {}) {
   return score;
 }
 
+function catalogPlaceholderProduct(product = {}) {
+  const text = normalizeChat([
+    product.name,
+    product.title,
+    product.brand,
+    product.sourceUrl,
+    product.affiliateLink,
+    ...(Array.isArray(product.tags) ? product.tags : [])
+  ].filter(Boolean).join(' '));
+  return /\b(load\s+test\s+product|fitlook\s+load|load-test-shirt|example\.com\/load-test)\b/.test(text);
+}
+
+function uniqueCatalogProducts(products = []) {
+  const seen = new Set();
+  return products.filter((product) => {
+    const primaryKey = String(product?.id || product?._id || product?.sourceUrl || product?.affiliateLink || product?.name || '');
+    const nameKey = normalizeChat([product?.name, product?.brand].filter(Boolean).join('|'));
+    const keys = [primaryKey, nameKey].filter(Boolean);
+    if (!keys.length || keys.some((key) => seen.has(key))) return false;
+    keys.forEach((key) => seen.add(key));
+    return true;
+  });
+}
+
+function remoteCatalogBaseUrl() {
+  const raw = String(
+    process.env.LOOKMEFY_CATALOG_API_BASE_URL ||
+    process.env.CATALOG_API_BASE_URL ||
+    process.env.VITE_API_BASE_URL ||
+    ''
+  ).trim().replace(/\/+$/, '');
+  if (!raw) return '';
+  try {
+    const url = new URL(raw);
+    if (!['https:', 'http:'].includes(url.protocol)) return '';
+    const host = url.hostname.toLowerCase();
+    if (host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0' || host.endsWith('.localhost')) return '';
+    return `${url.origin}${url.pathname.replace(/\/+$/, '')}`;
+  } catch {
+    return '';
+  }
+}
+
+function remoteCatalogProductsUrl(baseUrl = '') {
+  if (!baseUrl) return '';
+  return `${baseUrl}${baseUrl.endsWith('/api') ? '/products' : '/api/products'}`;
+}
+
+function stripCatalogChoicePrefix(message = '') {
+  return String(message || '')
+    .replace(/^\s*search\s+(?:in\s+)?(?:the\s+)?(?:lookmefy\s+)?catalog\s*(?:for\s+)?/i, '')
+    .trim();
+}
+
+async function fetchRemoteCatalogBatch({ query = '', filters = {}, limit = 96 } = {}) {
+  const baseUrl = remoteCatalogBaseUrl();
+  if (!baseUrl) return [];
+  const params = new URLSearchParams({ limit: String(Math.min(Math.max(Number(limit) || 48, 1), 96)) });
+  if (query) params.set('q', query);
+  if (filters.budget) params.set('maxPrice', String(filters.budget));
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 4_000);
+  try {
+    const response = await fetch(`${remoteCatalogProductsUrl(baseUrl)}?${params.toString()}`, {
+      headers: {
+        accept: 'application/json',
+        'user-agent': 'Lookmefy-AI-Stylist/1.0'
+      },
+      signal: controller.signal
+    });
+    if (!response.ok) return [];
+    const payload = await response.json();
+    return Array.isArray(payload?.products) ? payload.products : [];
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function remoteCatalogFashionFallback(message = '', user = {}, filters = extractFashionFilters(message, user)) {
+  const prompt = stripCatalogChoicePrefix(message);
+  const query = onlineSearchPromptForContext(prompt || message, user);
+  const batches = [];
+  if (query) batches.push(await fetchRemoteCatalogBatch({ query, filters, limit: 96 }));
+  if (batches.flat().length < 6) batches.push(await fetchRemoteCatalogBatch({ query: '', filters, limit: 96 }));
+  return uniqueCatalogProducts(batches.flat())
+    .filter((product) => product && !catalogPlaceholderProduct(product))
+    .filter((product) => productLooksWearable(product, message))
+    .filter((product) => productMatchesRequiredFashionFilters(product, filters))
+    .map((product) => ({
+      product,
+      score: scoreCatalogFashion(product, message, user)
+    }))
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 6)
+    .map(({ product }) => withSourceMetadata({ ...product, searchSource: 'catalog-fallback' }, 'catalog-fallback'));
+}
+
 async function catalogFashionFallback(message = '', user = {}) {
   const preferredGender = productGenderForPreference(user?.genderPreference);
   const filters = extractFashionFilters(message, user);
@@ -1063,7 +1452,8 @@ async function catalogFashionFallback(message = '', user = {}) {
     products = await Product.find(catalogFilter()).sort({ isFeatured: -1, isNewArrival: -1, rating: -1, createdAt: -1 }).limit(180).lean();
   }
 
-  return products
+  const localResults = products
+    .filter((product) => !catalogPlaceholderProduct(product))
     .filter((product) => productLooksWearable(product, message))
     .filter((product) => productMatchesRequiredFashionFilters(product, filters))
     .map((product) => ({
@@ -1074,6 +1464,8 @@ async function catalogFashionFallback(message = '', user = {}) {
     .sort((a, b) => b.score - a.score)
     .slice(0, 6)
     .map(({ product }) => withSourceMetadata({ ...productToClient(product), searchSource: 'catalog-fallback' }, 'catalog-fallback'));
+  if (localResults.length) return localResults;
+  return remoteCatalogFashionFallback(message, user, filters);
 }
 
 function uniqueStrings(values = []) {
@@ -1271,11 +1663,15 @@ function fashionFollowUps(message) {
 
 function aiStudioPrompt({ message, history, products, source = 'amazon', knowledge = [], context = {}, mode = 'product_search' }) {
   const sourceLabel = source === 'catalog-fallback' ? 'Lookmefy catalog' : 'Amazon';
+  const generalChat = mode === 'general_chat';
   return [
-    'You are Lookmefy AI Studio, the in-app assistant for fashion, wardrobe, shopping, AI try-on, tokens, profile, and Lookmefy help.',
-    'Stay inside Lookmefy scope. Do not answer unrelated politics, news, general knowledge, coding, medical, legal, finance, or homework questions.',
-    `Current mode: ${mode}. Recommend wearable clothing, footwear, ethnic wear, watches, bags, or accessories from the ${sourceLabel} result cards when product cards are supplied.`,
-    'Do not recommend beauty, home, electronics, toys, groceries, or non-fashion products.',
+    'You are Lookmefy AI Studio, the in-app assistant for general chat plus fashion, wardrobe, shopping, AI try-on, tokens, profile, and Lookmefy help.',
+    'Answer normal casual questions and general knowledge questions clearly, like a helpful chat assistant.',
+    generalChat
+      ? 'Current mode: general_chat. Answer the user directly in text. Do not recommend product cards or pretend a shopping search happened.'
+      : `Current mode: ${mode}. Recommend wearable clothing, footwear, ethnic wear, watches, bags, or accessories from the ${sourceLabel} result cards when product cards are supplied.`,
+    'For live/current topics such as weather, news, prices, sports scores, stocks, or crypto, be accurate about whether live data was supplied. If no live data is supplied, say you do not have live data instead of guessing.',
+    'For shopping/product requests, only recommend wearable fashion products. Do not recommend beauty, home, electronics, toys, groceries, or non-fashion products.',
     'Use user context only for personalization. Do not invent token balance, wardrobe items, saved outfits, product prices, or actions.',
     'If no result card fits, say that no matching fashion items are available and ask for another item type, colour, budget, or occasion.',
     source === 'catalog-fallback' ? 'Be transparent that live Amazon results were unavailable and these are catalog fallback picks.' : '',
@@ -1292,6 +1688,8 @@ function aiStudioPrompt({ message, history, products, source = 'amazon', knowled
       savedOutfitCount: context.savedOutfits?.length || 0,
       recentActivity: (context.recentActivity || []).slice(0, 6)
     })}`,
+    '',
+    `Server date/time: ${JSON.stringify({ iso: new Date().toISOString(), timeZone: defaultAiStudioTimeZone() })}`,
     '',
     `Lookmefy knowledge snippets: ${JSON.stringify((knowledge || []).slice(0, 5).map(({ title, content, matchedTerms }) => ({
       title,
@@ -1352,6 +1750,36 @@ async function falAiStudioReply({ message, history, products, source, knowledge,
     return text;
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+function generalChatFallbackReply(message = '') {
+  if (/\b(joke|funny)\b/i.test(message)) {
+    return 'Why did the developer wear a jacket? Because the code had too many drafts.';
+  }
+  if (isWeatherQuestion(message)) return 'Tell me the city or place and I can check the weather.';
+  if (/\b(news|stock|crypto|score|latest|current events?)\b/i.test(message)) {
+    return 'I can help explain the topic, but I need live data to answer the very latest numbers or news accurately.';
+  }
+  return 'I can answer that. Ask the exact question and I will keep the reply clear and useful.';
+}
+
+async function generalChatReply(message = '', history = [], knowledge = [], context = {}) {
+  const direct = currentDateTimeReply(message) || await currentWeatherReply(message);
+  if (direct) return direct;
+  try {
+    return await falAiStudioReply({
+      message,
+      history,
+      products: [],
+      source: 'general',
+      knowledge,
+      context,
+      mode: 'general_chat'
+    });
+  } catch (error) {
+    console.warn('[ai-studio] general AI request failed', readableError(error));
+    return generalChatFallbackReply(message);
   }
 }
 
@@ -1598,6 +2026,18 @@ async function aiStudioChatService({ userId, body = {} }) {
   const help = lookmefyHelpReply(message, userContext);
   if (help) return finish(help);
 
+  if (shouldAnswerGeneralQuestion(message)) {
+    return finish({
+      reply: await generalChatReply(message, history, knowledge, userContext),
+      products: [],
+      outfits: [],
+      suggestions: ['Ask another question', 'Search fashion products', 'Open wardrobe'],
+      intent: 'general_question',
+      mode: 'general_chat',
+      actions: []
+    });
+  }
+
   if (shouldBlockOutOfScopeQuestion(message)) {
     return finish({
       reply: outOfScopeReply(),
@@ -1652,7 +2092,9 @@ async function aiStudioChatService({ userId, body = {} }) {
       return finish({
         reply: choiceAction === 'wardrobe'
           ? 'What occasion, place, or vibe should I check your wardrobe for?'
-          : 'What should I search online for? Tell me the item, occasion, budget, colour, or vibe.',
+          : choiceAction === 'catalog'
+            ? 'What should I search in the Lookmefy catalog? Tell me the item, occasion, budget, colour, or vibe.'
+            : 'What should I search online for? Tell me the item, occasion, budget, colour, or vibe.',
         products: [],
         outfits: [],
         suggestions: ['Beach outfit', 'Kurta for wedding', 'Black shirt under INR 1000'],
@@ -1662,6 +2104,19 @@ async function aiStudioChatService({ userId, body = {} }) {
     }
     if (choiceAction === 'wardrobe') {
       return finish(await wardrobeReplyForContext(userContext, context), { message: context });
+    }
+    if (choiceAction === 'catalog') {
+      const products = await catalogFashionFallback(context, user);
+      return finish({
+        reply: products.length
+          ? localFashionReply(context, products, 'catalog-fallback')
+          : 'I could not find matching Lookmefy catalog picks yet. Try another item type, colour, budget, or occasion.',
+        products: products.slice(0, 6),
+        source: 'catalog-fallback',
+        suggestions: fashionFollowUps(context),
+        intent: 'product_search_confirmed',
+        mode: 'product_search'
+      }, { message: context });
     }
     const searchMessage = onlineSearchPromptForContext(context, user);
     try {

@@ -4,11 +4,10 @@ import { useFonts } from 'expo-font';
 import * as ImagePicker from 'expo-image-picker';
 import { StatusBar } from 'expo-status-bar';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { Component, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Component, createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Animated,
   AppState,
   BackHandler,
   FlatList,
@@ -31,10 +30,22 @@ import {
 import { api, clearToken, filePart, formatMoney, getToken, imageUrl, saveToken } from './src/api';
 import { categories, images, infoPages, policyPages } from './src/assets';
 import { calculateCreditPercentage, normalizeProduct, normalizeProducts, resolveImageUrl } from './src/products';
-import { STOREKIT_CREDITS_150_PRODUCT_ID, STOREKIT_MONTHLY_SUBSCRIPTION_PRODUCT_ID, storeKitAppAccountTokenForUser } from './src/storeKitProducts';
+import {
+  STOREKIT_CONSUMABLE_PRODUCT_IDS,
+  STOREKIT_CREDIT_TOP_UP_PRODUCT_IDS_BY_PLAN_ID,
+  STOREKIT_MONTHLY_SUBSCRIPTION_PRODUCT_ID,
+  isLookmefyStoreKitProductId,
+  isStoreKitConsumableProductId,
+  storeKitAppAccountTokenForUser,
+  storeKitProductIdForTopUpPlan
+} from './src/storeKitProducts';
 
 const logoSymbol = require('./assets/lookmefy-symbol.png');
+const wardrobeBottomsIcon = require('./assets/wardrobe-bottoms-icon.png');
+const wardrobeFootwearIcon = require('./assets/wardrobe-footwear-icon.png');
 
+const USER_PASSWORD_MIN_LENGTH = 6;
+const USER_PASSWORD_MAX_BYTES = 72;
 const genders = ['men', 'women', 'unisex'];
 const profileGenderOptions = [
   { value: 'female', label: 'Female', icon: 'female-outline' },
@@ -52,23 +63,6 @@ const aiPreviewDisclaimer = 'Note: AI previews can make mistakes. Check fit, col
 const appTopInset = Platform.OS === 'android' ? Math.max(76, NativeStatusBar.currentHeight || 0) : 0;
 const bottomNavigationHeight = Platform.OS === 'ios' ? 86 : 78;
 const screenBottomInset = 40;
-const homeHeroShowcaseSlides = [
-  {
-    key: 'black-coat',
-    model: images.homeSliderAtelier,
-    garment: images['category-generated/jackets.png']
-  },
-  {
-    key: 'denim-shirt',
-    model: images.homeSliderArchway,
-    garment: images['category-generated/men-shirts.png']
-  },
-  {
-    key: 'light-suiting',
-    model: images.homeSliderNaturalLight,
-    garment: images['category-generated/tops.png']
-  }
-];
 const screenScrollProps = {
   showsVerticalScrollIndicator: false,
   keyboardShouldPersistTaps: 'handled',
@@ -91,9 +85,12 @@ const horizontalScrollProps = {
   scrollEventThrottle: 16
 };
 const homeCategorySnapInterval = 70;
-const productImageAspectRatio = 0.8;
+const productImageAspectRatio = 0.72;
+const aiTryOnRequestTimeoutMs = 420000;
+const aiTryOnJobTimeoutMs = 420000;
 const avatarCropReferenceSize = 132;
-const homeHeroSlideIntervalMs = 4200;
+const wishlistStorageVersion = 'v1';
+const homeHeroSlideIntervalMs = 4000;
 const homeHeroSlides = [
   { key: 'summer', title: 'SUMMER ESSENTIALS', cta: 'SHOP NOW', image: 'homeSliderAtelier', route: 'shop' },
   { key: 'natural-light', title: 'LIGHT LAYERING', cta: 'EXPLORE', image: 'homeSliderNaturalLight', route: 'shop' },
@@ -239,6 +236,54 @@ const onboardingTourSteps = [
   }
 ];
 const validRoutes = new Set(['auth', 'home', 'shop', 'search', 'tryon', 'closet', 'custom', 'stylebot', 'tokens', 'profile', 'generation-history', 'product', 'wishlist', 'orders', 'signup', 'login', 'how', 'info']);
+const tabletLayoutMinWidth = 768;
+const tabletContentMaxWidth = 1180;
+
+function responsiveContentWidthForWindow(windowWidth) {
+  const safeWidth = Math.max(1, Math.round(Number(windowWidth) || 0));
+  if (safeWidth < tabletLayoutMinWidth) return safeWidth;
+  const contentRatio = safeWidth >= 1024 ? 0.9 : 0.88;
+  return Math.min(tabletContentMaxWidth, Math.round(safeWidth * contentRatio));
+}
+
+function productColumnsForWindow(windowWidth) {
+  const safeWidth = Math.max(1, Number(windowWidth) || 0);
+  if (safeWidth >= 1024) return 4;
+  if (safeWidth >= tabletLayoutMinWidth) return 3;
+  return 2;
+}
+
+function gridWidthForColumns(columns) {
+  if (columns >= 4) return '23.5%';
+  if (columns === 3) return '31.5%';
+  return null;
+}
+
+function responsiveLayoutForWindow(windowWidth) {
+  const safeWindowWidth = Math.max(1, Math.round(Number(windowWidth) || 0));
+  const isTablet = safeWindowWidth >= tabletLayoutMinWidth;
+  const productColumns = productColumnsForWindow(safeWindowWidth);
+  const gridWidth = gridWidthForColumns(productColumns);
+  const contentWidth = responsiveContentWidthForWindow(safeWindowWidth);
+  return {
+    windowWidth: safeWindowWidth,
+    contentWidth,
+    isTablet,
+    isLargeTablet: safeWindowWidth >= 1024,
+    productColumns,
+    contentFrameStyle: isTablet ? { width: contentWidth } : null,
+    productGridItemStyle: gridWidth ? { flexGrow: 0, flexBasis: gridWidth, maxWidth: gridWidth } : null,
+    productGridWidthStyle: gridWidth ? { width: gridWidth } : null,
+    categoryTileStyle: isTablet ? { width: productColumns >= 4 ? '23.5%' : '31.5%' } : null
+  };
+}
+
+const defaultResponsiveLayout = responsiveLayoutForWindow(390);
+const ResponsiveLayoutContext = createContext(defaultResponsiveLayout);
+
+function useResponsiveLayout() {
+  return useContext(ResponsiveLayoutContext);
+}
 
 function normalizeRoute(name, params = {}) {
   const routeName = typeof name === 'string' && validRoutes.has(name) ? name : 'home';
@@ -296,15 +341,30 @@ function normalizeOtpInput(value = '') {
   return String(value || '').replace(/\D/g, '').slice(0, 8);
 }
 
+function utf8ByteLength(value = '') {
+  let bytes = 0;
+  for (const char of String(value || '')) {
+    const codePoint = char.codePointAt(0);
+    if (codePoint <= 0x7f) bytes += 1;
+    else if (codePoint <= 0x7ff) bytes += 2;
+    else if (codePoint <= 0xffff) bytes += 3;
+    else bytes += 4;
+  }
+  return bytes;
+}
+
 function passwordValidationMessage(value = '') {
   const password = String(value || '');
-  if (password.length < 8) return 'Password must be at least 8 characters.';
-  if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) return 'Use at least one letter and one number in your password.';
+  if (!password) return 'Password is required.';
+  if (password.length < USER_PASSWORD_MIN_LENGTH) return `Password must be at least ${USER_PASSWORD_MIN_LENGTH} characters.`;
+  if (utf8ByteLength(password) > USER_PASSWORD_MAX_BYTES) return `Password must be at most ${USER_PASSWORD_MAX_BYTES} bytes.`;
   return '';
 }
 
 function shopResultTitle(filters = {}, tryOnMode = false) {
   if (tryOnMode) return 'AI Try-On';
+  if (filters.discounted === 'true' || filters.sale === 'true') return 'Top Deals';
+  if (filters.maxPrice) return `Under ₹${filters.maxPrice}`;
   if (filters.q) return filters.q;
   if (filters.category) return titleCase(filters.category);
   return 'All Products';
@@ -325,6 +385,43 @@ function initialAiStudioMessages(user) {
       text: `Hi${firstName ? ` ${firstName}` : ''}. Tell me what fashion item you want: shirts, dresses, pants, shoes, accessories, budget, colour, fabric, or vibe.`
     }
   ];
+}
+
+function normalizeAiStudioAction(action) {
+  if (!action) return null;
+  if (typeof action === 'string') return { type: 'message', label: action, prompt: action };
+  const label = String(action.label || action.type || 'Action').replace(/\s+/g, ' ').trim();
+  if (!label) return null;
+  return {
+    type: String(action.type || 'message'),
+    label,
+    prompt: String(action.prompt || label).replace(/\s+/g, ' ').trim(),
+    disabled: Boolean(action.disabled),
+    disabledReason: String(action.disabledReason || '').replace(/\s+/g, ' ').trim()
+  };
+}
+
+function normalizeAiStudioActions(data = {}) {
+  const actions = Array.isArray(data.actions) ? data.actions : [];
+  if (actions.length) return actions.map(normalizeAiStudioAction).filter(Boolean).slice(0, 4);
+  return (Array.isArray(data.suggestions) ? data.suggestions : []).map(normalizeAiStudioAction).filter(Boolean).slice(0, 4);
+}
+
+function normalizeAiStudioOutfits(outfits = []) {
+  return (Array.isArray(outfits) ? outfits : []).map((outfit, index) => ({
+    ...outfit,
+    id: String(outfit.id || outfit.title || `outfit-${index}`),
+    title: String(outfit.title || 'Recommended outfit'),
+    reason: String(outfit.reason || ''),
+    sourceLabel: String(outfit.sourceLabel || (outfit.source === 'hybrid' ? 'Mixed look' : 'Wardrobe item')),
+    items: Array.isArray(outfit.items) ? outfit.items : [],
+    products: Array.isArray(outfit.products) ? outfit.products : []
+  })).filter((outfit) => outfit.id);
+}
+
+function normalizeAiStudioProducts(products = [], outfits = []) {
+  const outfitProducts = outfits.flatMap((outfit) => outfit.products || []);
+  return uniqueProductsById(normalizeProducts([...(Array.isArray(products) ? products : []), ...outfitProducts]));
 }
 
 function recentSearchStorageKey(user) {
@@ -494,7 +591,7 @@ function productImageSource(product, tryOn) {
 }
 
 function productImageResizeMode(tryOn) {
-  return tryOn?.imageUrl ? 'contain' : 'cover';
+  return 'contain';
 }
 
 function mediaUrlWithVersion(url, version) {
@@ -538,6 +635,18 @@ async function fetchProductTryOn(productId, { waitForImage = false } = {}) {
 
 function chatProductKey(product = {}) {
   return String(product?.id || product?.sourceUrl || product?.affiliateLink || product?.name || 'product');
+}
+
+function isOnlineAiStudioProduct(product = {}) {
+  const source = String([product?.source, product?.searchSource, product?.sourceLabel].filter(Boolean).join(' ')).toLowerCase();
+  if (/lookmefy|catalog/.test(source)) return false;
+  return product?.tryOnAvailable === false
+    || product?.aiTryOnAvailable === false
+    || /web|amazon|serpapi|online/.test(source);
+}
+
+function chatTryOnStateKey(messageId, product = {}) {
+  return `${String(messageId || 'message')}:${chatProductKey(product)}`;
 }
 
 function useTourTarget(targetKey, registerTourTarget, options = {}) {
@@ -594,6 +703,11 @@ function sourceSignature(source) {
   if (typeof source === 'number') return `asset:${source}`;
   if (Array.isArray(source)) return source.map(sourceSignature).join(',');
   return source.uri || JSON.stringify(source);
+}
+
+function wishlistStorageKey(user) {
+  const identity = user?.id || user?.phone || user?.email || 'guest';
+  return `lookmefy:wishlist:${wishlistStorageVersion}:${identity}`;
 }
 
 const ResilientImage = memo(function ResilientImage({ source, fallbackSource, style, imageStyle, imageBaseStyle, resizeMode = 'cover', alt, fallbackIcon = 'image-outline', fallbackText }) {
@@ -717,6 +831,163 @@ function uniqueProductsById(products = []) {
   });
 }
 
+function productDiscountPercent(product) {
+  const price = Number(product?.price || 0);
+  const compareAtPrice = Number(product?.compareAtPrice || 0);
+  if (!price || !compareAtPrice || compareAtPrice <= price) return 0;
+  return Math.round(((compareAtPrice - price) / compareAtPrice) * 100);
+}
+
+function productMetric(product, keys = []) {
+  return keys.reduce((best, key) => Math.max(best, Number(product?.[key] || 0)), 0);
+}
+
+function uniqueProductsWithImages(products = []) {
+  const seen = new Set();
+  return products.filter((product) => {
+    if (!product?.id || !product?.imageUrl || seen.has(product.id)) return false;
+    seen.add(product.id);
+    return true;
+  });
+}
+
+function productImageKey(productOrImage) {
+  const image = typeof productOrImage === 'string' ? productOrImage : productOrImage?.imageUrl;
+  return String(image || '').trim().split('?')[0].toLowerCase();
+}
+
+function pickCardProduct(productPools = [], usedImageKeys = new Set(), matcher = () => true) {
+  const pools = Array.isArray(productPools[0]) ? productPools : [productPools];
+  const candidates = uniqueProductsWithImages(pools.flat().filter(Boolean));
+  const product = candidates.find((candidate) => {
+    const key = productImageKey(candidate);
+    return key && !usedImageKeys.has(key) && matcher(candidate);
+  });
+  if (product) usedImageKeys.add(productImageKey(product));
+  return product || null;
+}
+
+function productMatchesAnyCategory(product, words = []) {
+  const text = [product?.category, product?.name, product?.tags?.join?.(' ') || product?.tags]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+  return words.some((word) => text.includes(word));
+}
+
+function stableExploreProducts(products = []) {
+  return [...products]
+    .sort((a, b) => String(a.id || a.name || '').localeCompare(String(b.id || b.name || '')))
+    .sort((a, b) => ((String(a.id || '').charCodeAt(0) || 0) % 7) - ((String(b.id || '').charCodeAt(0) || 0) % 7));
+}
+
+function fillProductRailProducts(products = [], fallbackProducts = [], minimum = 8) {
+  const primary = uniqueProductsWithImages(products);
+  if (primary.length >= minimum) return primary;
+  const seen = new Set(primary.map((product) => product.id));
+  const fillers = stableExploreProducts(fallbackProducts).filter((product) => product?.id && product?.imageUrl && !seen.has(product.id));
+  return uniqueProductsWithImages([...primary, ...fillers]).slice(0, minimum);
+}
+
+function buildHomeOfferCards({ catalogProducts = [], arrivalProducts = [], tryOnPickProducts = [], feedGender = '' }) {
+  const pricedProducts = catalogProducts.filter((product) => Number(product.price || 0) > 0);
+  const catalogProductsWithImages = uniqueProductsWithImages(catalogProducts);
+  const discountedProducts = uniqueProductsWithImages(catalogProducts)
+    .filter((product) => productDiscountPercent(product) > 0)
+    .sort((a, b) => productDiscountPercent(b) - productDiscountPercent(a));
+  const under499Products = pricedProducts.filter((product) => Number(product.price || 0) < 499);
+  const under999Products = pricedProducts.filter((product) => Number(product.price || 0) < 999);
+  const genderProducts = feedGender
+    ? catalogProducts.filter((product) => String(product.gender || '').toLowerCase() === feedGender)
+    : [];
+  const usedImageKeys = new Set();
+  const cards = [];
+  const contextText = (product) => `${product?.category || ''} ${product?.name || ''} ${Array.isArray(product?.tags) ? product.tags.join(' ') : product?.tags || ''}`;
+  const discountedProduct = pickCardProduct(discountedProducts, usedImageKeys);
+  const under499Product = pickCardProduct(under499Products, usedImageKeys);
+  const under999Product = pickCardProduct(under999Products, usedImageKeys);
+  const arrivalProduct = pickCardProduct(arrivalProducts, usedImageKeys);
+  const tryOnProduct = pickCardProduct(tryOnPickProducts, usedImageKeys);
+  const genderProduct = pickCardProduct(genderProducts, usedImageKeys);
+  const occasionProduct = pickCardProduct(
+    [arrivalProducts, catalogProductsWithImages],
+    usedImageKeys,
+    (product) => /dress|saree|gown|jumpsuit|co-ord|set|blazer|jacket|occasion|party|date|work/i.test(contextText(product))
+  ) || pickCardProduct([arrivalProducts, catalogProductsWithImages], usedImageKeys);
+
+  if (discountedProduct) cards.push({
+    id: 'deal-drop',
+    kicker: 'Top Deals',
+    title: `Up to ${productDiscountPercent(discountedProduct)}% off`,
+    copy: `${discountedProducts.length} live markdowns`,
+    cta: 'Shop now',
+    route: 'shop',
+    params: { discounted: 'true' },
+    product: discountedProduct
+  });
+  if (under499Product) cards.push({
+    id: 'under-499-offer',
+    kicker: 'Budget Edit',
+    title: 'Under ₹499',
+    copy: `${under499Products.length} catalog picks`,
+    cta: 'Explore',
+    route: 'shop',
+    params: { maxPrice: '499' },
+    product: under499Product
+  });
+  if (under999Product) cards.push({
+    id: 'under-999-offer',
+    kicker: 'Easy Prices',
+    title: 'Under ₹999',
+    copy: `${under999Products.length} styles available`,
+    cta: 'View picks',
+    route: 'shop',
+    params: { maxPrice: '999' },
+    product: under999Product
+  });
+  if (arrivalProduct) cards.push({
+    id: 'new-arrivals-offer',
+    kicker: 'Fresh Drop',
+    title: 'New arrivals',
+    copy: `${arrivalProducts.length} recent styles`,
+    cta: 'Shop new',
+    route: 'shop',
+    params: { sort: 'newest' },
+    product: arrivalProduct
+  });
+  if (tryOnProduct) cards.push({
+    id: 'ai-tryon-offer',
+    kicker: 'AI Try-On',
+    title: 'See it on you',
+    copy: `${tryOnPickProducts.length} preview-ready picks`,
+    cta: 'Try now',
+    route: 'custom',
+    params: {},
+    product: tryOnProduct
+  });
+  if (genderProduct) cards.push({
+    id: 'gender-feed-offer',
+    kicker: feedGender === 'women' ? "Women's edit" : "Men's edit",
+    title: feedGender === 'women' ? 'Curated for women' : 'Curated for men',
+    copy: `${genderProducts.length} matching styles`,
+    cta: 'Open edit',
+    route: 'shop',
+    params: { gender: feedGender },
+    product: genderProduct
+  });
+  if (occasionProduct) cards.push({
+    id: 'occasion-edit-offer',
+    kicker: 'Occasion edit',
+    title: 'Plan every look',
+    copy: 'Work, dates, weekends',
+    cta: 'Get ideas',
+    route: 'tryon',
+    params: {},
+    product: occasionProduct
+  });
+  return cards.slice(0, 6);
+}
+
 function useProducts(params, token) {
   const enabled = params?.enabled !== false;
   const fetchAll = params?.all === true;
@@ -791,6 +1062,48 @@ function useProducts(params, token) {
 
   useEffect(load, [load]);
   return { ...state, reload: load };
+}
+
+function useRecommendedProducts(user, token, limit = 8) {
+  const [state, setState] = useState({
+    products: [],
+    total: 0,
+    facets: { brands: [], categories: [], categoryCounts: [] },
+    loading: Boolean(user),
+    error: ''
+  });
+
+  useEffect(() => {
+    let alive = true;
+    if (!user) {
+      setState({ products: [], total: 0, facets: { brands: [], categories: [], categoryCounts: [] }, loading: false, error: '' });
+      return () => {
+        alive = false;
+      };
+    }
+    setState((current) => ({ ...current, loading: true, error: '' }));
+    api(`/recommendations/for-you?limit=${encodeURIComponent(limit)}`)
+      .then((data) => {
+        if (!alive) return;
+        const products = uniqueProductsById(normalizeProducts(data.products || []));
+        setState({
+          products,
+          total: data.total || products.length,
+          facets: data.facets || { brands: [], categories: [], categoryCounts: [] },
+          loading: false,
+          error: ''
+        });
+      })
+      .catch((error) => {
+        if (!alive) return;
+        setState({ products: [], total: 0, facets: { brands: [], categories: [], categoryCounts: [] }, loading: false, error: error.message });
+      });
+    return () => {
+      alive = false;
+    };
+  }, [Boolean(user), user?.id, user?._id, token, limit]);
+
+  return state;
 }
 
 function useApiState(path, token, enabled = true, emptyData = {}) {
@@ -1063,27 +1376,33 @@ function AppHeader({ onNavigate, title = 'Lookmefy', leftIcon = 'menu-outline', 
 }
 
 function BottomNav({ route = { name: 'home' }, onNavigate = () => {} }) {
+  const layout = useResponsiveLayout();
   const routeName = route?.name || 'home';
   const activeRoute = routeName === 'product' || routeName === 'wishlist' || routeName === 'search'
       ? 'shop'
-      : routeName === 'stylebot'
-        ? 'tryon'
-        : routeName;
+      : routeName;
   const items = [
     ['home', 'home-outline', 'Home'],
-    ['shop', 'search-outline', 'Categories'],
+    ['shop', 'grid-outline', 'Categories'],
     ['tryon', 'camera-outline', 'Try-On'],
     ['closet', 'shirt-outline', 'Wardrobe'],
-    ['profile', 'person-outline', 'Profile']
+    ['stylebot', 'sparkles-outline', 'AI Stylist']
   ];
   return (
-    <View style={styles.bottomNav}>
+    <View style={[styles.bottomNav, layout.isTablet && styles.bottomNavTablet, layout.contentFrameStyle]}>
       {items.map(([name, icon, label]) => {
         const active = activeRoute === name;
         return (
-          <TouchableOpacity key={name} activeOpacity={0.82} accessibilityRole="tab" accessibilityState={{ selected: active }} style={styles.navItem} onPress={() => onNavigate(name)}>
+          <TouchableOpacity
+            key={name}
+            activeOpacity={0.82}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: active }}
+            style={styles.navItem}
+            onPress={() => onNavigate(name, name === 'closet' ? { view: 'stylist' } : {})}
+          >
             <View style={[styles.navIconWrap, active && styles.navIconWrapCenter]}>
-              <Ionicons name={icon} size={active ? 13 : 12} color={active ? '#111111' : '#6f6f6f'} />
+              <Ionicons name={icon} size={active ? 20 : 21} color={active ? '#111111' : '#8d8682'} />
             </View>
             <Text style={[styles.navText, active && styles.navTextActive]}>{label}</Text>
             <View style={[styles.navActiveUnderline, active && styles.navActiveUnderlineVisible]} />
@@ -1165,9 +1484,11 @@ function SkeletonBlock({ style }) {
 }
 
 function ProductCardSkeleton({ variant = 'grid' }) {
+  const layout = useResponsiveLayout();
   const useHomeImageFrame = variant === 'homeFrame';
+  const responsiveCardStyle = variant === 'carousel' ? null : layout.productGridItemStyle;
   return (
-    <View style={[styles.productCard, styles.skeletonProductCard, useHomeImageFrame && styles.productCardHomeFrame, variant === 'carousel' && styles.productCardCarousel]}>
+    <View style={[styles.productCard, styles.skeletonProductCard, useHomeImageFrame && styles.productCardHomeFrame, responsiveCardStyle, variant === 'carousel' && styles.productCardCarousel]}>
       <View style={[styles.productImageWrap, useHomeImageFrame && styles.homeProductImageWrap]}>
         <SkeletonBlock style={styles.skeletonFill} />
       </View>
@@ -1196,9 +1517,11 @@ function HorizontalProductSkeleton({ count = 4 }) {
   );
 }
 
-function HomeProductSkeletonGrid({ count = 4 }) {
-  return Array.from({ length: count }).map((_, index) => (
-    <View key={`home-product-skeleton-${index}`} style={styles.homeProductCard}>
+function HomeProductSkeletonGrid({ count }) {
+  const layout = useResponsiveLayout();
+  const skeletonCount = count || layout.productColumns * 2;
+  return Array.from({ length: skeletonCount }).map((_, index) => (
+    <View key={`home-product-skeleton-${index}`} style={[styles.homeProductCard, layout.productGridWidthStyle]}>
       <View style={styles.homeProductImageWrap}>
         <SkeletonBlock style={styles.skeletonFill} />
       </View>
@@ -1209,11 +1532,13 @@ function HomeProductSkeletonGrid({ count = 4 }) {
   ));
 }
 
-function HomeJournalSkeletonGrid({ count = 4 }) {
+function HomeJournalSkeletonGrid({ count }) {
+  const layout = useResponsiveLayout();
+  const skeletonCount = count || layout.productColumns * 2;
   return (
     <View style={styles.homeJournalGrid}>
-      {Array.from({ length: count }).map((_, index) => (
-        <View key={`home-journal-skeleton-${index}`} style={styles.homeJournalProductCard}>
+      {Array.from({ length: skeletonCount }).map((_, index) => (
+        <View key={`home-journal-skeleton-${index}`} style={[styles.homeJournalProductCard, layout.productGridWidthStyle]}>
           <View style={styles.homeJournalImageFrame}>
             <SkeletonBlock style={styles.skeletonFill} />
           </View>
@@ -1228,11 +1553,13 @@ function HomeJournalSkeletonGrid({ count = 4 }) {
   );
 }
 
-function WardrobeGridSkeleton({ count = 4 }) {
+function WardrobeGridSkeleton({ count }) {
+  const layout = useResponsiveLayout();
+  const skeletonCount = count || layout.productColumns * 2;
   return (
     <View style={styles.closetGrid}>
-      {Array.from({ length: count }).map((_, index) => (
-        <View key={`wardrobe-skeleton-${index}`} style={styles.closetItemCard}>
+      {Array.from({ length: skeletonCount }).map((_, index) => (
+        <View key={`wardrobe-skeleton-${index}`} style={[styles.closetItemCard, layout.productGridWidthStyle]}>
           <View style={styles.closetItemImage}>
             <SkeletonBlock style={styles.skeletonFill} />
           </View>
@@ -1322,6 +1649,7 @@ function AiPreviewNote({ style }) {
 }
 
 const ProductCard = memo(function ProductCard({ product, tryOn, loading, videoLoading, error, videoError, locked, onPress, onTryOn, onTryOnVideo, onAddToWishlist, isWishlisted, variant = 'grid' }) {
+  const layout = useResponsiveLayout();
   const price = Number(product?.price);
   const hasPrice = Number.isFinite(price);
   const hasDiscount = hasPrice && product?.compareAtPrice && product.compareAtPrice > product.price;
@@ -1329,11 +1657,12 @@ const ProductCard = memo(function ProductCard({ product, tryOn, loading, videoLo
   const videoUri = imageUrl(tryOn?.videoUrl);
   const hasTryOnImage = Boolean(tryOn?.imageUrl);
   const useHomeImageFrame = variant === 'homeFrame';
+  const responsiveCardStyle = variant === 'carousel' ? null : layout.productGridItemStyle;
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={product?.title || product?.name || 'Open product'}
-      style={({ pressed }) => [styles.productCard, useHomeImageFrame && styles.productCardHomeFrame, variant === 'carousel' && styles.productCardCarousel, pressed && !locked && styles.productCardPressed, locked && styles.lockedCard]}
+      style={({ pressed }) => [styles.productCard, useHomeImageFrame && styles.productCardHomeFrame, responsiveCardStyle, variant === 'carousel' && styles.productCardCarousel, pressed && !locked && styles.productCardPressed, locked && styles.lockedCard]}
       onPress={locked ? undefined : onPress}
     >
       <View style={[styles.productImageWrap, useHomeImageFrame && styles.homeProductImageWrap]}>
@@ -1440,28 +1769,46 @@ function ProductRow({ title, state, onNavigate, user, token, onAddToWishlist, wi
 }
 
 const homeCategoryItems = [
-  { label: 'TOPS', image: 'category-generated/tops.png', params: { category: 'tops' } },
-  { label: 'BOTTOMS', image: 'category-generated/bottomwear.png', params: { category: 'bottoms' } },
-  { label: 'T-SHIRTS', image: 'category-generated/tshirts.png', params: { category: 't-shirts' } },
-  { label: 'SHOES', image: 'category-generated/sneakers.png', params: { category: 'shoes' } },
-  { label: 'EYEWEAR', image: 'category-generated/eyewear.png', params: { category: 'eyewear' } }
+  { label: 'Shirts', count: 31, image: 'category-generated/men-shirts.png', params: { category: 'shirts' } },
+  { label: 'T Shirts', count: 95, image: 'category-generated/tshirts.png', params: { category: 't-shirts' } },
+  { label: 'Dresses', count: 110, image: 'category-generated/dresses.png', params: { category: 'dresses' } },
+  { label: 'Pants', count: 79, image: 'category-generated/bottomwear.png', params: { category: 'pants' } },
+  { label: 'Jeans', count: 70, image: 'category-generated/jeans.png', params: { q: 'jeans' } },
+  { label: 'Jackets', count: 68, image: 'category-generated/jackets.png', params: { category: 'jackets' } },
+  { label: 'Shoes', count: 104, image: 'category-generated/sneakers.png', params: { category: 'shoes' } },
+  { label: 'Watches', count: 124, image: 'category-generated/watches.png', params: { category: 'watches' } },
+  { label: 'Accessories', count: 52, image: 'category-generated/accessories.png', params: { category: 'accessories' } },
+  { label: 'Ethnic Wear', count: 136, image: 'category-generated/kurti-dress-material.png', params: { category: 'ethnic wear' } },
+  { label: 'Eyewear', count: 37, image: 'category-generated/eyewear.png', params: { category: 'eyewear' } },
+  { label: 'Innerwear', count: 97, image: 'category-generated/innerwear.png', params: { category: 'innerwear' } },
+  { label: 'Sleepwear', count: 36, image: 'category-generated/sleepwear.png', params: { category: 'sleepwear' } }
 ];
 const homeCategoryItemsByGender = {
   men: [
-    { label: 'SHIRTS', image: 'category-generated/men-shirts.png', params: { category: 'shirts', gender: 'men' } },
-    { label: 'T-SHIRTS', image: 'category-generated/tshirts.png', params: { category: 't-shirts', gender: 'men' } },
-    { label: 'PANTS', image: 'category-generated/bottomwear.png', params: { category: 'pants', gender: 'men' } },
-    { label: 'SHOES', image: 'category-generated/men-footwear.png', params: { category: 'shoes', gender: 'men' } },
-    { label: 'WATCHES', image: 'category-generated/watches.png', params: { category: 'watches', gender: 'men' } },
-    { label: 'EYEWEAR', image: 'category-generated/eyewear.png', params: { category: 'eyewear', gender: 'men' } }
+    { label: 'Shirts', count: 31, image: 'category-generated/men-shirts.png', params: { category: 'shirts', gender: 'men' } },
+    { label: 'T Shirts', count: 95, image: 'category-generated/tshirts.png', params: { category: 't-shirts', gender: 'men' } },
+    { label: 'Pants', count: 79, image: 'category-generated/bottomwear.png', params: { category: 'pants', gender: 'men' } },
+    { label: 'Jeans', count: 70, image: 'category-generated/jeans.png', params: { q: 'jeans', gender: 'men' } },
+    { label: 'Jackets', count: 68, image: 'category-generated/jackets.png', params: { category: 'jackets', gender: 'men' } },
+    { label: 'Shoes', count: 104, image: 'category-generated/men-footwear.png', params: { category: 'shoes', gender: 'men' } },
+    { label: 'Watches', count: 124, image: 'category-generated/watches.png', params: { category: 'watches', gender: 'men' } },
+    { label: 'Accessories', count: 52, image: 'category-generated/accessories.png', params: { category: 'accessories', gender: 'men' } },
+    { label: 'Eyewear', count: 37, image: 'category-generated/eyewear.png', params: { category: 'eyewear', gender: 'men' } }
   ],
   women: [
-    { label: 'TOPS', image: 'category-generated/tops.png', params: { category: 'tops', gender: 'women' } },
-    { label: 'DRESSES', image: 'category-generated/dresses.png', params: { category: 'dresses', gender: 'women' } },
-    { label: 'KURTIS', image: 'category-generated/kurti-dress-material.png', params: { q: 'kurti', gender: 'women' } },
-    { label: 'SAREES', image: 'category-generated/saree.png', params: { q: 'saree', gender: 'women' } },
-    { label: 'SHOES', image: 'category-generated/women-footwear.png', params: { category: 'shoes', gender: 'women' } },
-    { label: 'JEWELLERY', image: 'category-generated/jewellery.png', params: { category: 'accessories', gender: 'women' } }
+    { label: 'Shirts', count: 31, image: 'category-generated/men-shirts.png', params: { category: 'shirts', gender: 'women' } },
+    { label: 'T Shirts', count: 95, image: 'category-generated/tshirts.png', params: { category: 't-shirts', gender: 'women' } },
+    { label: 'Dresses', count: 110, image: 'category-generated/dresses.png', params: { category: 'dresses', gender: 'women' } },
+    { label: 'Pants', count: 79, image: 'category-generated/bottomwear.png', params: { category: 'pants', gender: 'women' } },
+    { label: 'Jeans', count: 70, image: 'category-generated/jeans.png', params: { q: 'jeans', gender: 'women' } },
+    { label: 'Jackets', count: 68, image: 'category-generated/jackets.png', params: { category: 'jackets', gender: 'women' } },
+    { label: 'Shoes', count: 104, image: 'category-generated/women-footwear.png', params: { category: 'shoes', gender: 'women' } },
+    { label: 'Watches', count: 124, image: 'category-generated/watches.png', params: { category: 'watches', gender: 'women' } },
+    { label: 'Accessories', count: 52, image: 'category-generated/accessories.png', params: { category: 'accessories', gender: 'women' } },
+    { label: 'Ethnic Wear', count: 136, image: 'category-generated/kurti-dress-material.png', params: { q: 'ethnic wear', gender: 'women' } },
+    { label: 'Eyewear', count: 37, image: 'category-generated/eyewear.png', params: { category: 'eyewear', gender: 'women' } },
+    { label: 'Innerwear', count: 97, image: 'category-generated/innerwear.png', params: { category: 'innerwear', gender: 'women' } },
+    { label: 'Sleepwear', count: 36, image: 'category-generated/sleepwear.png', params: { category: 'sleepwear', gender: 'women' } }
   ]
 };
 
@@ -1609,12 +1956,28 @@ const categoryPageContent = {
     ]
   }
 };
-const homeProductFeedPageSize = 96;
+const homeProductFeedPageSize = 48;
 const shopProductGridLimit = 50;
 const searchQuickSuggestions = ['short kurti', 'saree', 'kurti', 'tshirt', 'earring', 'top for women', 'slipper', 'watch', 'top', 'kurti set', 'shoes', 'eyewear'];
 
-function ShopTopBar({ onNavigate, user }) {
-  return <AppHeader onNavigate={onNavigate} user={user} compact />;
+function PageBackRow({ onBack }) {
+  if (!onBack) return null;
+  return (
+    <View style={styles.pageBackRow}>
+      <TouchableOpacity accessibilityRole="button" accessibilityLabel="Go back" activeOpacity={0.86} style={styles.pageBackButton} onPress={onBack}>
+        <Ionicons name="chevron-back" size={21} color="#111111" />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function ShopTopBar({ onNavigate, user, onBack }) {
+  return (
+    <>
+      <AppHeader onNavigate={onNavigate} user={user} compact />
+      <PageBackRow onBack={onBack} />
+    </>
+  );
 }
 
 function CategoryBubble({ item, size = 'large', active = false }) {
@@ -1634,15 +1997,16 @@ function CategoryBubble({ item, size = 'large', active = false }) {
   );
 }
 
-function CategoryLandingScreen({ selectedCategory, onSelectCategory, onNavigate, user }) {
+function CategoryLandingScreen({ selectedCategory, onSelectCategory, onNavigate, onBack, user }) {
+  const layout = useResponsiveLayout();
   const content = categoryPageContent[selectedCategory] || categoryPageContent.popular;
   const openTile = (item) => onNavigate('shop', item.params || { sort: 'newest' });
 
   return (
     <View style={styles.categoryScreen}>
-      <ShopTopBar onNavigate={onNavigate} user={user} />
+      <ShopTopBar onNavigate={onNavigate} user={user} onBack={onBack} />
       <View style={styles.categoryBrowser}>
-        <ScrollView style={styles.categoryRail} contentContainerStyle={styles.categoryRailContent} showsVerticalScrollIndicator={false}>
+        <ScrollView style={[styles.categoryRail, layout.isTablet && styles.categoryRailTablet]} contentContainerStyle={[styles.categoryRailContent, layout.isTablet && styles.categoryRailContentTablet]} showsVerticalScrollIndicator={false}>
           {categoryRailItems.map((item) => {
             const active = item.key === selectedCategory;
             return (
@@ -1662,16 +2026,16 @@ function CategoryLandingScreen({ selectedCategory, onSelectCategory, onNavigate,
           })}
         </ScrollView>
 
-        <ScrollView style={styles.categoryMain} contentContainerStyle={styles.categoryMainContent} showsVerticalScrollIndicator={false}>
+        <ScrollView style={styles.categoryMain} contentContainerStyle={[styles.categoryMainContent, layout.isTablet && styles.categoryMainContentTablet]} showsVerticalScrollIndicator={false}>
           <View style={styles.categoryKickerRow}>
             <Text style={styles.categoryKicker}>{content.kicker}</Text>
             <View style={styles.categoryKickerLine} />
           </View>
           <Text style={styles.categoryHeadline}>{content.title}</Text>
 
-          <View style={styles.categoryTileGrid}>
+          <View style={[styles.categoryTileGrid, layout.isTablet && styles.categoryTileGridTablet]}>
             {content.featured.map((item) => (
-              <TouchableOpacity key={`${content.kicker}-${item.label}`} accessibilityRole="button" activeOpacity={0.86} style={styles.categoryTile} onPress={() => openTile(item)}>
+              <TouchableOpacity key={`${content.kicker}-${item.label}`} accessibilityRole="button" activeOpacity={0.86} style={[styles.categoryTile, layout.categoryTileStyle]} onPress={() => openTile(item)}>
                 <CategoryBubble item={item} />
                 <Text style={styles.categoryTileLabel} numberOfLines={2}>{item.label}</Text>
               </TouchableOpacity>
@@ -1679,9 +2043,9 @@ function CategoryLandingScreen({ selectedCategory, onSelectCategory, onNavigate,
           </View>
 
           <Text style={styles.categorySectionTitle}>{content.sectionTitle}</Text>
-          <View style={styles.categoryTileGrid}>
+          <View style={[styles.categoryTileGrid, layout.isTablet && styles.categoryTileGridTablet]}>
             {content.items.map((item) => (
-              <TouchableOpacity key={`${content.sectionTitle}-${item.label}`} accessibilityRole="button" activeOpacity={0.86} style={styles.categoryTile} onPress={() => openTile(item)}>
+              <TouchableOpacity key={`${content.sectionTitle}-${item.label}`} accessibilityRole="button" activeOpacity={0.86} style={[styles.categoryTile, layout.categoryTileStyle]} onPress={() => openTile(item)}>
                 <CategoryBubble item={item} />
                 <Text style={styles.categoryTileLabel} numberOfLines={2}>{item.label}</Text>
               </TouchableOpacity>
@@ -1693,209 +2057,102 @@ function CategoryLandingScreen({ selectedCategory, onSelectCategory, onNavigate,
   );
 }
 
-function CurationProductCard({ product, onPress, onAddToWishlist, isWishlisted }) {
+function CurationProductCard({ product, onPress, onAddToWishlist, isWishlisted, rail = false }) {
+  const layout = useResponsiveLayout();
   const price = Number(product.price);
+  const discount = productDiscountPercent(product);
   return (
-    <TouchableOpacity style={styles.homeProductCard} onPress={onPress}>
+    <TouchableOpacity style={[styles.homeProductCard, rail && styles.homeProductCardRail, !rail && layout.productGridWidthStyle]} onPress={onPress}>
       <View style={styles.homeProductImageWrap}>
         <ProductImage product={product} style={styles.homeProductImage} alt={product.title || product.name} />
-        {product.isNew ? <Text style={styles.homeNewBadge}>NEW</Text> : null}
+        {discount ? <Text style={styles.homeDealBadge}>{discount}% OFF</Text> : product.isNew ? <Text style={styles.homeNewBadge}>NEW</Text> : null}
         {onAddToWishlist ? <WishlistDoneButton saved={isWishlisted} compact onPress={() => onAddToWishlist(product)} /> : null}
       </View>
       <Text style={styles.homeProductEyebrow} numberOfLines={1}>{product.displayLabel || titleCase(product.category || 'Catalog')}</Text>
       <Text style={styles.homeProductTitle} numberOfLines={2}>{product.title || product.name}</Text>
-      <Text style={styles.homeProductPrice}>{Number.isFinite(price) ? formatMoney(price, product.currency) : 'Price unavailable'}</Text>
-    </TouchableOpacity>
-  );
-}
-
-function productMixKey(product = {}, index = 0) {
-  const seed = String(product.id || product._id || product.title || product.name || index);
-  let hash = 0;
-  for (let i = 0; i < seed.length; i += 1) {
-    hash = ((hash << 5) - hash + seed.charCodeAt(i)) | 0;
-  }
-  return Math.abs(hash * 2654435761);
-}
-
-function productMixCategory(product = {}) {
-  const text = `${product.category || ''} ${product.title || ''} ${product.name || ''}`.toLowerCase();
-  if (/shoe|sneaker|boot|sandal|slipper|footwear/.test(text)) return 'footwear';
-  if (/accessor|jewel|earring|necklace|bracelet|watch|belt|tie|necktie|bag|purse|eyewear|glass|sunglass|cap|hat|wallet/.test(text)) return 'accessories';
-  if (/jean|pant|trouser|bottom|short/.test(text)) return 'bottoms';
-  if (/dress|saree|kurti|ethnic/.test(text)) return 'dresses';
-  if (/jacket|blazer|coat|suit|outerwear/.test(text)) return 'outerwear';
-  if (/shirt|tee|t-shirt|top|sweater|hoodie/.test(text)) return 'tops';
-  return product.category || 'other';
-}
-
-function mixedProducts(products = []) {
-  const seen = new Set();
-  const grouped = new Map();
-  products
-    .filter((product) => {
-      const id = product?.id || product?._id || product?.title || product?.name;
-      if (!id || seen.has(id)) return false;
-      seen.add(id);
-      return product?.imageUrl || product?.imageUrls?.length;
-    })
-    .forEach((product, index) => {
-      const category = productMixCategory(product);
-      if (!grouped.has(category)) grouped.set(category, []);
-      grouped.get(category).push({ product, sortKey: productMixKey(product, index) });
-    });
-
-  const groups = Array.from(grouped.entries())
-    .map(([category, items]) => ({
-      category,
-      items: items.sort((left, right) => left.sortKey - right.sortKey),
-      sortKey: productMixKey({ id: category }, grouped.size)
-    }))
-    .sort((left, right) => left.sortKey - right.sortKey);
-
-  const mixed = [];
-  let added = true;
-  while (added) {
-    added = false;
-    groups.forEach((group) => {
-      const next = group.items.shift();
-      if (next) {
-        mixed.push(next.product);
-        added = true;
-      }
-    });
-  }
-  return mixed;
-}
-
-function HomeLookCard({ product, fallbackImage, title, meta, onPress }) {
-  return (
-    <TouchableOpacity style={styles.homeLookCard} activeOpacity={0.88} onPress={onPress}>
-      <View style={styles.homeLookImageWrap}>
-        {product ? (
-          <ProductImage product={product} style={styles.homeLookImage} resizeMode="cover" alt={product.title || product.name} />
-        ) : (
-          <Image source={fallbackImage} style={styles.homeLookImage} resizeMode="cover" />
-        )}
-      </View>
-      <View style={styles.homeLookBody}>
-        <View style={styles.homeLookTextBlock}>
-          <Text style={styles.homeLookTitle} numberOfLines={1}>{title}</Text>
-          <Text style={styles.homeLookMeta} numberOfLines={1}>{meta}</Text>
-        </View>
-        <Ionicons name="chevron-forward" size={22} color="#34302e" />
+      <View style={styles.homeProductPriceRow}>
+        <Text style={styles.homeProductPrice}>{Number.isFinite(price) ? formatMoney(price, product.currency) : 'Price unavailable'}</Text>
+        {discount && Number.isFinite(Number(product.compareAtPrice)) ? <Text style={styles.homeProductComparePrice}>{formatMoney(product.compareAtPrice, product.currency)}</Text> : null}
       </View>
     </TouchableOpacity>
   );
 }
 
-function HomeWardrobeTile({ item, onPress }) {
+function HomeOfferCards({ offers = [], onNavigate }) {
+  const layout = useResponsiveLayout();
+  if (!offers.length) return null;
   return (
-    <TouchableOpacity style={styles.homeWardrobeTile} activeOpacity={0.86} onPress={onPress}>
-      <View style={styles.homeWardrobeImageWrap}>
-        <Image source={images[item.image]} style={styles.homeWardrobeImage} resizeMode="contain" />
-      </View>
-      <Text style={styles.homeWardrobeLabel} numberOfLines={1}>{item.label}</Text>
-    </TouchableOpacity>
-  );
-}
-
-function HomeTryOnProductCard({ product, fallbackImage, fallbackTitle, fallbackPrice, onPress, onTryOn, onAddToWishlist, isWishlisted, grid }) {
-  const price = Number(product?.price);
-  return (
-    <TouchableOpacity style={[styles.homeTryOnCard, grid && styles.homeTryOnGridCard]} activeOpacity={0.88} onPress={onPress || onTryOn}>
-      <View style={[styles.homeTryOnImageWrap, grid && styles.homeTryOnGridImageWrap]}>
-        {product ? (
-          <ProductImage product={product} style={styles.homeTryOnImage} alt={product.title || product.name} />
-        ) : (
-          <Image source={fallbackImage} style={styles.homeTryOnImage} resizeMode="cover" />
-        )}
-      </View>
-      <Text style={styles.homeTryOnTitle} numberOfLines={2}>{product?.title || product?.name || fallbackTitle}</Text>
-      <Text style={styles.homeTryOnPrice}>{product ? (Number.isFinite(price) ? formatMoney(price, product.currency) : 'Price unavailable') : fallbackPrice}</Text>
-      <View style={styles.homeTryOnActions}>
-        <TouchableOpacity style={styles.homeTryOnButton} activeOpacity={0.86} onPress={onTryOn || onPress}>
-          <Ionicons name="shirt-outline" size={16} color="#ffffff" />
-          <Text style={styles.homeTryOnButtonText}>Try On</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          accessibilityRole="button"
-          accessibilityLabel={isWishlisted ? 'Remove product from wishlist' : 'Add product to wishlist'}
-          style={styles.homeTryOnHeart}
-          activeOpacity={0.84}
-          onPress={(event) => {
-            event?.stopPropagation?.();
-            if (product) onAddToWishlist?.(product);
-          }}
-        >
-          <Ionicons name={isWishlisted ? 'heart' : 'heart-outline'} size={21} color="#111111" />
-        </TouchableOpacity>
-      </View>
-    </TouchableOpacity>
-  );
-}
-
-function HomeHeroShowcase() {
-  const progress = useRef(new Animated.Value(0)).current;
-  const slideCount = homeHeroShowcaseSlides.length;
-
-  useEffect(() => {
-    progress.setValue(0);
-    const animation = Animated.loop(
-      Animated.timing(progress, {
-        toValue: slideCount,
-        duration: homeHeroSlideIntervalMs * slideCount,
-        useNativeDriver: true
-      })
-    );
-    animation.start();
-    return () => animation.stop();
-  }, [progress, slideCount]);
-
-  return (
-    <View style={styles.homeHeroRightPane} pointerEvents="box-none">
-      {homeHeroShowcaseSlides.map((slide, index) => {
-        const inputRange = [
-          index - 1,
-          index - 0.1,
-          index,
-          index + 0.82,
-          index + 1,
-          index + 1.1
-        ];
-        const firstSlideInputRange = index === 0
-          ? [0, 0.82, 1, slideCount - 0.18, slideCount, slideCount + 0.1]
-          : inputRange;
-        const opacity = progress.interpolate({
-          inputRange: firstSlideInputRange,
-          outputRange: index === 0 ? [1, 1, 0, 0, 1, 1] : [0, 0, 1, 1, 0, 0],
-          extrapolate: 'clamp'
-        });
-        const translateX = progress.interpolate({
-          inputRange: firstSlideInputRange,
-          outputRange: index === 0 ? [0, 0, -14, 16, 0, 0] : [16, 16, 0, 0, -14, -14],
-          extrapolate: 'clamp'
-        });
-        const translateY = progress.interpolate({
-          inputRange: firstSlideInputRange,
-          outputRange: index === 0 ? [0, 0, 6, -8, 0, 0] : [-8, -8, 0, 0, 6, 6],
-          extrapolate: 'clamp'
-        });
-        return (
-          <Animated.View key={slide.key} pointerEvents="none" style={[styles.homeHeroVisualLayer, { opacity, transform: [{ translateX }] }]}>
-            <Image source={slide.model} style={styles.homeHeroModel} resizeMode="cover" />
-            <View style={styles.homeHeroGarmentPanel} pointerEvents="none">
-              <Animated.Image source={slide.garment} style={[styles.homeHeroGarment, { opacity, transform: [{ translateY }] }]} resizeMode="contain" />
+    <View style={styles.homeOfferSection}>
+      <ScrollView {...horizontalScrollProps} contentContainerStyle={[styles.homeOfferTrack, layout.isTablet && styles.homeOfferTrackTablet]}>
+        {offers.map((offer) => (
+          <TouchableOpacity
+            key={offer.id}
+            activeOpacity={0.88}
+            accessibilityRole="button"
+            accessibilityLabel={`${offer.title}. ${offer.cta}`}
+            style={[styles.homeOfferCard, layout.isTablet && styles.homeOfferCardTablet]}
+            onPress={() => onNavigate(offer.route, offer.params || {})}
+          >
+            <View style={styles.homeOfferCopy}>
+              <Text style={styles.homeOfferKicker} numberOfLines={1}>{offer.kicker}</Text>
+              <Text style={styles.homeOfferTitle} numberOfLines={2}>{offer.title}</Text>
+              <Text style={styles.homeOfferText} numberOfLines={1}>{offer.copy}</Text>
+              <Text style={styles.homeOfferCta} numberOfLines={1}>{offer.cta}</Text>
             </View>
-          </Animated.View>
-        );
-      })}
+            <View style={styles.homeOfferImageWrap}>
+              <ProductImage product={offer.product} style={styles.homeOfferImage} resizeMode="cover" alt="" />
+            </View>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
     </View>
   );
 }
 
-function ProductTopBar({ onNavigate, user }) {
-  return <AppHeader onNavigate={onNavigate} user={user} compact />;
+function HomeProductRail({ title, subtitle, products = [], loading, error, viewParams = {}, onNavigate, onAddToWishlist, wishlistIds }) {
+  const visibleProducts = uniqueProductsWithImages(products).slice(0, 8);
+  if (!loading && !error && !visibleProducts.length) return null;
+  return (
+    <View style={styles.homeCommerceSection}>
+      <View style={styles.homeCommerceHead}>
+        <View style={styles.homeCommerceTitleWrap}>
+          <Text style={styles.homeCommerceTitle}>{title}</Text>
+          {subtitle ? <Text style={styles.homeCommerceSubtitle}>{subtitle}</Text> : null}
+        </View>
+        <TouchableOpacity style={styles.homeCommerceViewAll} activeOpacity={0.78} onPress={() => onNavigate('shop', viewParams)}>
+          <Text style={styles.homeCommerceViewAllText}>VIEW ALL</Text>
+          <Ionicons name="arrow-forward" size={13} color="#1f1b19" />
+        </TouchableOpacity>
+      </View>
+      {loading ? (
+        <HorizontalProductSkeleton count={4} />
+      ) : error || !visibleProducts.length ? (
+        <StatusPanel error={error} empty={!visibleProducts.length} text="No products found yet." />
+      ) : (
+        <ScrollView {...horizontalScrollProps} contentContainerStyle={styles.homeCommerceTrack}>
+          {visibleProducts.map((product) => (
+            <CurationProductCard
+              rail
+              key={`${title}-${product.id}`}
+              product={product}
+              onPress={() => onNavigate('product', { id: product.id })}
+              onAddToWishlist={onAddToWishlist}
+              isWishlisted={wishlistIds?.has(product.id)}
+            />
+          ))}
+        </ScrollView>
+      )}
+    </View>
+  );
+}
+
+function ProductTopBar({ onNavigate, user, onBack }) {
+  return (
+    <>
+      <AppHeader onNavigate={onNavigate} user={user} compact />
+      <PageBackRow onBack={onBack} />
+    </>
+  );
 }
 
 function ProductActionButton({ label, icon, active, disabled, onPress }) {
@@ -1923,14 +2180,23 @@ function CompleteLookCard({ product, fallback, onPress, onAddToWishlist, isWishl
   );
 }
 
-function ConciergeSuggestionCard({ product, fallback, featured, onShop, onTryOn, onPreview, tryOn, tryOnLoading, tryOnError, actionLabel = 'Generate Try-On' }) {
+function ConciergeSuggestionCard({ product, fallback, featured, onOpenProduct, onShop, onTryOn, onPreview, tryOn, tryOnLoading, tryOnError, actionLabel = 'Generate Try-On' }) {
   const source = product ? productImageSource(product) : images[fallback.image];
   const price = Number(product?.price);
-  const canPreview = Boolean(tryOn?.imageUrl && onPreview);
-  const handleCardPress = canPreview ? onPreview : (onTryOn || onShop);
+  const handleCardPress = onOpenProduct || onShop;
+  const handleImagePress = onPreview || handleCardPress;
+  const onlineProduct = isOnlineAiStudioProduct(product);
+  const sourceLabel = onlineProduct ? 'Amazon result' : product?.sourceLabel || (product?.source === 'wardrobe' ? 'Wardrobe item' : product?.source ? 'Lookmefy catalog' : '');
+  const externalUrl = product?.affiliateLink || product?.sourceUrl;
   return (
-    <TouchableOpacity style={styles.conciergeSuggestionCard} activeOpacity={0.88} onPress={handleCardPress}>
-      <View style={styles.conciergeSuggestionImageWrap}>
+    <View style={styles.conciergeSuggestionCard}>
+      <TouchableOpacity
+        style={styles.conciergeSuggestionImageWrap}
+        activeOpacity={0.88}
+        accessibilityRole="button"
+        accessibilityLabel={tryOn?.imageUrl ? `View AI preview for ${product?.title || product?.name || 'product'}` : `View product photo for ${product?.title || product?.name || fallback?.name || 'product'}`}
+        onPress={handleImagePress}
+      >
         {product ? <ProductImage product={product} tryOn={tryOn} style={styles.conciergeSuggestionImage} alt={product.title || product.name} /> : <ResilientImage source={source} fallbackSource={images.hero} style={styles.conciergeSuggestionImage} resizeMode="cover" fallbackIcon="shirt-outline" />}
         {tryOn?.imageUrl ? <Text style={styles.badge}>AI Try-On</Text> : null}
         {tryOnLoading ? <TryOnLoading text="Generating" /> : null}
@@ -1939,174 +2205,336 @@ function ConciergeSuggestionCard({ product, fallback, featured, onShop, onTryOn,
             <Ionicons name="sparkles" size={24} color="#050505" />
           </TouchableOpacity>
         ) : null}
-      </View>
+      </TouchableOpacity>
       <View style={styles.conciergeSuggestionBody}>
-        <Text style={styles.conciergeSuggestionBrand} numberOfLines={1}>{product?.displayLabel || fallback?.brand}</Text>
-        <Text style={styles.conciergeSuggestionName} numberOfLines={2}>{product?.title || product?.name || fallback?.name}</Text>
-        <Text style={styles.conciergeSuggestionPrice}>{product ? (Number.isFinite(price) ? formatMoney(price, product.currency) : 'Price unavailable') : fallback?.price}</Text>
+        <TouchableOpacity
+          activeOpacity={0.82}
+          accessibilityRole="button"
+          accessibilityLabel={`Open product details for ${product?.title || product?.name || fallback?.name || 'product'}`}
+          onPress={handleCardPress}
+        >
+          {sourceLabel ? <Text style={styles.conciergeSourceBadge} numberOfLines={1}>{sourceLabel}</Text> : null}
+          <Text style={styles.conciergeSuggestionBrand} numberOfLines={1}>{product?.displayLabel || fallback?.brand}</Text>
+          <Text style={styles.conciergeSuggestionName} numberOfLines={2}>{product?.title || product?.name || fallback?.name}</Text>
+          <Text style={styles.conciergeSuggestionPrice}>{product ? (Number.isFinite(price) ? formatMoney(price, product.currency) : 'Price unavailable') : fallback?.price}</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={[styles.conciergeShopButton, tryOnLoading && styles.disabledButton]} disabled={tryOnLoading} onPress={onTryOn || onShop}>
           <Text style={styles.conciergeShopText}>{tryOnLoading ? 'Generating...' : actionLabel}</Text>
         </TouchableOpacity>
         {tryOn?.imageUrl ? <AiPreviewNote /> : null}
         {tryOnError ? <Text style={styles.errorText}>{tryOnError}</Text> : null}
-        {product?.affiliateLink && onShop ? (
+        {externalUrl && onShop && onTryOn ? (
           <TouchableOpacity style={styles.conciergeExternalLink} onPress={onShop}>
-            <Text style={styles.conciergeExternalLinkText}>View on Amazon</Text>
+            <Text style={styles.conciergeExternalLinkText}>{product?.searchLink ? 'Open search' : 'View on Amazon'}</Text>
           </TouchableOpacity>
         ) : null}
       </View>
-    </TouchableOpacity>
+    </View>
+  );
+}
+
+function AiStudioOutfitCard({ outfit }) {
+  const items = Array.isArray(outfit?.items) ? outfit.items : [];
+  return (
+    <View style={styles.aiOutfitCard}>
+      <View style={styles.aiOutfitHead}>
+        <Text style={styles.aiOutfitTitle} numberOfLines={2}>{outfit?.title || 'Recommended outfit'}</Text>
+        {outfit?.sourceLabel ? <Text style={styles.aiOutfitSource} numberOfLines={1}>{outfit.sourceLabel}</Text> : null}
+      </View>
+      {outfit?.reason ? <Text style={styles.aiOutfitReason}>{outfit.reason}</Text> : null}
+      {items.length ? (
+        <ScrollView {...horizontalScrollProps} contentContainerStyle={styles.aiOutfitItems}>
+          {items.map((item) => (
+            <View style={styles.aiOutfitItem} key={item.id || item.name}>
+              {item.imageUrl ? (
+                <Image source={{ uri: imageUrl(item.imageUrl) }} style={styles.aiOutfitItemImage} resizeMode="cover" />
+              ) : (
+                <View style={styles.aiOutfitItemFallback}>
+                  <Ionicons name="shirt-outline" size={20} color="#9b5658" />
+                </View>
+              )}
+              <Text style={styles.aiOutfitItemName} numberOfLines={2}>{item.name || 'Wardrobe item'}</Text>
+              <Text style={styles.aiOutfitItemMeta} numberOfLines={1}>{[item.category, item.color].filter(Boolean).join(' · ') || 'Wardrobe'}</Text>
+            </View>
+          ))}
+        </ScrollView>
+      ) : null}
+    </View>
   );
 }
 
 function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, registerTourTarget, tourFocusRequest }) {
+  const layout = useResponsiveLayout();
+  const homeHeroWidth = Math.max(1, layout.contentWidth - 32);
+  const homeHeroHeight = layout.isTablet ? Math.min(320, Math.max(220, Math.round(homeHeroWidth * 0.32))) : 184;
+  const heroCarouselRef = useRef(null);
   const homeScrollRef = useRef(null);
+  const [heroIndex, setHeroIndex] = useState(0);
   const preferredGender = productGenderForUser(user);
-  const curated = useProducts({ sort: 'newest', limit: homeProductFeedPageSize, all: true }, token);
+  const preferredHomeCategories = homeCategoryItemsByGender[preferredGender] || homeCategoryItems;
+  const curated = useProducts({ sort: 'newest', limit: homeProductFeedPageSize, gender: preferredGender }, token);
+  const recommended = useRecommendedProducts(user, token, 16);
   const shopLookQuery = preferredGender === 'women'
-    ? { gender: 'women', sort: 'newest', limit: 24 }
+    ? { category: 'dresses', gender: 'women', sort: 'newest', limit: 8 }
     : preferredGender === 'men'
-      ? { gender: 'men', sort: 'newest', limit: 24 }
-      : { sort: 'newest', limit: 24 };
+      ? { gender: 'men', sort: 'newest', limit: 8 }
+      : { sort: 'newest', limit: 8 };
   const shopLooks = useProducts(shopLookQuery, token);
-  const curatedProducts = curated.products;
-  const shopLookProducts = shopLooks.products.filter((product) => product.imageUrl || product.imageUrls?.length);
-  const recommendedProducts = useMemo(() => mixedProducts([...curatedProducts, ...shopLookProducts]), [curatedProducts, shopLookProducts]);
-  const continueLooks = [
-    {
-      title: preferredGender === 'men' ? 'Tailored Day Look' : 'Casual Day Look',
-      meta: '3 items  -  2 days ago',
-      product: null,
-      fallbackImage: images.homeSliderNaturalLight
-    },
-    {
-      title: 'Denim Vibes',
-      meta: '4 items  -  4 days ago',
-      product: null,
-      fallbackImage: images.homeSliderArchway
-    }
-  ];
-  const wardrobeItems = [
-    { label: 'Black Shirt', image: 'category-generated/men-shirts.png', params: { category: 'shirts', gender: preferredGender } },
-    { label: 'Denim Jacket', image: 'category-generated/jackets.png', params: { category: 'jackets', gender: preferredGender } },
-    { label: 'White Tee', image: 'category-generated/tshirts.png', params: { category: 't-shirts', gender: preferredGender } },
-    { label: 'Black Trousers', image: 'category-generated/bottomwear.png', params: { category: 'bottoms', gender: preferredGender } }
-  ];
-  const fallbackTryOnProducts = [
-    ['Oversized Blazer', '$129', images['category-generated/jackets.png']],
-    ['Satin Midi Dress', '$89', images['category-generated/dresses.png']],
-    ['Knit Sweater', '$79', images['category-generated/tops.png']]
-  ];
+  const catalogProducts = useMemo(() => uniqueProductsWithImages(curated.products), [curated.products]);
+  const arrivalProducts = useMemo(() => {
+    const newArrivalProducts = catalogProducts.filter((product) => product.isNew);
+    return [...newArrivalProducts, ...catalogProducts.filter((product) => !product.isNew)].slice(0, 8);
+  }, [catalogProducts]);
+  const tryOnPickProducts = useMemo(() => (
+    catalogProducts
+      .filter((product) => !arrivalProducts.some((arrival) => arrival.id === product.id))
+      .slice(0, 8)
+  ), [arrivalProducts, catalogProducts]);
+  const recommendedProducts = useMemo(
+    () => fillProductRailProducts(recommended.products, catalogProducts),
+    [recommended.products, catalogProducts]
+  );
+  const homeOffers = useMemo(
+    () => buildHomeOfferCards({ catalogProducts, arrivalProducts, tryOnPickProducts, feedGender: preferredGender }),
+    [arrivalProducts, catalogProducts, preferredGender, tryOnPickProducts]
+  );
+  const commerceSections = useMemo(() => {
+    const pricedProducts = catalogProducts.filter((product) => Number(product.price || 0) > 0);
+    const byDiscount = uniqueProductsWithImages(catalogProducts)
+      .filter((product) => productDiscountPercent(product) > 0)
+      .sort((a, b) => productDiscountPercent(b) - productDiscountPercent(a));
+    const byRating = uniqueProductsWithImages(catalogProducts)
+      .filter((product) => Number(product.rating || 0) > 0)
+      .sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0));
+    const bestSellers = uniqueProductsWithImages(catalogProducts)
+      .filter((product) => productMetric(product, ['soldCount', 'salesCount', 'orderCount', 'orders']) > 0)
+      .sort((a, b) => productMetric(b, ['soldCount', 'salesCount', 'orderCount', 'orders']) - productMetric(a, ['soldCount', 'salesCount', 'orderCount', 'orders']));
+    return [
+      {
+        id: 'top-deals',
+        title: 'Top Deals',
+        subtitle: 'Live markdowns from the catalog',
+        products: fillProductRailProducts(byDiscount, catalogProducts),
+        loading: curated.loading,
+        error: curated.error,
+        viewParams: { discounted: 'true' }
+      },
+      {
+        id: 'under-499',
+        title: 'Under ₹499',
+        subtitle: 'Budget-friendly finds',
+        products: fillProductRailProducts(pricedProducts.filter((product) => Number(product.price || 0) < 499), catalogProducts),
+        loading: curated.loading,
+        error: curated.error,
+        viewParams: { maxPrice: '499' }
+      },
+      {
+        id: 'under-999',
+        title: 'Under ₹999',
+        subtitle: 'More styles at easy prices',
+        products: fillProductRailProducts(pricedProducts.filter((product) => Number(product.price || 0) < 999), catalogProducts),
+        loading: curated.loading,
+        error: curated.error,
+        viewParams: { maxPrice: '999' }
+      },
+      {
+        id: 'top-rated',
+        title: 'Top Rated',
+        subtitle: 'Highest rated catalog products',
+        products: fillProductRailProducts(byRating, catalogProducts),
+        loading: curated.loading,
+        error: curated.error,
+        viewParams: preferredGender ? { gender: preferredGender, sort: 'newest' } : { sort: 'newest' }
+      },
+      {
+        id: 'best-sellers',
+        title: 'Best Sellers',
+        subtitle: 'Ranked from available sales data',
+        products: fillProductRailProducts(bestSellers, catalogProducts),
+        loading: curated.loading,
+        error: curated.error,
+        viewParams: preferredGender ? { gender: preferredGender } : {}
+      }
+    ].filter((section) => section.loading || uniqueProductsWithImages(section.products).length >= 4);
+  }, [catalogProducts, curated.error, curated.loading, preferredGender, recommended.error, recommended.loading, recommendedProducts]);
+  const lookCategories = preferredGender === 'men'
+    ? new Set(['shirts', 't-shirts', 'pants', 'jeans', 'jackets', 'suits', 'shoes'])
+    : preferredGender === 'women'
+      ? new Set(['dresses', 'tops', 'ethnic wear', 'ethnic', 'shoes', 'accessories', 'jeans', 't-shirts'])
+      : null;
+  const shopLookProducts = shopLooks.products.filter((product) => (!lookCategories || lookCategories.has(product.category)) && (product.imageUrl || product.imageUrls?.length));
+  const lookLabels = preferredGender === 'men'
+    ? ['Office Sharp', 'Weekend Fit', 'Denim Day', 'Sneaker Edit', 'Layered Look', 'Evening Ready']
+    : ['Dinner Ready', 'Soft Floral', 'Denim Day', 'Party Edit', 'Vacation', 'Weekend'];
+  const homeCurationTitle = preferredGender === 'men' ? "Men's New Arrivals" : preferredGender === 'women' ? "Women's New Arrivals" : 'Curated New Arrivals';
+  const journalTitle = preferredGender === 'men' ? "Men's Style Edit" : 'Shop by Look';
+  const journalKicker = preferredGender === 'men' ? 'MENSWEAR EDIT' : 'DRESS EDIT';
+  const journalIntro = preferredGender === 'men'
+    ? 'Sharp menswear picks from the live catalog, selected for quick outfit discovery.'
+    : preferredGender === 'women'
+      ? 'Real dress picks from the live catalog, selected for quick outfit discovery.'
+      : 'Live catalog picks selected for quick outfit discovery.';
+  const journalViewParams = preferredGender === 'women'
+    ? { category: 'dresses', gender: 'women' }
+    : preferredGender === 'men'
+      ? { gender: 'men', sort: 'newest' }
+      : { sort: 'newest' };
   const catalogTourTarget = useTourTarget('home-catalog', registerTourTarget, { request: tourFocusRequest, scrollRef: homeScrollRef, scrollOffset: 92 });
+  const handleHeroMomentumEnd = useCallback((event) => {
+    const nextIndex = Math.round(event.nativeEvent.contentOffset.x / homeHeroWidth);
+    setHeroIndex(Math.min(homeHeroSlides.length - 1, Math.max(0, nextIndex)));
+  }, [homeHeroWidth]);
+
+  useEffect(() => {
+    if (homeHeroSlides.length < 2) return undefined;
+    const timer = setInterval(() => {
+      setHeroIndex((currentIndex) => {
+        const nextIndex = (currentIndex + 1) % homeHeroSlides.length;
+        heroCarouselRef.current?.scrollTo({ x: nextIndex * homeHeroWidth, animated: true });
+        return nextIndex;
+      });
+    }, homeHeroSlideIntervalMs);
+    return () => clearInterval(timer);
+  }, [homeHeroWidth]);
 
   return (
     <View style={styles.homeScreen}>
-      <ScrollView ref={homeScrollRef} style={styles.homeScroll} contentContainerStyle={styles.homeContent} {...screenScrollProps}>
-        <View style={styles.homeEditorialHeader}>
-          <View>
-            <Text style={styles.homeEditorialBrand}>Lookmefy</Text>
-            <Text style={styles.homeEditorialTagline}>AI STYLES A BRIGHTER YOU</Text>
-          </View>
-          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Open notifications" style={styles.homeBellButton} onPress={() => onNavigate('orders')}>
-            <Ionicons name="notifications-outline" size={26} color="#0f0f0f" />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.homeTryOnHero}>
-          <HomeHeroShowcase />
-          <View pointerEvents="none" style={styles.homeHeroLeftBase} />
-          <View pointerEvents="none" style={styles.homeHeroLeftSlantFill} />
-          <View pointerEvents="none" style={styles.homeHeroDivider} />
-          <TouchableOpacity style={styles.homeHeroRoundAction} activeOpacity={0.88} onPress={() => onNavigate('tryon')}>
-            <Ionicons name="arrow-forward" size={26} color="#111111" />
-          </TouchableOpacity>
-          <View style={styles.homeHeroLeftPane}>
-            <Text style={styles.homeHeroKicker}>VIRTUAL TRY-ON</Text>
-            <Text style={styles.homeHeroEditorialTitle}>See it. Try it.{'\n'}Love it.</Text>
-            <Text style={styles.homeHeroEditorialText}>Try fashion on yourself before you shop.</Text>
-            <TouchableOpacity style={styles.homePrimaryTryOnButton} activeOpacity={0.88} onPress={() => onNavigate('tryon')}>
-              <Ionicons name="camera-outline" size={19} color="#ffffff" />
-              <Text style={styles.homePrimaryTryOnText}>AI Try On</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.homeSecondaryWardrobeButton} activeOpacity={0.88} onPress={() => onNavigate('closet')}>
-              <Ionicons name="shirt-outline" size={19} color="#111111" />
-              <Text style={styles.homeSecondaryWardrobeText}>Open Wardrobe</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View style={styles.homeSectionBlock}>
-          <View style={styles.homeEditorialSectionHead}>
-            <Text style={styles.homeEditorialSectionTitle}>Continue Your Looks</Text>
-            <TouchableOpacity style={styles.homeEditorialSeeAll} onPress={() => onNavigate('generation-history')}>
-              <Text style={styles.homeEditorialSeeAllText}>See All</Text>
-              <Ionicons name="arrow-forward" size={19} color="#5f5c58" />
-            </TouchableOpacity>
-          </View>
-          <View style={styles.homeLookGrid}>
-            {continueLooks.map((look) => (
-              <HomeLookCard
-                key={look.title}
-                product={look.product}
-                fallbackImage={look.fallbackImage}
-                title={look.title}
-                meta={look.meta}
-                onPress={() => look.product ? onNavigate('product', { id: look.product.id }) : onNavigate('generation-history')}
-              />
-            ))}
-          </View>
-        </View>
-
-        <View ref={catalogTourTarget.ref} onLayout={catalogTourTarget.onLayout} style={styles.homeSectionBlock}>
-          <View style={styles.homeEditorialSectionHead}>
-            <Text style={styles.homeEditorialSectionTitle}>My Wardrobe</Text>
-            <TouchableOpacity style={styles.homeEditorialSeeAll} onPress={() => onNavigate('closet')}>
-              <Text style={styles.homeEditorialSeeAllText}>See All</Text>
-              <Ionicons name="arrow-forward" size={19} color="#5f5c58" />
-            </TouchableOpacity>
-          </View>
-          <ScrollView {...horizontalScrollProps} contentContainerStyle={styles.homeWardrobeTrack}>
-            {wardrobeItems.map((item) => (
-              <HomeWardrobeTile key={item.label} item={item} onPress={() => onNavigate('shop', item.params || {})} />
-            ))}
-            <TouchableOpacity style={styles.homeWardrobeAddTile} activeOpacity={0.86} onPress={() => onNavigate('closet', { add: true })}>
-              <Ionicons name="add-outline" size={38} color="#111111" />
-              <Text style={styles.homeWardrobeAddText}>Add Item</Text>
-            </TouchableOpacity>
-          </ScrollView>
-        </View>
-
-        <View style={styles.homeSectionBlock}>
-          <View style={styles.homeEditorialSectionHead}>
-            <Text style={styles.homeEditorialSectionTitle}>Recommended to Try On</Text>
-          </View>
-          {curated.loading && !recommendedProducts.length ? (
-            <HomeProductSkeletonGrid />
-          ) : curated.error && !recommendedProducts.length ? (
-            <StatusPanel error={curated.error} empty text="No products found yet." />
-          ) : (
-            <View style={styles.homeTryOnGrid}>
-              {(recommendedProducts.length ? recommendedProducts : fallbackTryOnProducts).map((item, index) => {
-                const product = Array.isArray(item) ? null : item;
-                const fallback = Array.isArray(item) ? item : fallbackTryOnProducts[index % fallbackTryOnProducts.length];
-                return (
-                  <HomeTryOnProductCard
-                    key={product?.id || fallback[0]}
-                    product={product}
-                    fallbackTitle={fallback[0]}
-                    fallbackPrice={fallback[1]}
-                    fallbackImage={fallback[2]}
-                    onPress={() => product ? onNavigate('product', { id: product.id }) : onNavigate('shop')}
-                    onTryOn={() => product ? onNavigate('tryon', { productId: product.id }) : onNavigate('tryon')}
-                    onAddToWishlist={onAddToWishlist}
-                    isWishlisted={product ? wishlistIds?.has(product.id) : false}
-                    grid
-                  />
-                );
-              })}
+      <AppHeader onNavigate={onNavigate} user={user} compact />
+      <ScrollView ref={homeScrollRef} style={styles.homeScroll} contentContainerStyle={[styles.homeContent, layout.isTablet && styles.homeContentTablet]} {...screenScrollProps}>
+      <View style={[styles.homeHero, layout.isTablet && { height: homeHeroHeight }]}>
+        <ScrollView
+          ref={heroCarouselRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          bounces={false}
+          overScrollMode="never"
+          scrollEventThrottle={16}
+          onMomentumScrollEnd={handleHeroMomentumEnd}
+        >
+          {homeHeroSlides.map((slide) => (
+            <View key={slide.key} style={[styles.homeHeroSlide, { width: homeHeroWidth }]}>
+              <Image source={images[slide.image]} style={styles.homeHeroImage} resizeMode="cover" />
+              <View style={styles.homeHeroShade} />
+              <View style={styles.homeHeroCopy}>
+                <Text style={styles.homeHeroTitle}>{slide.title}</Text>
+                <TouchableOpacity style={styles.homeHeroButton} onPress={() => onNavigate(slide.route)}>
+                  <Text style={styles.homeHeroButtonText}>{slide.cta}</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          )}
+          ))}
+        </ScrollView>
+        <View pointerEvents="none" style={styles.homeHeroDots}>
+          {homeHeroSlides.map((slide, index) => (
+            <View key={`${slide.key}-dot`} style={[styles.homeHeroDot, index === heroIndex && styles.homeHeroDotActive]} />
+          ))}
         </View>
+      </View>
+
+      <View ref={catalogTourTarget.ref} onLayout={catalogTourTarget.onLayout} style={styles.homeFindStyleSection}>
+        <Text style={styles.homeFindStyleTitle}>Find Your Style</Text>
+        <ScrollView
+          {...horizontalScrollProps}
+          showsHorizontalScrollIndicator
+          contentContainerStyle={[styles.homeCategoryTrack, layout.isTablet && styles.homeCategoryTrackTablet]}
+          decelerationRate="fast"
+          snapToInterval={homeCategorySnapInterval}
+          snapToAlignment="start"
+        >
+          {preferredHomeCategories.map((item) => (
+            <TouchableOpacity key={item.label} activeOpacity={0.86} style={[styles.homeCategoryItem, layout.isTablet && styles.homeCategoryItemTablet]} onPress={() => onNavigate('shop', item.params || {})}>
+              <View style={[styles.homeCategoryImageFrame, layout.isTablet && styles.homeCategoryImageFrameTablet]}>
+                <Image source={images[item.image]} style={styles.homeCategoryImage} resizeMode="cover" />
+              </View>
+              <Text style={styles.homeCategoryLabel} numberOfLines={1}>{item.label}</Text>
+              <Text style={styles.homeCategoryCount} numberOfLines={1}>{item.count || 0} ITEMS</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
+      <HomeProductRail
+        title="Recommended for You"
+        subtitle="Built from your Lookmefy profile"
+        products={recommendedProducts}
+        loading={(curated.loading || recommended.loading) && !recommendedProducts.length}
+        error={recommendedProducts.length ? '' : recommended.error || curated.error}
+        viewParams={preferredGender ? { gender: preferredGender } : {}}
+        onNavigate={onNavigate}
+        onAddToWishlist={onAddToWishlist}
+        wishlistIds={wishlistIds}
+      />
+
+      <HomeOfferCards offers={homeOffers} onNavigate={onNavigate} />
+
+      <HomeProductRail
+        title={homeCurationTitle}
+        subtitle="Fresh styles from the live catalog"
+        products={arrivalProducts}
+        loading={curated.loading}
+        error={curated.error}
+        viewParams={preferredGender ? { gender: preferredGender, sort: 'newest' } : { sort: 'newest' }}
+        onNavigate={onNavigate}
+        onAddToWishlist={onAddToWishlist}
+        wishlistIds={wishlistIds}
+      />
+
+      {commerceSections.map((section) => (
+        <HomeProductRail
+          key={section.id}
+          title={section.title}
+          subtitle={section.subtitle}
+          products={section.products}
+          loading={section.loading}
+          error={section.error}
+          viewParams={section.viewParams}
+          onNavigate={onNavigate}
+          onAddToWishlist={onAddToWishlist}
+          wishlistIds={wishlistIds}
+        />
+      ))}
+
+      <View style={styles.homeJournalBand}>
+        <View style={styles.homeJournalHead}>
+          <View>
+            <Text style={styles.homeJournalKicker}>{journalKicker}</Text>
+            <Text style={styles.homeJournalTitle}>{journalTitle}</Text>
+          </View>
+          <TouchableOpacity style={styles.homeJournalLink} activeOpacity={0.82} onPress={() => onNavigate('shop', journalViewParams)}>
+            <Text style={styles.homeJournalLinkText}>View all</Text>
+            <Ionicons name="arrow-forward" size={14} color="#9b5658" />
+          </TouchableOpacity>
+        </View>
+        <Text style={[styles.homeJournalIntro, layout.isTablet && styles.homeJournalIntroTablet]}>{journalIntro}</Text>
+        {shopLooks.loading ? (
+          <HomeJournalSkeletonGrid />
+        ) : shopLooks.error || !shopLookProducts.length ? (
+          <StatusPanel error={shopLooks.error} empty={!shopLookProducts.length} text={preferredGender === 'men' ? 'No men looks found yet.' : 'No looks found yet.'} />
+        ) : (
+          <View style={styles.homeJournalGrid}>
+            {shopLookProducts.slice(0, 6).map((product, index) => {
+              const price = Number(product.price);
+              return (
+                <TouchableOpacity key={product.id} style={[styles.homeJournalProductCard, layout.productGridWidthStyle]} activeOpacity={0.86} onPress={() => onNavigate('product', { id: product.id })}>
+                  <View style={styles.homeJournalImageFrame}>
+                    <ProductImage product={product} style={styles.homeJournalImage} resizeMode="cover" alt={product.title || product.name} />
+                    {onAddToWishlist ? <WishlistDoneButton saved={wishlistIds?.has(product.id)} compact onPress={() => onAddToWishlist(product)} /> : null}
+                    <View style={styles.homeJournalOverlay}>
+                      <Text style={styles.homeJournalLookLabel} numberOfLines={1}>{lookLabels[index % lookLabels.length]}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.homeJournalProductBody}>
+                    <Text style={styles.homeJournalProductLabel} numberOfLines={1}>{product.displayLabel || titleCase(product.category || 'Catalog')}</Text>
+                    <Text style={styles.homeJournalProductTitle} numberOfLines={2}>{product.title || product.name}</Text>
+                    <Text style={styles.homeJournalProductPrice}>{Number.isFinite(price) ? formatMoney(price, product.currency) : 'Price unavailable'}</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+      </View>
       </ScrollView>
     </View>
   );
@@ -2376,7 +2804,7 @@ function SearchScreen({ initial = {}, user, token, onNavigate, onBack, onAddToWi
   );
 }
 
-function ShopScreen({ initial = {}, tryOnMode, user, setUser, token, onNavigate, onRequireAuth, onAddToWishlist, wishlistIds }) {
+function ShopScreen({ initial = {}, tryOnMode, user, setUser, token, onNavigate, onBack, onRequireAuth, onAddToWishlist, wishlistIds }) {
   if (tryOnMode) {
     return <StyleBotScreen user={user} setUser={setUser} token={token} onNavigate={onNavigate} onRequireAuth={onRequireAuth} />;
   }
@@ -2385,10 +2813,13 @@ function ShopScreen({ initial = {}, tryOnMode, user, setUser, token, onNavigate,
   const [filters, setFilters] = useState({
     q: initial.q || '',
     category: initial.category || '',
-    brand: '',
+    brand: initial.brand || '',
     gender: initial.gender || '',
     sort: initial.sort || '',
-    newArrival: initial.newArrival || ''
+    newArrival: initial.newArrival || '',
+    maxPrice: initial.maxPrice || '',
+    discounted: initial.discounted || '',
+    sale: initial.sale || ''
   });
   const preferredCategorySection = defaultCategorySectionForUser(user);
   const explicitCategorySection = initial.section || initial.categoryGroup || '';
@@ -2414,16 +2845,19 @@ function ShopScreen({ initial = {}, tryOnMode, user, setUser, token, onNavigate,
       brand: initial.brand || '',
       gender: initial.gender || '',
       sort: initial.sort || '',
-      newArrival: initial.newArrival || ''
+      newArrival: initial.newArrival || '',
+      maxPrice: initial.maxPrice || '',
+      discounted: initial.discounted || '',
+      sale: initial.sale || ''
     });
   }, [JSON.stringify(initial || {}), tryOnMode]);
 
   useEffect(() => {
-    if (initial.section || initial.categoryGroup || initial.q || initial.category || initial.gender || initial.brand || initial.newArrival) return;
+    if (initial.section || initial.categoryGroup || initial.q || initial.category || initial.gender || initial.brand || initial.newArrival || initial.maxPrice || initial.discounted || initial.sale) return;
     setSelectedCategory(preferredCategorySection);
   }, [JSON.stringify(initial || {}), preferredCategorySection]);
 
-  const hasSearchIntent = Boolean(filters.q || filters.category || filters.brand || filters.gender || filters.newArrival);
+  const hasSearchIntent = Boolean(filters.q || filters.category || filters.brand || filters.gender || filters.newArrival || filters.maxPrice || filters.discounted || filters.sale);
   const allowTryOnTrial = tryOnMode || hasSearchIntent;
   const visibleProducts = state.products;
 
@@ -2448,7 +2882,9 @@ function ShopScreen({ initial = {}, tryOnMode, user, setUser, token, onNavigate,
     try {
       const data = await api(`/tryons/${product.id}`, {
         method: 'POST',
-        body: existing?.imageUrl ? JSON.stringify({ force: true }) : undefined
+        body: existing?.imageUrl ? JSON.stringify({ force: true }) : undefined,
+        timeoutMs: aiTryOnRequestTimeoutMs,
+        jobTimeoutMs: aiTryOnJobTimeoutMs
       });
       let nextTryOn = data.tryOn || null;
       if (!nextTryOn?.imageUrl) nextTryOn = await fetchProductTryOn(product.id, { waitForImage: true });
@@ -2479,7 +2915,8 @@ function ShopScreen({ initial = {}, tryOnMode, user, setUser, token, onNavigate,
       const data = await api(`/tryons/${product.id}/video`, {
         method: 'POST',
         body: existing.videoUrl ? JSON.stringify({ force: true }) : undefined,
-        timeoutMs: 180000
+        timeoutMs: aiTryOnRequestTimeoutMs,
+        jobTimeoutMs: aiTryOnJobTimeoutMs
       });
       setTryOns((current) => ({ ...current, [product.id]: data.tryOn }));
       if (data.user) setUser(data.user);
@@ -2498,6 +2935,7 @@ function ShopScreen({ initial = {}, tryOnMode, user, setUser, token, onNavigate,
         selectedCategory={selectedCategory}
         onSelectCategory={setSelectedCategory}
         onNavigate={onNavigate}
+        onBack={onBack}
         user={user}
       />
     );
@@ -2505,7 +2943,7 @@ function ShopScreen({ initial = {}, tryOnMode, user, setUser, token, onNavigate,
 
   return (
     <View style={styles.shopScreen}>
-      <ShopTopBar onNavigate={onNavigate} user={user} />
+      <ShopTopBar onNavigate={onNavigate} user={user} onBack={onBack} />
       <ScrollView contentContainerStyle={styles.scrollContent} {...screenScrollProps}>
       <View style={styles.searchPanel}>
         <View style={styles.searchRow}>
@@ -2573,18 +3011,19 @@ function ShopScreen({ initial = {}, tryOnMode, user, setUser, token, onNavigate,
   );
 }
 
-function ProductScreen({ id, user, setUser, token, onNavigate, onRequireAuth, onAddToWishlist, wishlistIds }) {
+function ProductScreen({ id, user, setUser, token, onNavigate, onBack, onRequireAuth, onAddToWishlist, wishlistIds }) {
   const { width } = useWindowDimensions();
+  const layout = useResponsiveLayout();
   const [state, setState] = useState({ product: null, loading: true, error: '' });
   const [tryOn, setTryOn] = useState(null);
   const [tryOnLoading, setTryOnLoading] = useState(false);
   const [tryOnVideoLoading, setTryOnVideoLoading] = useState(false);
   const [tryOnError, setTryOnError] = useState('');
   const [tryOnVideoError, setTryOnVideoError] = useState('');
-  const [selectedSize, setSelectedSize] = useState('Medium');
   const [lightbox, setLightbox] = useState(null);
   const mediaScrollRef = useRef(null);
-  const mediaWidth = Math.max(1, Math.round(width - 28));
+  const detailContentWidth = layout.contentWidth || width;
+  const mediaWidth = Math.max(1, Math.round(detailContentWidth - 28));
   const related = useProducts({ category: state.product?.category || '', limit: 5 }, token);
   const relatedProducts = related.products.filter((item) => item.id !== id).slice(0, 4);
   const [relatedTryOns] = useTryOns(user, relatedProducts, token);
@@ -2640,7 +3079,8 @@ function ProductScreen({ id, user, setUser, token, onNavigate, onRequireAuth, on
       const data = await api(`/tryons/${state.product.id}`, {
         method: 'POST',
         body: regenerate ? JSON.stringify({ force: true }) : undefined,
-        timeoutMs: 180000
+        timeoutMs: aiTryOnRequestTimeoutMs,
+        jobTimeoutMs: aiTryOnJobTimeoutMs
       });
       let nextTryOn = data.tryOn || null;
       if (!nextTryOn?.imageUrl) nextTryOn = await fetchProductTryOn(state.product.id, { waitForImage: true });
@@ -2672,7 +3112,8 @@ function ProductScreen({ id, user, setUser, token, onNavigate, onRequireAuth, on
       const data = await api(`/tryons/${state.product.id}/video`, {
         method: 'POST',
         body: regenerate ? JSON.stringify({ force: true }) : undefined,
-        timeoutMs: 180000
+        timeoutMs: aiTryOnRequestTimeoutMs,
+        jobTimeoutMs: aiTryOnJobTimeoutMs
       });
       setTryOn(data.tryOn);
       if (regenerate && data.reused) setTryOnVideoError('Existing video was reused. Restart the backend with the latest code, then try again.');
@@ -2687,7 +3128,7 @@ function ProductScreen({ id, user, setUser, token, onNavigate, onRequireAuth, on
   if (state.loading || state.error || !state.product) {
     return (
       <View style={styles.productDetailScreen}>
-        <ProductTopBar onNavigate={onNavigate} user={user} />
+        <ProductTopBar onNavigate={onNavigate} user={user} onBack={onBack} />
         <ScrollView contentContainerStyle={styles.scrollContent} {...screenScrollProps}>
           <StatusPanel loading={state.loading} error={state.error} empty={!state.loading && !state.product} text="This item may have been removed from the catalog." />
         </ScrollView>
@@ -2696,6 +3137,7 @@ function ProductScreen({ id, user, setUser, token, onNavigate, onRequireAuth, on
   }
 
   const product = state.product;
+  const isWishlisted = wishlistIds?.has(product.id);
   const originalUri = imageUrl(product.imageUrl);
   const tryOnUri = tryOnImageUrl(tryOn);
   const tryOnVideoUri = tryOnVideoUrl(tryOn);
@@ -2709,10 +3151,10 @@ function ProductScreen({ id, user, setUser, token, onNavigate, onRequireAuth, on
     product.fit || '',
     titleCase(product.gender || '')
   ].filter(Boolean).slice(0, 3);
-  const colorLabel = product.colors?.[0]?.name ? product.colors[0].name.toString().toUpperCase() : '';
-  const sizeOptions = product.sizes?.length ? product.sizes : [];
   const detailRows = ['PRODUCT DETAILS', 'FIT & CARE', 'SHIPPING & RETURNS'];
-  const mediaHeight = Math.min(520, Math.max(360, Math.round((width - 28) * 1.31)));
+  const mediaHeight = layout.isTablet
+    ? Math.min(600, Math.max(420, Math.round(mediaWidth * 0.62)))
+    : Math.min(520, Math.max(360, Math.round(mediaWidth * 1.31)));
   const openShop = () => {
     if (!user) {
       onRequireAuth?.('Log in with your mobile number to shop this brand.');
@@ -2724,7 +3166,7 @@ function ProductScreen({ id, user, setUser, token, onNavigate, onRequireAuth, on
 
   return (
     <View style={styles.productDetailScreen}>
-      <ProductTopBar onNavigate={onNavigate} user={user} />
+      <ProductTopBar onNavigate={onNavigate} user={user} onBack={onBack} />
       <ScrollView contentContainerStyle={styles.productDetailContent} {...screenScrollProps}>
       <View style={[styles.productHeroMedia, { height: mediaHeight, width: mediaWidth }]}>
         <ScrollView ref={mediaScrollRef} {...horizontalScrollProps} pagingEnabled contentContainerStyle={styles.productMediaTrack}>
@@ -2742,8 +3184,14 @@ function ProductScreen({ id, user, setUser, token, onNavigate, onRequireAuth, on
             </Pressable>
           ))}
         </ScrollView>
-        <TouchableOpacity style={styles.productFavoriteButton}>
-          <Ionicons name="heart-outline" size={24} color="#5d5754" />
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel={isWishlisted ? 'Remove product from wishlist' : 'Add product to wishlist'}
+          activeOpacity={0.84}
+          style={[styles.productFavoriteButton, isWishlisted && styles.productFavoriteButtonSaved]}
+          onPress={() => onAddToWishlist?.(product)}
+        >
+          <Ionicons name={isWishlisted ? 'heart' : 'heart-outline'} size={24} color={isWishlisted ? '#ffffff' : '#5d5754'} />
         </TouchableOpacity>
         {mediaItems.length > 1 ? (
           <View style={styles.productSwipeHint}>
@@ -2779,31 +3227,6 @@ function ProductScreen({ id, user, setUser, token, onNavigate, onRequireAuth, on
             <Text style={styles.productCategoryMetaLabel}>Category</Text>
             <Text style={styles.productCategoryMetaValue}>{titleCase(product.category)}</Text>
           </TouchableOpacity>
-        ) : null}
-
-        {colorLabel ? (
-          <>
-            <Text style={styles.productOptionLabel}>COLOR: <Text style={styles.productOptionValue}>{colorLabel}</Text></Text>
-            <View style={styles.productSwatchRow}>
-              {product.colors.slice(0, 6).map((color, index) => <View key={color.name} style={[styles.productColorSwatch, index === 0 && styles.productColorSwatchActive, { backgroundColor: color.value }]} />)}
-            </View>
-          </>
-        ) : null}
-
-        {sizeOptions.length ? (
-          <>
-            <View style={styles.productSizeHead}>
-              <Text style={styles.productOptionLabel}>SELECT SIZE</Text>
-              <TouchableOpacity><Text style={styles.productSizeGuide}>Size Guide</Text></TouchableOpacity>
-            </View>
-            <View style={styles.productSizeRow}>
-              {sizeOptions.map((size) => (
-                <TouchableOpacity key={size} style={[styles.productSizeButton, selectedSize === size && styles.productSizeButtonActive]} onPress={() => setSelectedSize(size)}>
-                  <Text style={[styles.productSizeText, selectedSize === size && styles.productSizeTextActive]}>{size}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </>
         ) : null}
 
         <View style={styles.productActionRow}>
@@ -3584,6 +4007,7 @@ function AuthEntryScreen({ onNavigate }) {
 }
 
 const closetCategories = ['tops', 'bottoms', 'dresses', 'suits', 'outerwear', 'shoes', 'accessories', 'activewear', 'ethnic', 'other'];
+const closetViews = ['stylist', 'combo', 'add', 'wardrobe', 'looks'];
 const closetOccasions = ['today casual', 'office meeting', 'date night', 'party', 'wedding function', 'college day', 'travel', 'rainy weather'];
 const closetSceneOptions = {
   backdrop: ['neutral studio', 'office lobby', 'cafe', 'outdoor street', 'wedding venue'],
@@ -3591,18 +4015,22 @@ const closetSceneOptions = {
   lighting: ['natural light', 'studio softbox', 'evening warm', 'bright daylight']
 };
 const closetComboSlots = [
-  { key: 'topwear', label: 'Topwear', helper: 'Shirts, tops, kurtas', short: 'To', categories: ['tops', 'outerwear', 'ethnic'] },
+  { key: 'topwear', label: 'Topwear', helper: 'Shirts, tops, kurtas', short: 'To', categories: ['tops', 'dresses', 'suits', 'outerwear', 'activewear', 'ethnic'] },
   { key: 'bottomwear', label: 'Bottomwear', helper: 'Pants, denim, skirts', short: 'Bo', categories: ['bottoms'] },
   { key: 'goggles', label: 'Goggles', helper: 'Glasses and shades', short: 'Go', categories: ['accessories'], keywords: ['goggle', 'goggles', 'glass', 'glasses', 'sunglass', 'eyewear'] },
+  { key: 'watch', label: 'Watch', helper: 'Watches and wristwear', short: 'Wa', categories: ['accessories'], keywords: ['watch', 'watches', 'wristwatch', 'wristwear'] },
   { key: 'cap', label: 'Cap', helper: 'Caps and hats', short: 'Ca', categories: ['accessories'], keywords: ['cap', 'hat'] },
   { key: 'footwear', label: 'Footwear', helper: 'Shoes, boots, sandals', short: 'Fo', categories: ['shoes'] }
 ];
 const wardrobeCategoryTabs = [
-  { key: 'tops', label: 'Tops', icon: 'shirt-outline', slot: 'topwear' },
-  { key: 'bottoms', label: 'Bottoms', icon: 'accessibility-outline', slot: 'bottomwear' },
-  { key: 'outerwear', label: 'Outerwear', icon: 'body-outline', slot: 'topwear' },
-  { key: 'shoes', label: 'Shoes', icon: 'walk-outline', slot: 'footwear' },
-  { key: 'accessories', label: 'Accessori', icon: 'sparkles-outline', slot: 'goggles' }
+  { key: 'tops', label: 'Tops', icon: 'shirt-outline', slot: 'topwear', side: 'left' },
+  { key: 'bottoms', label: 'Bottoms', icon: 'pants', slot: 'bottomwear', side: 'left' },
+  { key: 'outerwear', label: 'Outerwear', icon: 'body-outline', slot: 'topwear', side: 'left' },
+  { key: 'shoes', label: 'Footwear', icon: 'shoe', slot: 'footwear', side: 'left' },
+  { key: 'accessories', label: 'Accessories', icon: 'sparkles-outline', slot: 'goggles', side: 'right', filter: 'accessories' },
+  { key: 'glasses', label: 'Glasses', icon: 'glasses-outline', slot: 'goggles', side: 'right', filter: 'accessories' },
+  { key: 'watches', label: 'Watches', icon: 'watch-outline', slot: 'watch', side: 'right', filter: 'accessories' },
+  { key: 'bags-hats', label: 'Bags & Hats', icon: 'bag-handle-outline', slot: 'cap', side: 'right', filter: 'accessories' }
 ];
 const wardrobeFallbackRecommendations = [
   { title: 'Urban Sophisticate', images: ['trending-2.jpg', 'category-3.jpg', 'category-6.jpg'] },
@@ -3610,8 +4038,13 @@ const wardrobeFallbackRecommendations = [
   { title: 'Soft Gallery Fit', images: ['arrival-4.jpg', 'category-4.jpg', 'category-6.jpg'] }
 ];
 
-function WardrobeTopBar({ user, onNavigate }) {
-  return <AppHeader onNavigate={onNavigate} user={user} compact />;
+function WardrobeTopBar({ user, onNavigate, onBack }) {
+  return (
+    <>
+      <AppHeader onNavigate={onNavigate} user={user} compact />
+      <PageBackRow onBack={onBack} />
+    </>
+  );
 }
 
 function WardrobeRecommendationCard({ suggestion, fallback, onPress }) {
@@ -3664,6 +4097,92 @@ function optionsForSlot(slot, items) {
   return exactOptions.length ? exactOptions : items.filter((item) => slotMatchesItem(slot, item));
 }
 
+function wardrobeUploadCategory(tab) {
+  const category = tab?.filter || tab?.key || 'tops';
+  return closetCategories.includes(category) ? category : 'accessories';
+}
+
+function wardrobeTabItemText(item = {}) {
+  return [item.name, item.category, item.color, item.formality, ...(item.tags || []), ...(item.occasions || [])]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+}
+
+function wardrobeTabMatchesItem(tab, item = {}) {
+  if (!tab) return true;
+  const category = wardrobeUploadCategory(tab);
+  if (category !== 'all' && item.category !== category) return false;
+  const text = wardrobeTabItemText(item);
+  if (tab.key === 'glasses') return /\b(glasses?|goggles?|sunglasses?|eyewear|spectacles?)\b/.test(text);
+  if (tab.key === 'watches') return /\b(watches?|wrist\s*watches?|wristwatch|wristwear)\b/.test(text);
+  if (tab.key === 'bags-hats') return /\b(bags?|purses?|handbags?|caps?|hats?)\b/.test(text);
+  return true;
+}
+
+function selectedIdsFromComboSlots(slots = {}) {
+  const ids = closetComboSlots.map((slot) => slots[slot.key]).filter(Boolean);
+  return [...new Set(ids)];
+}
+
+function tryOnSelectionsFromWardrobe(slotItems = [], fallbackItems = []) {
+  const used = new Set();
+  const selections = slotItems
+    .map((slot) => {
+      const item = slot.selected || slot.options.find((option) => !used.has(option.id));
+      if (!item?.id || used.has(item.id)) return null;
+      used.add(item.id);
+      return { slot: slot.key, label: slot.label, item };
+    })
+    .filter(Boolean);
+  if (selections.length) return selections;
+  return fallbackItems.slice(0, 5).map((item, index) => ({ slot: `fallback-${index}`, label: titleCase(item.category || 'Item'), item }));
+}
+
+function wardrobeTryOnSlotForItem(item = {}) {
+  const category = String(item.category || '').toLowerCase();
+  const text = [item.name, category, item.color, item.formality, ...(item.tags || []), ...(item.occasions || [])]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+  if (category === 'shoes') return 'footwear';
+  if (category === 'bottoms') return 'bottomwear';
+  if (category === 'outerwear') return 'outerwear';
+  if (category === 'dresses' || category === 'suits') return category;
+  if (['tops', 'activewear', 'ethnic'].includes(category)) return 'topwear';
+  if (category === 'accessories') {
+    if (/\b(watches?|wrist\s*watches?|wristwear)\b/.test(text)) return 'watch';
+    if (/\b(glasses?|goggles?|sunglasses?|eyewear|spectacles?)\b/.test(text)) return 'goggles';
+    if (/\b(caps?|hats?|bags?|purses?|handbags?)\b/.test(text)) return 'cap';
+    return 'accessories';
+  }
+  return category || 'selection';
+}
+
+function wardrobeItemSlotsFromItems(entries = []) {
+  return entries.map((item, index) => ({
+    itemId: item.id,
+    slot: wardrobeTryOnSlotForItem(item),
+    label: titleCase(item.category || `Item ${index + 1}`)
+  }));
+}
+
+function closetCategoryEntryLabel(category) {
+  const labels = {
+    accessories: 'Accessory',
+    shoes: 'Shoe',
+    bottoms: 'Bottom',
+    dresses: 'Dress',
+    suits: 'Suit',
+    tops: 'Top',
+    outerwear: 'Outerwear',
+    activewear: 'Activewear',
+    ethnic: 'Ethnic',
+    other: 'Item'
+  };
+  return labels[category] || titleCase(category || 'Item');
+}
+
 function ClosetDetectionCard({ detection, fields, compact = false }) {
   if (!detection) return null;
   const loading = detection.status === 'loading';
@@ -3696,19 +4215,22 @@ function ClosetDetectionCard({ detection, fields, compact = false }) {
   );
 }
 
-function ClosetScreen({ user, setUser, setToken, token, onNavigate, initial = {}, registerTourTarget, tourFocusRequest }) {
+function ClosetScreen({ user, setUser, setToken, token, onNavigate, onBack, initial = {}, registerTourTarget, tourFocusRequest }) {
   const { height } = useWindowDimensions();
+  const layout = useResponsiveLayout();
   const addStudioScrollRef = useRef(null);
   const emptyCloset = { items: [], outfits: [], suggestions: [], stats: {} };
   const closet = useApiState('/closet', token, Boolean(user), emptyCloset);
+  const initialItemCategory = closetCategories.includes(initial.category) ? initial.category : initial.view === 'add' ? 'dresses' : 'tops';
   const [closetView, setClosetView] = useState(initial.view === 'add' ? 'add' : 'stylist');
   const [selectedIds, setSelectedIds] = useState([]);
   const [comboSlots, setComboSlots] = useState({});
   const [activeSlot, setActiveSlot] = useState('topwear');
   const [filter, setFilter] = useState('all');
+  const [activeWardrobeTabKey, setActiveWardrobeTabKey] = useState('');
   const [itemPhoto, setItemPhoto] = useState(null);
   const [itemName, setItemName] = useState('');
-  const [itemCategory, setItemCategory] = useState(initial.view === 'add' ? 'dresses' : 'tops');
+  const [itemCategory, setItemCategory] = useState(initialItemCategory);
   const [itemColor, setItemColor] = useState('');
   const [itemFabric, setItemFabric] = useState('');
   const [itemPattern, setItemPattern] = useState('');
@@ -3729,26 +4251,50 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, initial = {}
     { role: 'assistant', text: 'Ask what to wear today, for an occasion, or which pants fit a shirt from your closet.' }
   ]);
   const [suggestionOverrides, setSuggestionOverrides] = useState(null);
+  const [savedClosetItems, setSavedClosetItems] = useState([]);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState('');
   const [lightbox, setLightbox] = useState(null);
   const wardrobeUploadTourTarget = useTourTarget('wardrobe-upload', registerTourTarget, { request: tourFocusRequest, scrollRef: addStudioScrollRef, scrollOffset: 116 });
 
   useEffect(() => {
-    if (initial.view === 'add') setClosetView('add');
-    else setClosetView((current) => current === 'add' ? 'stylist' : current);
-  }, [initial.view]);
+    if (closetViews.includes(initial.view)) setClosetView(initial.view);
+    else setClosetView('stylist');
+    if (!initial.view || initial.view === 'wardrobe') {
+      setSelectedIds([]);
+      setComboSlots({});
+    }
+    if (closetCategories.includes(initial.category)) {
+      setFilter(initial.category);
+      setItemCategory(initial.category);
+    }
+    if (initial.type && wardrobeCategoryTabs.some((tab) => tab.key === initial.type)) {
+      setActiveWardrobeTabKey(initial.type);
+    } else if (initial.category) {
+      setActiveWardrobeTabKey('');
+    }
+  }, [initial.category, initial.type, initial.view]);
 
   if (!user) return <AuthScreen mode="signup" setUser={setUser} setToken={setToken} onNavigate={onNavigate} />;
 
   const isAddStudio = initial.view === 'add' || closetView === 'add';
 
-  const items = closet.data.items || [];
+  const closetItems = closet.data.items || [];
+  const savedClosetItemIds = new Set(savedClosetItems.map((item) => item.id).filter(Boolean));
+  const items = [
+    ...savedClosetItems,
+    ...closetItems.filter((item) => !savedClosetItemIds.has(item.id))
+  ];
   const outfits = closet.data.outfits || [];
   const suggestions = suggestionOverrides || closet.data.suggestions || [];
   const latestOutfit = outfits[0];
   const selectedItems = selectedIds.map((id) => items.find((item) => item.id === id)).filter(Boolean);
-  const filteredItems = items.filter((item) => filter === 'all' || item.category === filter);
+  const activeWardrobeTab = wardrobeCategoryTabs.find((tab) => tab.key === activeWardrobeTabKey) || null;
+  const filteredItems = items.filter((item) => {
+    if (filter !== 'all' && item.category !== filter) return false;
+    return wardrobeTabMatchesItem(activeWardrobeTab, item);
+  });
+  const activeAddSectionItems = items.filter((item) => item.category === itemCategory).slice(0, 8);
   const selectedKey = selectedIds.slice().sort().join(':');
   const comboPreviewItems = (selectedItems.length ? selectedItems : items.filter((item) => ['tops', 'bottoms', 'suits', 'outerwear', 'shoes'].includes(item.category))).slice(0, 4);
   const mainPreview = user.bodyPhotoUrl || latestOutfit?.imageUrl || comboPreviewItems[0]?.imageUrl || null;
@@ -3796,16 +4342,21 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, initial = {}
       items: items.slice(0, 4)
     }
   ];
-  const activeWardrobeCategory = wardrobeCategoryTabs.find((tab) => tab.key === filter) || wardrobeCategoryTabs.find((tab) => tab.slot === activeSlot) || wardrobeCategoryTabs[0];
   const wardrobePreviewSource = mainPreview
     ? { uri: imageUrl(mainPreview) }
     : null;
-  const comboSlotSelectedIds = [...new Set(Object.values(comboSlots).filter(Boolean))];
-  const tryThisLookIds = selectedIds.length
-    ? selectedIds
-    : comboSlotSelectedIds.length
-      ? comboSlotSelectedIds
-      : comboPreviewItems.map((item) => item.id).filter(Boolean);
+  const wardrobeLeftCategoryTabs = wardrobeCategoryTabs.filter((tab) => tab.side !== 'right');
+  const wardrobeRightCategoryTabs = wardrobeCategoryTabs.filter((tab) => tab.side === 'right');
+  const wardrobeFilterLabel = activeWardrobeTab?.label || (filter === 'all' ? 'All Items' : titleCase(filter));
+  const wardrobeFilterTitle = filter === 'all' && !activeWardrobeTab ? 'Your Closet' : `${wardrobeFilterLabel} Entries`;
+  const comboSlotSelectedIds = selectedIdsFromComboSlots(comboSlots);
+  const tryThisSelections = tryOnSelectionsFromWardrobe(slotItems, comboPreviewItems);
+  const tryThisLookIds = tryThisSelections.map((selection) => selection.item.id).filter(Boolean);
+  const tryThisItemSlots = tryThisSelections.map((selection) => ({
+    slot: selection.slot,
+    label: selection.label,
+    itemId: selection.item.id
+  }));
   const wardrobePreviewHeight = clamp(height * 0.62, 470, 620);
   const recommendationSource = suggestions.slice(0, 3);
   const detectionSummaryFields = [
@@ -3819,10 +4370,11 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, initial = {}
   ].filter(([, value]) => String(value || '').trim());
 
   const toggleItem = (id) => {
+    if (selectedIds.includes(id)) setComboSlots((slots) => Object.fromEntries(Object.entries(slots).filter(([, itemId]) => itemId !== id)));
     setSelectedIds((current) => current.includes(id) ? current.filter((itemId) => itemId !== id) : [...current, id].slice(-5));
   };
 
-  const selectedIdsFromSlots = (slots) => [...new Set(Object.values(slots).filter(Boolean))];
+  const selectedIdsFromSlots = selectedIdsFromComboSlots;
 
   const slotsFromItems = (entries = []) => {
     const next = {};
@@ -3871,8 +4423,37 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, initial = {}
     });
   };
 
+  const openWardrobeCategory = (tab) => {
+    const category = wardrobeUploadCategory(tab);
+    setActiveSlot(tab.slot);
+    setFilter(category);
+    setActiveWardrobeTabKey(tab.key);
+    setItemCategory(category);
+    setSelectedIds([]);
+    setComboSlots({});
+    setClosetView('wardrobe');
+    onNavigate('closet', { view: 'wardrobe', category, type: tab.key });
+  };
+
+  const switchClosetView = (nextView) => {
+    if (nextView === 'stylist' || nextView === 'wardrobe') {
+      setSelectedIds([]);
+      setComboSlots({});
+    }
+    setClosetView(nextView);
+  };
+
+  const openSavedAddSectionItem = (item) => {
+    const slot = closetComboSlots.find((entry) => slotMatchesItem(entry, item));
+    if (slot) chooseSlotItem(slot.key, item);
+    setFilter(item.category);
+    setActiveWardrobeTabKey('');
+    setClosetView('wardrobe');
+    onNavigate('closet', { view: 'wardrobe', category: item.category });
+  };
+
   const applyDetectedItemFields = (fields = {}) => {
-    const nextCategory = closetCategories.includes(fields.category) ? fields.category : '';
+    const nextCategory = closetCategories.includes(fields.category) && fields.category !== 'other' ? fields.category : '';
     if (fields.name) setItemName(fields.name);
     if (nextCategory) setItemCategory(nextCategory);
     if (fields.color) setItemColor(fields.color);
@@ -3912,7 +4493,7 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, initial = {}
       const missingRoute = isMissingRouteError(error.message);
       const detectionMessage = missingRoute
         ? 'Detection service is not active on the running backend. Restart the backend, then try again.'
-        : error.message || 'AI detection is unavailable. You can still fill the details manually.';
+        : 'AI detection is unavailable right now. You can still fill the details manually and save this item.';
       setItemDetection({
         status: 'error',
         message: detectionMessage
@@ -3983,7 +4564,9 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, initial = {}
       form.append('formality', itemFormality);
       form.append('occasions', itemOccasions);
       form.append('tags', itemTags);
-      await api('/closet/items', { method: 'POST', body: form });
+      const data = await api('/closet/items', { method: 'POST', body: form });
+      const savedItem = data.item;
+      const savedCategory = savedItem?.category || itemCategory;
       setSuggestionOverrides(null);
       setItemPhoto(null);
       setItemDetection(null);
@@ -3995,8 +4578,14 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, initial = {}
       setItemFormality('any');
       setItemOccasions('');
       setItemTags('');
-      setMessage('Closet item added.');
+      if (savedItem?.id) setSavedClosetItems((current) => [savedItem, ...current.filter((item) => item.id !== savedItem.id)]);
+      setComboSlots({});
+      setSelectedIds([]);
+      setFilter(savedCategory);
+      setClosetView('wardrobe');
+      setMessage(`${savedItem?.name || 'Closet item'} added to ${titleCase(savedCategory)}.`);
       closet.reload();
+      onNavigate('closet', { view: 'wardrobe', category: savedCategory });
     } catch (error) {
       setMessage(error.message);
     } finally {
@@ -4015,12 +4604,15 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, initial = {}
       return;
     }
     setBusy('generate');
-    setMessage('Generating your closet look with FitRoom...');
+    setMessage('Generating your closet look...');
     try {
       const data = await api('/closet/outfits/generate', {
         method: 'POST',
+        timeoutMs: 240000,
+        jobTimeoutMs: 300000,
         body: JSON.stringify({
           itemIds: ids,
+          itemSlots: details.itemSlots || ids.map((id, index) => ({ itemId: id, slot: `selection-${index}` })),
           occasion: details.occasion || occasion,
           weather,
           mood,
@@ -4035,7 +4627,12 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, initial = {}
       if (data.user) setUser(data.user);
       setSuggestionOverrides(null);
       setMessage('Closet look is ready.');
-      setSelectedIds(ids);
+      if (details.clearSelectionAfterGenerate) {
+        setSelectedIds([]);
+        setComboSlots({});
+      } else {
+        setSelectedIds(ids);
+      }
       closet.reload();
       if (data.outfit?.imageUrl) setLightbox(imageUrl(data.outfit.imageUrl));
     } catch (error) {
@@ -4043,6 +4640,20 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, initial = {}
     } finally {
       setBusy('');
     }
+  };
+
+  const generateSelectedWardrobeLook = () => {
+    const ids = selectedIds.filter((id) => items.some((item) => item.id === id));
+    const entries = ids.map((id) => items.find((item) => item.id === id)).filter(Boolean);
+    setComboSlots({});
+    setSelectedIds([]);
+    setClosetView('stylist');
+    onNavigate('closet', { view: 'stylist' });
+    generateOutfit(ids, {
+      title: 'My wardrobe look',
+      itemSlots: wardrobeItemSlotsFromItems(entries),
+      clearSelectionAfterGenerate: true
+    });
   };
 
   const askForSuggestions = async (nextOccasion = occasion) => {
@@ -4074,7 +4685,6 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, initial = {}
       const reply = data.reply || 'Look ideas are ready.';
       setChat((current) => [...current, { role: 'assistant', text: reply }]);
       setMessage(reply);
-      if (data.suggestions?.[0]) setSelectedIds(data.suggestions[0].itemIds || []);
       if (data.suggestions) setSuggestionOverrides(data.suggestions);
       setStylistText('');
     } catch (error) {
@@ -4092,6 +4702,7 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, initial = {}
     try {
       await api(`/closet/items/${encodeURIComponent(id)}`, { method: 'DELETE' });
       setSuggestionOverrides(null);
+      setSavedClosetItems((current) => current.filter((item) => item.id !== id));
       setSelectedIds((current) => current.filter((itemId) => itemId !== id));
       setComboSlots((current) => Object.fromEntries(Object.entries(current).filter(([, itemId]) => itemId !== id)));
       setMessage('Closet item removed.');
@@ -4124,14 +4735,35 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, initial = {}
     setItemCategory(order[(currentIndex + 1) % order.length]);
   };
 
+  const renderWardrobeCategoryButton = (tab) => {
+    const renderCategoryIcon = () => {
+      if (tab.icon === 'pants') return <Image source={wardrobeBottomsIcon} style={styles.wardrobeCategoryAssetIcon} resizeMode="contain" />;
+      if (tab.icon === 'shoe') return <Image source={wardrobeFootwearIcon} style={styles.wardrobeCategoryAssetIcon} resizeMode="contain" />;
+      return <Ionicons name={tab.icon} size={28} color="#444444" />;
+    };
+    return (
+      <Pressable
+        key={tab.key}
+        style={styles.wardrobeCategoryButton}
+        onPress={() => openWardrobeCategory(tab)}
+      >
+        {({ pressed }) => (
+          <>
+            <View style={[styles.wardrobeCategoryIcon, pressed && styles.wardrobeCategoryIconActive]}>
+              {renderCategoryIcon()}
+            </View>
+            <Text style={[styles.wardrobeCategoryLabel, pressed && styles.wardrobeCategoryLabelActive]} numberOfLines={1}>{tab.label}</Text>
+          </>
+        )}
+      </Pressable>
+    );
+  };
+
   if (isAddStudio) {
     return (
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.addStudioScreen}>
         <ScrollView ref={addStudioScrollRef} contentContainerStyle={styles.addStudioContent} {...screenScrollProps}>
           <View style={styles.addStudioTopBar}>
-            <TouchableOpacity style={styles.addStudioTopButton} onPress={discardAddDraft}>
-              <Ionicons name="close" size={24} color="#171412" />
-            </TouchableOpacity>
             <BrandLogo compact style={styles.addStudioBrandLogo} />
             <TouchableOpacity style={styles.addStudioTopButton} onPress={() => onNavigate('closet')}>
               <Ionicons name="cube-outline" size={22} color="#171412" />
@@ -4146,7 +4778,7 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, initial = {}
           <TouchableOpacity ref={wardrobeUploadTourTarget.ref} onLayout={wardrobeUploadTourTarget.onLayout} style={styles.addStudioUploadBox} activeOpacity={0.84} onPress={pickClosetItemPhoto}>
             {itemPhoto?.uri ? (
               <>
-                <Image source={{ uri: itemPhoto.uri }} style={styles.addStudioUploadImage} resizeMode="cover" />
+                <ResilientImage source={{ uri: itemPhoto.uri }} style={styles.addStudioUploadImage} resizeMode="cover" fallbackIcon="shirt-outline" />
                 {busy === 'analyze-item' ? (
                   <View style={styles.addStudioAnalyzeOverlay}>
                     <ActivityIndicator size="small" color="#ffffff" />
@@ -4169,7 +4801,7 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, initial = {}
             </TouchableOpacity>
             {itemPhoto?.uri ? [({ uri: itemPhoto.uri })].map((source, index) => (
               <View key={index} style={styles.addStudioThumbWrap}>
-                <Image source={source} style={styles.addStudioThumbImage} resizeMode="cover" />
+                <ResilientImage source={source} style={styles.addStudioThumbImage} resizeMode="cover" fallbackIcon="shirt-outline" />
                 <TouchableOpacity style={styles.addStudioThumbClose} onPress={clearItemPhoto}>
                   <Ionicons name="close" size={12} color="#6c625e" />
                 </TouchableOpacity>
@@ -4180,8 +4812,35 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, initial = {}
           <ClosetDetectionCard detection={itemDetection} fields={detectionSummaryFields} />
 
           <View style={styles.addStudioArchiveHead}>
-            <Text style={styles.addStudioArchiveTitle}>Archive Entry: {titleCase(itemCategory || 'Dress').replace(/s$/, '')}</Text>
+            <Text style={styles.addStudioArchiveTitle}>Archive Entry: {closetCategoryEntryLabel(itemCategory || 'dresses')}</Text>
             <View style={styles.addStudioArchiveLine} />
+          </View>
+
+          <View style={styles.addStudioSavedSection}>
+            <View style={styles.addStudioSavedHead}>
+              <Text style={styles.addStudioSavedTitle}>Saved {titleCase(itemCategory || 'items')}</Text>
+              <Text style={styles.addStudioSavedCount}>{activeAddSectionItems.length}</Text>
+            </View>
+            {closet.loading && !activeAddSectionItems.length ? (
+              <View style={styles.addStudioSavedEmpty}>
+                <ActivityIndicator size="small" color="#9b5658" />
+              </View>
+            ) : activeAddSectionItems.length ? (
+              <ScrollView {...horizontalScrollProps} contentContainerStyle={styles.addStudioSavedTrack}>
+                {activeAddSectionItems.map((item) => (
+                  <TouchableOpacity key={item.id} style={styles.addStudioSavedCard} activeOpacity={0.86} onPress={() => openSavedAddSectionItem(item)}>
+                    <ResilientImage source={item.imageUrl ? { uri: imageUrl(item.imageUrl) } : null} style={styles.addStudioSavedImage} resizeMode="cover" fallbackIcon="shirt-outline" />
+                    <Text style={styles.addStudioSavedName} numberOfLines={1}>{item.name}</Text>
+                    <Text style={styles.addStudioSavedMeta} numberOfLines={1}>{[item.color, item.category].filter(Boolean).map(titleCase).join(' | ')}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            ) : (
+              <View style={styles.addStudioSavedEmpty}>
+                <Ionicons name="shirt-outline" size={22} color="#9b5658" />
+                <Text style={styles.addStudioSavedEmptyText}>No saved {titleCase(itemCategory || 'items')} yet</Text>
+              </View>
+            )}
           </View>
 
           <Text style={styles.addStudioSectionLabel}>ITEM SPECIFICATIONS</Text>
@@ -4280,7 +4939,7 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, initial = {}
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.wardrobeScreen}>
       <ScrollView contentContainerStyle={styles.wardrobeContent} {...screenScrollProps}>
-        <WardrobeTopBar user={user} onNavigate={onNavigate} />
+        <WardrobeTopBar user={user} onNavigate={onNavigate} onBack={onBack} />
 
         <View style={styles.wardrobeHeroHead}>
           <View>
@@ -4293,43 +4952,29 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, initial = {}
           </TouchableOpacity>
         </View>
 
-        <ScrollView {...horizontalScrollProps} contentContainerStyle={styles.wardrobeCategoryTrack}>
-          {wardrobeCategoryTabs.map((tab) => {
-            const active = activeWardrobeCategory.key === tab.key;
-            return (
-              <TouchableOpacity
-                key={tab.key}
-                style={styles.wardrobeCategoryButton}
-                activeOpacity={0.82}
-                onPress={() => {
-                  setActiveSlot(tab.slot);
-                  setFilter(tab.key);
-                }}
-              >
-                <View style={[styles.wardrobeCategoryIcon, active && styles.wardrobeCategoryIconActive]}>
-                  <Ionicons name={tab.icon} size={28} color="#444444" />
-                </View>
-                <Text style={[styles.wardrobeCategoryLabel, active && styles.wardrobeCategoryLabelActive]}>{tab.label}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-
         {closetView === 'stylist' ? (
           <>
             <View style={styles.wardrobePreviewWrap}>
-              <Pressable style={[styles.wardrobePreviewCard, { height: wardrobePreviewHeight }]} onPress={() => mainPreview && setLightbox(imageUrl(mainPreview))}>
-                {wardrobePreviewSource ? (
-                  <ResilientImage source={wardrobePreviewSource} style={styles.wardrobePreviewImage} resizeMode="contain" fallbackIcon="shirt-outline" />
-                ) : null}
-                {busy === 'generate' ? <View style={styles.previewGenerating}><ActivityIndicator color="#fff" /><Text style={styles.previewGeneratingText}>Generating look</Text></View> : null}
-              </Pressable>
+              <View style={styles.wardrobePreviewStage}>
+                <Pressable style={[styles.wardrobePreviewCard, { height: wardrobePreviewHeight }]} onPress={() => mainPreview && setLightbox(imageUrl(mainPreview))}>
+                  {wardrobePreviewSource ? (
+                    <ResilientImage source={wardrobePreviewSource} style={styles.wardrobePreviewImage} resizeMode="contain" fallbackIcon="shirt-outline" />
+                  ) : null}
+                  {busy === 'generate' ? <View style={styles.previewGenerating}><ActivityIndicator color="#fff" /><Text style={styles.previewGeneratingText}>Generating look</Text></View> : null}
+                </Pressable>
+                <View style={[styles.wardrobeCategoryRail, styles.wardrobeCategoryRailLeft]}>
+                  {wardrobeLeftCategoryTabs.map(renderWardrobeCategoryButton)}
+                </View>
+                <View style={[styles.wardrobeCategoryRail, styles.wardrobeCategoryRailRight]}>
+                  {wardrobeRightCategoryTabs.map(renderWardrobeCategoryButton)}
+                </View>
+              </View>
               <TouchableOpacity
                 style={[styles.wardrobeTryButton, (!tryThisLookIds.length || busy === 'generate') && styles.disabledButton]}
                 disabled={!tryThisLookIds.length || busy === 'generate'}
-                onPress={() => generateOutfit(tryThisLookIds, { title: 'My wardrobe look' })}
+                onPress={() => generateOutfit(tryThisLookIds, { title: 'My wardrobe look', itemSlots: tryThisItemSlots })}
               >
-                <Text style={styles.wardrobeTryText}>{busy === 'generate' ? 'Generating...' : 'Try This Look'}</Text>
+                <Text style={styles.wardrobeTryText}>{busy === 'generate' ? 'Generating...' : 'Try On'}</Text>
               </TouchableOpacity>
             </View>
 
@@ -4366,7 +5011,7 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, initial = {}
             <FilterChips
               selected={closetView}
               options={[['stylist', 'Preview'], ['combo', 'Combo'], ['add', 'Add'], ['wardrobe', 'Wardrobe'], ['looks', 'Looks']]}
-              onSelect={setClosetView}
+              onSelect={switchClosetView}
               compact
             />
           </View>
@@ -4375,7 +5020,7 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, initial = {}
         {closetView === 'add' ? <View style={styles.closetPanel}>
           <Text style={styles.sectionTitle}>Add Clothing</Text>
           <TouchableOpacity style={styles.uploadBox} onPress={pickClosetItemPhoto}>
-            {itemPhoto?.uri ? <Image source={{ uri: itemPhoto.uri }} style={styles.uploadPreview} /> : <Ionicons name="cloud-upload-outline" size={30} color="#0f766e" />}
+            {itemPhoto?.uri ? <ResilientImage source={{ uri: itemPhoto.uri }} style={styles.uploadPreview} resizeMode="cover" fallbackIcon="shirt-outline" /> : <Ionicons name="cloud-upload-outline" size={30} color="#0f766e" />}
             <View style={styles.uploadCopy}>
               <Text style={styles.uploadTitle}>{busy === 'analyze-item' ? 'Analyzing clothing photo' : itemPhoto ? 'Closet photo selected' : 'Upload clothing photo'}</Text>
               <Text style={styles.photoGuideText}>{itemPhoto ? 'Detected details will be filled below for review.' : 'Use one clear item per photo for best combo selection.'}</Text>
@@ -4545,20 +5190,30 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, initial = {}
         ) : null}
         {closetView === 'wardrobe' ? <View style={styles.closetPanel}>
           <View style={styles.panelHeaderRow}>
-            <View>
-              <Text style={styles.sectionTitle}>Your Closet</Text>
-              <Text style={styles.muted}>Browse, save favorites, remove old items, or send selected pieces to combo.</Text>
+            <View style={styles.wardrobeHeaderCopy}>
+              <Text style={styles.sectionTitle}>{wardrobeFilterTitle}</Text>
+              <Text style={styles.muted}>{filter === 'all' && !activeWardrobeTab ? 'Browse, save favorites, remove old items, or send selected pieces to combo.' : `Saved ${wardrobeFilterLabel.toLowerCase()} from your wardrobe.`}</Text>
             </View>
-            {selectedIds.length ? <TouchableOpacity style={styles.smallOutlineButton} onPress={() => setClosetView('combo')}><Text style={styles.smallOutlineText}>Build ({selectedIds.length})</Text></TouchableOpacity> : null}
+            <View style={styles.wardrobeHeaderActions}>
+              {selectedIds.length ? <TouchableOpacity style={styles.smallOutlineButton} onPress={() => setClosetView('combo')}><Text style={styles.smallOutlineText}>Build ({selectedIds.length})</Text></TouchableOpacity> : null}
+            </View>
           </View>
-          <FilterChips selected={filter} options={[['all', 'All'], ...closetCategories.map((item) => [item, titleCase(item)])]} onSelect={setFilter} compact />
+          <FilterChips
+            selected={filter}
+            options={[['all', 'All'], ...closetCategories.map((item) => [item, titleCase(item)])]}
+            onSelect={(nextFilter) => {
+              setFilter(nextFilter);
+              setActiveWardrobeTabKey('');
+            }}
+            compact
+          />
         </View> : null}
         {closetView === 'wardrobe' || closetView === 'combo' ? closet.loading ? <WardrobeGridSkeleton /> : items.length ? (
           <View style={styles.closetGrid}>
             {(closetView === 'wardrobe' ? filteredItems : items).map((item) => {
               const selected = selectedIds.includes(item.id);
               return (
-                <Pressable key={item.id} style={[styles.closetItemCard, selected && styles.closetItemSelected]} onPress={() => toggleItem(item.id)}>
+                <Pressable key={item.id} style={[styles.closetItemCard, layout.productGridWidthStyle, selected && styles.closetItemSelected]} onPress={() => toggleItem(item.id)}>
                   <ResilientImage source={item.imageUrl ? { uri: imageUrl(item.imageUrl) } : null} style={styles.closetItemImage} resizeMode="cover" fallbackIcon="shirt-outline" />
                   <View style={styles.closetItemBody}>
                     <Text style={styles.productTitle} numberOfLines={1}>{item.name}</Text>
@@ -4581,6 +5236,20 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, initial = {}
             ) : null}
           </View>
         ) : null : null}
+        {closetView === 'wardrobe' && items.length ? (
+          <View style={styles.wardrobeGenerateFooter}>
+            <TouchableOpacity
+              style={[styles.wardrobeGenerateLookButton, (!selectedIds.length || busy === 'generate') && styles.disabledButton]}
+              activeOpacity={0.88}
+              disabled={!selectedIds.length || busy === 'generate'}
+              onPress={generateSelectedWardrobeLook}
+            >
+              <Ionicons name="sparkles-outline" size={20} color="#ffffff" />
+              <Text style={styles.wardrobeGenerateLookText}>{busy === 'generate' ? 'GENERATING...' : 'GENERATE LOOK'}</Text>
+              {selectedIds.length ? <Text style={styles.wardrobeGenerateLookCount}>{selectedIds.length}</Text> : null}
+            </TouchableOpacity>
+          </View>
+        ) : null}
         {closetView === 'looks' ? (
           <View style={styles.looksList}>
             {outfits.map((outfit) => (
@@ -4602,7 +5271,8 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, initial = {}
   );
 }
 
-function CustomTryOnScreen({ user, setUser, setToken, token, onNavigate, refreshUser }) {
+function CustomTryOnScreen({ user, setUser, setToken, token, onNavigate, onBack, refreshUser }) {
+  const layout = useResponsiveLayout();
   const [garment, setGarment] = useState(null);
   const [result, setResult] = useState(null);
   const [message, setMessage] = useState('');
@@ -4620,6 +5290,7 @@ function CustomTryOnScreen({ user, setUser, setToken, token, onNavigate, refresh
   const generatedUri = result?.imageUrl ? imageUrl(result.imageUrl) : '';
   const hasGenerated = Boolean(generatedUri);
   const latestCustomTryOn = latestCustom.data?.tryOn;
+  const customResultHeight = layout.isTablet ? Math.min(520, Math.max(390, Math.round(layout.contentWidth * 0.42))) : 368;
 
   useEffect(() => {
     if (garment || result || loading || !latestCustomTryOn?.imageUrl) return;
@@ -4649,7 +5320,7 @@ function CustomTryOnScreen({ user, setUser, setToken, token, onNavigate, refresh
     try {
       const form = new FormData();
       form.append('garment', filePart(garment, 'garment.jpg'));
-      const data = await api('/tryons/custom', { method: 'POST', body: form, timeoutMs: 180000, jobTimeoutMs: 240000 });
+      const data = await api('/tryons/custom', { method: 'POST', body: form, timeoutMs: aiTryOnRequestTimeoutMs, jobTimeoutMs: aiTryOnJobTimeoutMs });
       const nextTryOn = data.tryOn;
       setResult(nextTryOn);
       if (data.user) {
@@ -4679,8 +5350,8 @@ function CustomTryOnScreen({ user, setUser, setToken, token, onNavigate, refresh
         <Text style={styles.description}>Upload a garment image and Lookmefy will generate it on your saved profile photo with FitRoom.</Text>
       </View>
 
-      <View style={styles.customUploadRow}>
-        <Pressable style={styles.customProfileCard} onPress={() => profilePreviewUri && setLightbox(profilePreviewUri)}>
+      <View style={[styles.customUploadRow, layout.isTablet && styles.customUploadRowTablet]}>
+        <Pressable style={[styles.customProfileCard, layout.isTablet && styles.customProfileCardTablet]} onPress={() => profilePreviewUri && setLightbox(profilePreviewUri)}>
           {profilePreviewUri ? (
             <ResilientImage source={{ uri: profilePreviewUri }} style={styles.customProfileImage} resizeMode={profilePreviewIsFullBody ? 'contain' : 'cover'} fallbackIcon="person-outline" />
           ) : (
@@ -4694,7 +5365,7 @@ function CustomTryOnScreen({ user, setUser, setToken, token, onNavigate, refresh
             <Text style={styles.customProfileSub} numberOfLines={1}>{user.bodyPhotoStatus === 'generating' ? 'Preparing' : 'Saved'}</Text>
           </View>
         </Pressable>
-        <TouchableOpacity style={[styles.customGarmentDrop, garment?.uri && styles.customGarmentDropReady]} activeOpacity={0.86} onPress={chooseGarment}>
+        <TouchableOpacity style={[styles.customGarmentDrop, layout.isTablet && styles.customGarmentDropTablet, garment?.uri && styles.customGarmentDropReady]} activeOpacity={0.86} onPress={chooseGarment}>
           {garment?.uri ? (
             <>
               <Image source={{ uri: garment.uri }} style={styles.customGarmentImage} resizeMode="cover" />
@@ -4727,11 +5398,11 @@ function CustomTryOnScreen({ user, setUser, setToken, token, onNavigate, refresh
             </TouchableOpacity>
           ) : null}
         </View>
-        <Pressable style={styles.customResultFrame} onPress={() => hasGenerated && setLightbox(generatedUri)}>
+        <Pressable style={[styles.customResultFrame, { minHeight: customResultHeight }]} onPress={() => hasGenerated && setLightbox(generatedUri)}>
           {hasGenerated ? (
             <ResilientImage
               source={{ uri: generatedUri }}
-              style={styles.customResultImage}
+              style={[styles.customResultImage, { height: customResultHeight }]}
               resizeMode="cover"
               fallbackIcon="alert-circle-outline"
               fallbackText="Result unavailable. Generate again."
@@ -4770,8 +5441,11 @@ function StyleBotScreen({
   setToken,
   token,
   onNavigate,
+  onBack,
   registerTourTarget,
   tourFocusRequest,
+  aiStudioConversationId,
+  setAiStudioConversationId,
   aiStudioMessages,
   setAiStudioMessages,
   aiStudioTryOns,
@@ -4810,13 +5484,27 @@ function StyleBotScreen({
         timeoutMs: 70000,
         body: JSON.stringify({
           message: prompt,
+          conversationId: aiStudioConversationId || '',
           history: messages.slice(-8).map((message) => ({ role: message.role, text: message.text }))
         })
       });
-      const products = normalizeProducts(data.products || []);
+      const outfits = normalizeAiStudioOutfits(data.outfits || []);
+      const products = normalizeAiStudioProducts(data.products || [], outfits);
+      const actions = normalizeAiStudioActions(data);
+      if (data.conversationId) setAiStudioConversationId(data.conversationId);
       setMessages((current) => current.map((message) => (
         message.id === assistantId
-          ? { ...message, text: data.reply || 'I found a few directions for you.', products, suggestions: data.suggestions || [], loading: false }
+          ? {
+            ...message,
+            text: data.reply || 'I found a few directions for you.',
+            products,
+            outfits,
+            actions,
+            suggestions: Array.isArray(data.suggestions) ? data.suggestions : [],
+            mode: data.mode || '',
+            intent: data.intent || '',
+            loading: false
+          }
           : message
       )));
     } catch (error) {
@@ -4833,9 +5521,9 @@ function StyleBotScreen({
     }
   };
 
-  const generateChatTryOn = async (product) => {
-    const key = chatProductKey(product);
-    if (!product || chatTryOnLoading[key]) return;
+  const generateChatTryOn = async (product, stateKey) => {
+    const key = stateKey || chatProductKey(product);
+    if (!product || product.searchLink || product.tryOnAvailable === false || product.aiTryOnAvailable === false || chatTryOnLoading[key]) return;
     const profileMessage = tryOnProfileBlockMessage(user);
     if (profileMessage) {
       setChatTryOnErrors((current) => ({ ...current, [key]: profileMessage }));
@@ -4844,11 +5532,12 @@ function StyleBotScreen({
     setChatTryOnLoading((current) => ({ ...current, [key]: true }));
     setChatTryOnErrors((current) => ({ ...current, [key]: '' }));
     try {
-      const isExternalProduct = Boolean(product.external || product.sourceUrl || product.affiliateLink);
+      const isExternalProduct = isOnlineAiStudioProduct(product);
       const regenerate = Boolean(chatTryOns[key]?.imageUrl);
       const data = await api(isExternalProduct ? '/tryons/external' : `/tryons/${product.id}`, {
         method: 'POST',
-        timeoutMs: 180000,
+        timeoutMs: aiTryOnRequestTimeoutMs,
+        jobTimeoutMs: aiTryOnJobTimeoutMs,
         body: JSON.stringify(isExternalProduct ? { product, force: regenerate } : { force: regenerate })
       });
       setChatTryOns((current) => ({ ...current, [key]: data.tryOn }));
@@ -4878,7 +5567,7 @@ function StyleBotScreen({
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.aiStudioScreen}>
-      <ProductTopBar onNavigate={onNavigate} user={user} />
+      <ProductTopBar onNavigate={onNavigate} user={user} onBack={onBack} />
       <ScrollView ref={scrollRef} contentContainerStyle={styles.aiStudioContent} {...screenScrollProps}>
         <View style={styles.aiChatThread}>
           {messages.map((message) => {
@@ -4892,25 +5581,54 @@ function StyleBotScreen({
                 {message.products?.length ? (
                   <ScrollView {...horizontalScrollProps} contentContainerStyle={styles.aiSuggestionProductsTrack}>
                     {message.products.map((product) => {
-                      const key = chatProductKey(product);
-                      const tryOn = chatTryOns[key];
+                      const key = chatTryOnStateKey(message.id, product);
+                      const onlineProduct = isOnlineAiStudioProduct(product);
+                      const tryOnEnabled = !product.searchLink
+                        && product.tryOnAvailable !== false
+                        && product.aiTryOnAvailable !== false
+                        && Boolean(product.imageUrl || product.remoteImageUrl || product.thumbnail);
+                      const tryOn = tryOnEnabled ? chatTryOns[key] : null;
+                      const previewUri = productImageSource(product, tryOn)?.uri;
                       return (
                         <ConciergeSuggestionCard
                           key={key}
                           product={product}
-                          actionLabel={tryOn?.imageUrl ? 'Generate Again' : 'Generate Try-On'}
+                          actionLabel={tryOnEnabled ? (tryOn?.imageUrl ? 'Generate Again' : 'Generate Try-On') : onlineProduct ? (product.searchLink ? 'Search Amazon' : 'View on Amazon') : 'View product'}
                           tryOn={tryOn}
-                          tryOnLoading={Boolean(chatTryOnLoading[key])}
-                          tryOnError={chatTryOnErrors[key]}
-                          onPreview={tryOn?.imageUrl ? () => setLightbox(imageUrl(tryOn.imageUrl)) : null}
-                          onShop={() => product.affiliateLink ? openExternalWebUrl(product.affiliateLink) : onNavigate('product', { id: product.id })}
-                          onTryOn={() => generateChatTryOn(product)}
+                          tryOnLoading={tryOnEnabled && Boolean(chatTryOnLoading[key])}
+                          tryOnError={tryOnEnabled ? chatTryOnErrors[key] : ''}
+                          onPreview={previewUri ? () => setLightbox(previewUri) : null}
+                          onOpenProduct={() => onlineProduct
+                            ? openExternalWebUrl(product.affiliateLink || product.sourceUrl)
+                            : onNavigate('product', { id: product.id })}
+                          onShop={() => product.affiliateLink || product.sourceUrl ? openExternalWebUrl(product.affiliateLink || product.sourceUrl) : onNavigate('product', { id: product.id })}
+                          onTryOn={tryOnEnabled ? () => generateChatTryOn(product, key) : undefined}
                         />
                       );
                     })}
                   </ScrollView>
                 ) : null}
-                {message.suggestions?.length ? (
+                {message.outfits?.length ? (
+                  <View style={styles.aiOutfitList}>
+                    {message.outfits.map((outfit) => <AiStudioOutfitCard key={outfit.id} outfit={outfit} />)}
+                  </View>
+                ) : null}
+                {message.actions?.length ? (
+                  <View style={styles.aiFollowUpRow}>
+                    {message.actions.map((action) => (
+                      <TouchableOpacity
+                        key={`${message.id}-${action.type}-${action.label}`}
+                        style={[styles.aiFollowUpChip, action.disabled && styles.disabledButton]}
+                        activeOpacity={0.82}
+                        disabled={action.disabled}
+                        onPress={() => submit(action.prompt || action.label)}
+                      >
+                        <Text style={styles.aiFollowUpText}>{action.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                ) : null}
+                {!message.actions?.length && message.suggestions?.length ? (
                   <View style={styles.aiFollowUpRow}>
                     {message.suggestions.map((suggestion) => (
                       <TouchableOpacity key={suggestion} style={styles.aiFollowUpChip} activeOpacity={0.82} onPress={() => submit(suggestion)}>
@@ -4975,11 +5693,11 @@ const fallbackSubscriptionPlan = {
 };
 
 const fallbackTopUpPlans = [
-  { id: 'top_up_50_credits', type: 'top_up', name: 'Top-up', headline: '50 credits', amount: 19900, currency: 'INR', tokens: 50, credits: 50, billingFrequency: 'one_time', cadence: 'One-time', ratePerCredit: 3.98, description: 'One-time refill for extra image try-ons and videos.' },
-  { id: 'top_up_75_credits', type: 'top_up', name: 'Top-up', headline: '75 credits', amount: 29900, currency: 'INR', tokens: 75, credits: 75, billingFrequency: 'one_time', cadence: 'One-time', ratePerCredit: 3.99, description: 'One-time refill for extra image try-ons and videos.' },
-  { id: 'top_up_110_credits', type: 'top_up', name: 'Top-up', headline: '110 credits', amount: 39900, currency: 'INR', tokens: 110, credits: 110, billingFrequency: 'one_time', cadence: 'One-time', ratePerCredit: 3.63, description: 'Better value for product batches and style exploration.' },
-  { id: 'top_up_135_credits', type: 'top_up', name: 'Top-up', headline: '135 credits', amount: 49900, currency: 'INR', tokens: 135, credits: 135, billingFrequency: 'one_time', cadence: 'One-time', ratePerCredit: 3.7, description: 'Better value for product batches and style exploration.' },
-  { id: 'top_up_400_credits', type: 'top_up', name: 'Top-up', headline: '400 credits', amount: 99900, currency: 'INR', tokens: 400, credits: 400, billingFrequency: 'one_time', cadence: 'One-time', ratePerCredit: 2.5, badge: 'Best value', description: 'Best value for bulk catalog work and repeated video trials.' }
+  { id: 'top_up_50_credits', type: 'top_up', name: 'Top-up', headline: '50 credits', amount: 19900, currency: 'INR', tokens: 50, credits: 50, billingFrequency: 'one_time', cadence: 'One-time', ratePerCredit: 3.98, appStoreProductId: STOREKIT_CREDIT_TOP_UP_PRODUCT_IDS_BY_PLAN_ID.top_up_50_credits, description: 'One-time refill for extra image try-ons and videos.' },
+  { id: 'top_up_75_credits', type: 'top_up', name: 'Top-up', headline: '75 credits', amount: 29900, currency: 'INR', tokens: 75, credits: 75, billingFrequency: 'one_time', cadence: 'One-time', ratePerCredit: 3.99, appStoreProductId: STOREKIT_CREDIT_TOP_UP_PRODUCT_IDS_BY_PLAN_ID.top_up_75_credits, description: 'One-time refill for extra image try-ons and videos.' },
+  { id: 'top_up_110_credits', type: 'top_up', name: 'Top-up', headline: '110 credits', amount: 39900, currency: 'INR', tokens: 110, credits: 110, billingFrequency: 'one_time', cadence: 'One-time', ratePerCredit: 3.63, appStoreProductId: STOREKIT_CREDIT_TOP_UP_PRODUCT_IDS_BY_PLAN_ID.top_up_110_credits, description: 'Better value for product batches and style exploration.' },
+  { id: 'top_up_135_credits', type: 'top_up', name: 'Top-up', headline: '135 credits', amount: 49900, currency: 'INR', tokens: 135, credits: 135, billingFrequency: 'one_time', cadence: 'One-time', ratePerCredit: 3.7, appStoreProductId: STOREKIT_CREDIT_TOP_UP_PRODUCT_IDS_BY_PLAN_ID.top_up_135_credits, description: 'Better value for product batches and style exploration.' },
+  { id: 'top_up_400_credits', type: 'top_up', name: 'Top-up', headline: '400 credits', amount: 99900, currency: 'INR', tokens: 400, credits: 400, billingFrequency: 'one_time', cadence: 'One-time', ratePerCredit: 2.5, appStoreProductId: STOREKIT_CREDIT_TOP_UP_PRODUCT_IDS_BY_PLAN_ID.top_up_400_credits, badge: 'Best value', description: 'Best value for bulk catalog work and repeated video trials.' }
 ];
 
 const fallbackPaymentCatalog = {
@@ -4987,7 +5705,7 @@ const fallbackPaymentCatalog = {
   topUps: fallbackTopUpPlans,
   appStoreProductIds: {
     monthlySubscription: STOREKIT_MONTHLY_SUBSCRIPTION_PRODUCT_ID,
-    credits150: STOREKIT_CREDITS_150_PRODUCT_ID
+    creditTopUps: STOREKIT_CREDIT_TOP_UP_PRODUCT_IDS_BY_PLAN_ID
   },
   creditCosts: { starterCredits: 8, image: 1, customTryOn: 1, video: 3 }
 };
@@ -5016,9 +5734,9 @@ function PaymentSummaryLine({ label, value, strong }) {
   );
 }
 
-function MonthlyCreditCard({ plan, selected, active, onPress }) {
+function MonthlyCreditCard({ plan, selected, active, onPress, style }) {
   return (
-    <TouchableOpacity activeOpacity={0.88} style={[styles.creditMandateCard, selected && styles.creditMandateCardSelected]} onPress={onPress}>
+    <TouchableOpacity activeOpacity={0.88} style={[styles.creditMandateCard, style, selected && styles.creditMandateCardSelected]} onPress={onPress}>
       <View style={styles.creditSelectedRow}>
         {selected ? <Text style={styles.creditSelectedPill}>SELECTED</Text> : null}
         {active ? <Text style={styles.creditActivePill}>ACTIVE</Text> : null}
@@ -5033,9 +5751,9 @@ function MonthlyCreditCard({ plan, selected, active, onPress }) {
   );
 }
 
-function AddMoreCard({ selected, onPress }) {
+function AddMoreCard({ selected, onPress, style }) {
   return (
-    <TouchableOpacity activeOpacity={0.88} style={[styles.creditAddMoreCard, selected && styles.creditMandateCardSelected]} onPress={onPress}>
+    <TouchableOpacity activeOpacity={0.88} style={[styles.creditAddMoreCard, style, selected && styles.creditMandateCardSelected]} onPress={onPress}>
       <Text style={styles.creditCardKicker}>TOP-UP</Text>
       <Text style={styles.creditAddMoreTitle}>Add more</Text>
       <Text style={styles.creditMandateSub}>One-time packs</Text>
@@ -5045,9 +5763,9 @@ function AddMoreCard({ selected, onPress }) {
   );
 }
 
-function TopUpCreditCard({ plan, selected, onPress }) {
+function TopUpCreditCard({ plan, selected, onPress, style }) {
   return (
-    <TouchableOpacity activeOpacity={0.88} style={[styles.topUpCreditCard, selected && styles.creditMandateCardSelected]} onPress={onPress}>
+    <TouchableOpacity activeOpacity={0.88} style={[styles.topUpCreditCard, style, selected && styles.creditMandateCardSelected]} onPress={onPress}>
       {selected ? <Text style={styles.creditSelectedPill}>SELECTED</Text> : null}
       {plan.badge ? <Text style={styles.topUpBestValue}>{String(plan.badge).toUpperCase()}</Text> : null}
       <Text style={styles.creditCardKicker}>TOP-UP</Text>
@@ -5069,6 +5787,14 @@ function loadExpoIapModule() {
   }
 }
 
+const STOREKIT_MONTHLY_SUBSCRIPTION_PRODUCT_IDS = Object.freeze([STOREKIT_MONTHLY_SUBSCRIPTION_PRODUCT_ID]);
+
+function useLatestValue(value) {
+  const ref = useRef(value);
+  ref.current = value;
+  return ref;
+}
+
 function storeKitProductPrice(product) {
   return product?.displayPrice || product?.localizedPriceIOS || product?.localizedPrice || '';
 }
@@ -5077,8 +5803,25 @@ function storeKitProductTitle(product, fallback) {
   return product?.displayName || product?.displayNameIOS || product?.title || fallback;
 }
 
+function storeKitProductId(product = {}) {
+  return String(product?.id || product?.productId || '').trim();
+}
+
 function findStoreKitProduct(items, productId) {
-  return (Array.isArray(items) ? items : []).find((item) => item?.id === productId || item?.productId === productId) || null;
+  const targetProductId = String(productId || '').trim();
+  return (Array.isArray(items) ? items : []).find((item) => storeKitProductId(item) === targetProductId) || null;
+}
+
+function storeKitProductsById(items) {
+  return (Array.isArray(items) ? items : []).reduce((indexed, item) => {
+    const productId = storeKitProductId(item);
+    if (productId) indexed[productId] = item;
+    return indexed;
+  }, {});
+}
+
+function applePurchaseTransactionId(purchase = {}) {
+  return String(purchase.transactionId || purchase.id || '').trim();
 }
 
 function isStoreKitCancel(error) {
@@ -5107,7 +5850,11 @@ function applePurchaseServerPayload(purchase = {}) {
 
 function isLookmefyStoreKitPurchase(purchase = {}) {
   const productId = String(purchase.productId || purchase.currentPlanId || '').trim();
-  return productId === STOREKIT_MONTHLY_SUBSCRIPTION_PRODUCT_ID || productId === STOREKIT_CREDITS_150_PRODUCT_ID;
+  return isLookmefyStoreKitProductId(productId);
+}
+
+function storeKitUserIdentity(user = {}) {
+  return String(user?.id || user?._id || '').trim();
 }
 
 function useAppleStoreKitPayments({ enabled, user, setUser, onRequireAuth }) {
@@ -5124,15 +5871,25 @@ function useAppleStoreKitPayments({ enabled, user, setUser, onRequireAuth }) {
     error: '',
     unavailableReason: '',
     subscriptionProduct: null,
-    creditsProduct: null,
+    creditProducts: [],
+    creditProductsById: {},
     activeSubscriptions: []
   });
   const iapRef = useRef(null);
   const processingRef = useRef(new Set());
+  const userRef = useLatestValue(user);
+  const onRequireAuthRef = useLatestValue(onRequireAuth);
+  const userIdentity = storeKitUserIdentity(user);
 
   const updateState = useCallback((patch) => {
     setState((current) => ({ ...current, ...patch }));
   }, []);
+
+  const updateUserFromStoreKit = useCallback((nextUser) => {
+    if (!nextUser) return;
+    userRef.current = nextUser;
+    setUser(nextUser);
+  }, [setUser, userRef]);
 
   const finishStoreKitTransaction = useCallback(async (purchase) => {
     const iap = iapRef.current;
@@ -5140,7 +5897,7 @@ function useAppleStoreKitPayments({ enabled, user, setUser, onRequireAuth }) {
     try {
       await iap.finishTransaction({
         purchase,
-        isConsumable: String(purchase?.productId || '') === STOREKIT_CREDITS_150_PRODUCT_ID
+        isConsumable: isStoreKitConsumableProductId(purchase?.productId)
       });
     } catch (error) {
       updateState({ error: `Apple verified the purchase, but finishing it failed: ${error.message}` });
@@ -5162,19 +5919,22 @@ function useAppleStoreKitPayments({ enabled, user, setUser, onRequireAuth }) {
     updateState({ loading: true, error: '', unavailableReason: '' });
     try {
       const [subscriptionProducts, consumableProducts, activeSubscriptions] = await Promise.all([
-        iap.fetchProducts({ skus: [STOREKIT_MONTHLY_SUBSCRIPTION_PRODUCT_ID], type: 'subs' }),
-        iap.fetchProducts({ skus: [STOREKIT_CREDITS_150_PRODUCT_ID], type: 'in-app' }),
-        iap.getActiveSubscriptions ? iap.getActiveSubscriptions([STOREKIT_MONTHLY_SUBSCRIPTION_PRODUCT_ID]).catch(() => []) : []
+        iap.fetchProducts({ skus: STOREKIT_MONTHLY_SUBSCRIPTION_PRODUCT_IDS, type: 'subs' }),
+        iap.fetchProducts({ skus: STOREKIT_CONSUMABLE_PRODUCT_IDS, type: 'in-app' }),
+        iap.getActiveSubscriptions ? iap.getActiveSubscriptions(STOREKIT_MONTHLY_SUBSCRIPTION_PRODUCT_IDS).catch(() => []) : []
       ]);
       const subscriptionProduct = findStoreKitProduct(subscriptionProducts, STOREKIT_MONTHLY_SUBSCRIPTION_PRODUCT_ID);
-      const creditsProduct = findStoreKitProduct(consumableProducts, STOREKIT_CREDITS_150_PRODUCT_ID);
+      const creditProductsById = storeKitProductsById(consumableProducts);
+      const creditProducts = STOREKIT_CONSUMABLE_PRODUCT_IDS.map((productId) => creditProductsById[productId]).filter(Boolean);
+      const missingCreditProducts = STOREKIT_CONSUMABLE_PRODUCT_IDS.filter((productId) => !creditProductsById[productId]);
       updateState({
         loading: false,
         connected: true,
         subscriptionProduct,
-        creditsProduct,
+        creditProducts,
+        creditProductsById,
         activeSubscriptions: Array.isArray(activeSubscriptions) ? activeSubscriptions : [],
-        unavailableReason: !subscriptionProduct || !creditsProduct ? 'App Store products are not available for this Apple ID/build yet.' : ''
+        unavailableReason: !subscriptionProduct || missingCreditProducts.length ? 'Some App Store products are not available for this Apple ID/build yet.' : ''
       });
     } catch (error) {
       updateState({
@@ -5187,7 +5947,8 @@ function useAppleStoreKitPayments({ enabled, user, setUser, onRequireAuth }) {
   }, [enabled, updateState]);
 
   const syncCurrentEntitlements = useCallback(async ({ silent = false } = {}) => {
-    if (!enabled || !user) return;
+    const currentUser = userRef.current;
+    if (!enabled || !currentUser) return;
     const iap = iapRef.current;
     if (!iap) return;
 
@@ -5206,12 +5967,21 @@ function useAppleStoreKitPayments({ enabled, user, setUser, onRequireAuth }) {
           method: 'POST',
           body: JSON.stringify({ purchases: relevantPurchases.map(applePurchaseServerPayload) })
         });
-        if (restoreResult.user) setUser(restoreResult.user);
-        for (const purchase of relevantPurchases) await finishStoreKitTransaction(purchase);
+        if (restoreResult.user) updateUserFromStoreKit(restoreResult.user);
+        const verifiedTransactionIds = new Set(
+          (Array.isArray(restoreResult.transactions) ? restoreResult.transactions : [])
+            .map((transaction) => String(transaction?.transactionId || '').trim())
+            .filter(Boolean)
+        );
+        for (const purchase of relevantPurchases) {
+          if (verifiedTransactionIds.has(applePurchaseTransactionId(purchase))) {
+            await finishStoreKitTransaction(purchase);
+          }
+        }
       }
 
       const statusResult = await api('/payments/apple/status', { noCache: true });
-      if (statusResult.user) setUser(statusResult.user);
+      if (statusResult.user) updateUserFromStoreKit(statusResult.user);
       updateState({
         syncing: false,
         error: '',
@@ -5223,12 +5993,13 @@ function useAppleStoreKitPayments({ enabled, user, setUser, onRequireAuth }) {
         error: error.message || 'Could not sync App Store status.'
       });
     }
-  }, [enabled, finishStoreKitTransaction, setUser, updateState, user]);
+  }, [enabled, finishStoreKitTransaction, updateState, updateUserFromStoreKit, userRef]);
 
   const verifyPurchase = useCallback(async (purchase, source = 'purchase') => {
     if (!enabled || !isLookmefyStoreKitPurchase(purchase)) return false;
-    if (!user) {
-      onRequireAuth?.('Log in with your mobile number before completing an App Store purchase.');
+    const currentUser = userRef.current;
+    if (!currentUser) {
+      onRequireAuthRef.current?.('Log in with your mobile number before completing an App Store purchase.');
       updateState({ purchasePending: false, purchasingProductId: '', error: 'Log in before completing this App Store purchase.' });
       return false;
     }
@@ -5252,7 +6023,7 @@ function useAppleStoreKitPayments({ enabled, user, setUser, onRequireAuth }) {
           purchase: applePurchaseServerPayload(purchase)
         })
       });
-      if (result.user) setUser(result.user);
+      if (result.user) updateUserFromStoreKit(result.user);
       await finishStoreKitTransaction(purchase);
       updateState({
         verifying: false,
@@ -5273,7 +6044,7 @@ function useAppleStoreKitPayments({ enabled, user, setUser, onRequireAuth }) {
     } finally {
       if (key) processingRef.current.delete(key);
     }
-  }, [enabled, finishStoreKitTransaction, onRequireAuth, setUser, updateState, user]);
+  }, [enabled, finishStoreKitTransaction, onRequireAuthRef, updateState, updateUserFromStoreKit, userRef]);
 
   useEffect(() => {
     if (!enabled) return undefined;
@@ -5328,15 +6099,16 @@ function useAppleStoreKitPayments({ enabled, user, setUser, onRequireAuth }) {
   }, [enabled, refreshProducts, updateState, verifyPurchase]);
 
   useEffect(() => {
-    if (enabled && state.connected && user?.id) {
+    if (enabled && state.connected && userIdentity) {
       syncCurrentEntitlements({ silent: true });
     }
-  }, [enabled, state.connected, syncCurrentEntitlements, user?.id]);
+  }, [enabled, state.connected, syncCurrentEntitlements, userIdentity]);
 
   const requestStoreKitPurchase = useCallback(async ({ productId, type }) => {
     if (!enabled) return;
-    if (!user) {
-      onRequireAuth?.('Log in with your mobile number to buy credits.');
+    const currentUser = userRef.current;
+    if (!currentUser) {
+      onRequireAuthRef.current?.('Log in with your mobile number to buy credits.');
       return;
     }
     const iap = iapRef.current;
@@ -5344,12 +6116,12 @@ function useAppleStoreKitPayments({ enabled, user, setUser, onRequireAuth }) {
       updateState({ error: 'App Store payments are not ready yet.' });
       return;
     }
-    const product = productId === STOREKIT_MONTHLY_SUBSCRIPTION_PRODUCT_ID ? state.subscriptionProduct : state.creditsProduct;
+    const product = productId === STOREKIT_MONTHLY_SUBSCRIPTION_PRODUCT_ID ? state.subscriptionProduct : state.creditProductsById[productId];
     if (!product) {
       updateState({ error: 'This App Store product is unavailable for the current build or Apple ID.' });
       return;
     }
-    const appAccountToken = storeKitAppAccountTokenForUser(user);
+    const appAccountToken = storeKitAppAccountTokenForUser(currentUser);
     if (!appAccountToken) {
       updateState({ error: 'Could not link this App Store purchase to your Lookmefy account.' });
       return;
@@ -5368,7 +6140,7 @@ function useAppleStoreKitPayments({ enabled, user, setUser, onRequireAuth }) {
           apple: {
             sku: productId,
             appAccountToken,
-            quantity: productId === STOREKIT_CREDITS_150_PRODUCT_ID ? 1 : undefined,
+            quantity: isStoreKitConsumableProductId(productId) ? 1 : undefined,
             andDangerouslyFinishTransactionAutomatically: false
           }
         },
@@ -5383,17 +6155,17 @@ function useAppleStoreKitPayments({ enabled, user, setUser, onRequireAuth }) {
         error: isStoreKitCancel(error) ? '' : error.message || 'Could not start App Store purchase.'
       });
     }
-  }, [enabled, onRequireAuth, state.connected, state.creditsProduct, state.subscriptionProduct, updateState, user]);
+  }, [enabled, onRequireAuthRef, state.connected, state.creditProductsById, state.subscriptionProduct, updateState, userRef]);
 
   const restorePurchases = useCallback(async () => {
-    if (!enabled || !user) {
-      onRequireAuth?.('Log in with your mobile number to restore App Store purchases.');
+    if (!enabled || !userRef.current) {
+      onRequireAuthRef.current?.('Log in with your mobile number to restore App Store purchases.');
       return;
     }
     updateState({ restoring: true, statusMessage: 'Restoring App Store purchases...', error: '' });
     await syncCurrentEntitlements({ silent: false });
     updateState({ restoring: false });
-  }, [enabled, onRequireAuth, syncCurrentEntitlements, updateState, user]);
+  }, [enabled, onRequireAuthRef, syncCurrentEntitlements, updateState, userRef]);
 
   const manageSubscription = useCallback(async () => {
     const iap = iapRef.current;
@@ -5407,7 +6179,7 @@ function useAppleStoreKitPayments({ enabled, user, setUser, onRequireAuth }) {
   return {
     ...state,
     purchaseMonthly: () => requestStoreKitPurchase({ productId: STOREKIT_MONTHLY_SUBSCRIPTION_PRODUCT_ID, type: 'subs' }),
-    purchaseCredits: () => requestStoreKitPurchase({ productId: STOREKIT_CREDITS_150_PRODUCT_ID, type: 'in-app' }),
+    purchaseCredits: (productId) => requestStoreKitPurchase({ productId, type: 'in-app' }),
     restorePurchases,
     syncCurrentEntitlements,
     refreshProducts,
@@ -5415,10 +6187,10 @@ function useAppleStoreKitPayments({ enabled, user, setUser, onRequireAuth }) {
   };
 }
 
-function AppleStoreKitCreditCard({ selected, active, product, title, kicker, headline, subhead, description, onPress }) {
+function AppleStoreKitCreditCard({ selected, active, product, title, kicker, headline, subhead, description, onPress, style }) {
   const price = storeKitProductPrice(product);
   return (
-    <TouchableOpacity activeOpacity={0.88} style={[styles.creditMandateCard, selected && styles.creditMandateCardSelected]} onPress={onPress}>
+    <TouchableOpacity activeOpacity={0.88} style={[styles.creditMandateCard, style, selected && styles.creditMandateCardSelected]} onPress={onPress}>
       <View style={styles.creditSelectedRow}>
         {selected ? <Text style={styles.creditSelectedPill}>SELECTED</Text> : null}
         {active ? <Text style={styles.creditActivePill}>ACTIVE</Text> : null}
@@ -5433,13 +6205,30 @@ function AppleStoreKitCreditCard({ selected, active, product, title, kicker, hea
   );
 }
 
-function AppleStoreKitActions({ mode, appleStoreKit, activeMonthly }) {
+function AppleStoreKitTopUpCard({ plan, product, selected, onPress, style }) {
+  const price = storeKitProductPrice(product);
+  return (
+    <TouchableOpacity activeOpacity={0.88} style={[styles.topUpCreditCard, style, selected && styles.creditMandateCardSelected]} onPress={onPress}>
+      {selected ? <Text style={styles.creditSelectedPill}>SELECTED</Text> : null}
+      {plan.badge ? <Text style={styles.topUpBestValue}>{String(plan.badge).toUpperCase()}</Text> : null}
+      <Text style={styles.creditCardKicker}>TOP-UP</Text>
+      <Text style={styles.topUpPrice}>{price || 'Unavailable'}</Text>
+      <Text style={styles.creditMandateSub}>{plan.credits} credits</Text>
+      <Text style={styles.creditMutedText}>{storeKitProductTitle(product, `${plan.credits} credit top-up`)}</Text>
+      <Text style={styles.creditCapsText}>{String(plan.cadence || 'One-time').toUpperCase()}</Text>
+      <Text style={styles.creditCardDescription}>{plan.description}</Text>
+    </TouchableOpacity>
+  );
+}
+
+function AppleStoreKitActions({ mode, appleStoreKit, activeMonthly, selectedTopUp }) {
   const buyingSubscription = appleStoreKit.purchasingProductId === STOREKIT_MONTHLY_SUBSCRIPTION_PRODUCT_ID;
-  const buyingCredits = appleStoreKit.purchasingProductId === STOREKIT_CREDITS_150_PRODUCT_ID;
+  const buyingCredits = isStoreKitConsumableProductId(appleStoreKit.purchasingProductId);
   const busy = appleStoreKit.loading || appleStoreKit.verifying || appleStoreKit.purchasePending || appleStoreKit.syncing || appleStoreKit.restoring;
-  const selectedProduct = mode === 'top_up' ? appleStoreKit.creditsProduct : appleStoreKit.subscriptionProduct;
+  const selectedTopUpProductId = storeKitProductIdForTopUpPlan(selectedTopUp);
+  const selectedProduct = mode === 'top_up' ? appleStoreKit.creditProductsById[selectedTopUpProductId] : appleStoreKit.subscriptionProduct;
   const disabled = busy || !appleStoreKit.connected || !selectedProduct || (mode === 'subscription' && activeMonthly);
-  let label = mode === 'top_up' ? 'BUY 150 CREDITS' : 'SUBSCRIBE WITH APPLE';
+  let label = mode === 'top_up' ? `BUY ${Number(selectedTopUp?.credits) || ''} CREDITS`.trim() : 'SUBSCRIBE WITH APPLE';
   if (appleStoreKit.loading) label = 'LOADING APP STORE';
   else if (appleStoreKit.restoring) label = 'RESTORING PURCHASES';
   else if (appleStoreKit.syncing) label = 'SYNCING STATUS';
@@ -5453,7 +6242,7 @@ function AppleStoreKitActions({ mode, appleStoreKit, activeMonthly }) {
         style={[styles.secureCheckoutButton, disabled && styles.disabledButton]}
         activeOpacity={0.88}
         disabled={disabled}
-        onPress={mode === 'top_up' ? appleStoreKit.purchaseCredits : appleStoreKit.purchaseMonthly}
+        onPress={mode === 'top_up' ? () => appleStoreKit.purchaseCredits(selectedTopUpProductId) : appleStoreKit.purchaseMonthly}
       >
         <Text style={styles.secureCheckoutText}>{label}</Text>
       </TouchableOpacity>
@@ -5479,7 +6268,8 @@ function AppleStoreKitActions({ mode, appleStoreKit, activeMonthly }) {
   );
 }
 
-function TokensScreen({ user, setUser, onNavigate, onRequireAuth }) {
+function TokensScreen({ user, setUser, onNavigate, onBack, onRequireAuth }) {
+  const layout = useResponsiveLayout();
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
   const [message, setMessage] = useState('');
@@ -5507,12 +6297,15 @@ function TokensScreen({ user, setUser, onNavigate, onRequireAuth }) {
   const isAppleCheckout = Platform.OS === 'ios';
   const activeAppleMonthly = isAppleCheckout && subscription?.provider === 'apple' && activeMonthly;
   const appleStoreKit = useAppleStoreKitPayments({ enabled: isAppleCheckout, user, setUser, onRequireAuth });
-  const appleSelectedProduct = mode === 'top_up' ? appleStoreKit.creditsProduct : appleStoreKit.subscriptionProduct;
+  const appleSelectedTopUpProductId = storeKitProductIdForTopUpPlan(selectedTopUp);
+  const appleSelectedProduct = mode === 'top_up' ? appleStoreKit.creditProductsById[appleSelectedTopUpProductId] : appleStoreKit.subscriptionProduct;
   const appleSelectedPrice = storeKitProductPrice(appleSelectedProduct) || 'Unavailable';
-  const appleSelectedProductId = mode === 'top_up' ? STOREKIT_CREDITS_150_PRODUCT_ID : STOREKIT_MONTHLY_SUBSCRIPTION_PRODUCT_ID;
+  const appleSelectedProductId = mode === 'top_up' ? appleSelectedTopUpProductId : STOREKIT_MONTHLY_SUBSCRIPTION_PRODUCT_ID;
   const visibleMessage = isAppleCheckout
     ? appleStoreKit.error || appleStoreKit.statusMessage || appleStoreKit.unavailableReason
     : message;
+  const creditChoiceCardStyle = layout.isTablet ? styles.creditGridCardHalf : null;
+  const topUpCreditCardStyle = layout.isTablet ? (layout.isLargeTablet ? styles.creditGridCardThird : styles.creditGridCardHalf) : null;
   const firstPaymentDate = formatDate(addDays(new Date(), 1));
   const messageIsError = isAppleCheckout
     ? Boolean(appleStoreKit.error || appleStoreKit.unavailableReason)
@@ -5553,7 +6346,7 @@ function TokensScreen({ user, setUser, onNavigate, onRequireAuth }) {
   const verifyPaymentOrder = useCallback(async (merchantOrderId, silent = false) => {
     if (!user || !merchantOrderId || verifyingOrderRef.current === merchantOrderId) return;
     verifyingOrderRef.current = merchantOrderId;
-    if (!silent) setMessage('Verifying payment with PhonePe...');
+    if (!silent) setMessage('Verifying payment with Razorpay...');
     try {
       const data = await api(`/payments/orders/${encodeURIComponent(merchantOrderId)}/status`, { noCache: true });
       if (data.user) setUser(data.user);
@@ -5561,7 +6354,7 @@ function TokensScreen({ user, setUser, onNavigate, onRequireAuth }) {
       const credits = Number(data.order?.tokens) || Number(selectedPlan.credits) || 0;
       if (state === 'completed') {
         setPendingOrderId('');
-        setMessage(`${data.order?.purchaseType === 'top_up' ? 'Top-up confirmed' : 'Monthly mandate confirmed'}. ${credits} credits have been added.`);
+        setMessage(`${data.order?.purchaseType === 'top_up' ? 'Top-up confirmed' : 'Monthly plan confirmed'}. ${credits} credits have been added.`);
       } else if (state === 'failed') {
         setPendingOrderId('');
         setMessage('Payment was not completed. You can try again when ready.');
@@ -5609,10 +6402,9 @@ function TokensScreen({ user, setUser, onNavigate, onRequireAuth }) {
     if (!selectedPlan?.id) return;
 
     setCheckoutLoading(true);
-    setMessage(mode === 'top_up' ? 'Opening PhonePe checkout...' : 'Opening PhonePe mandate setup...');
+    setMessage(mode === 'top_up' ? 'Opening Razorpay checkout...' : 'Opening Razorpay monthly checkout...');
     try {
-      const endpoint = mode === 'top_up' ? '/payments/phonepe/top-up' : '/payments/phonepe/subscription';
-      const data = await api(endpoint, {
+      const data = await api('/payments/checkout', {
         method: 'POST',
         body: JSON.stringify({
           planId: selectedPlan.id,
@@ -5620,27 +6412,46 @@ function TokensScreen({ user, setUser, onNavigate, onRequireAuth }) {
           redirectUrl: mobilePaymentReturnUrl()
         })
       });
-      const paymentUrl = data.paymentUrl || data.redirectUrl;
-      const merchantOrderId = data.order?.merchantOrderId || '';
+      const paymentUrl = data.paymentUrl || data.redirectUrl || data.razorpay?.paymentUrl || data.razorpay?.checkoutUrl;
+      const merchantOrderId = data.order?.merchantOrderId || data.razorpay?.notes?.merchantOrderId || '';
+      const verifyPath = data.razorpay?.verifyPath || '/payments/razorpay/verify';
       if (merchantOrderId) setPendingOrderId(merchantOrderId);
+      const paymentResult = data.paymentResult || data.razorpay?.paymentResult;
+      if (paymentResult?.razorpay_payment_id && paymentResult?.razorpay_signature) {
+        const verified = await api(verifyPath, {
+          method: 'POST',
+          body: JSON.stringify({
+            merchantOrderId,
+            razorpay_order_id: paymentResult.razorpay_order_id || data.razorpay?.orderId,
+            razorpay_payment_id: paymentResult.razorpay_payment_id,
+            razorpay_signature: paymentResult.razorpay_signature
+          })
+        });
+        if (verified.user) setUser(verified.user);
+        setPendingOrderId('');
+        setMessage(verified.message || 'Payment verified. Credits credited.');
+        return;
+      }
       if (paymentUrl) {
         await Linking.openURL(paymentUrl);
-        setMessage('Complete payment in PhonePe, then return to Lookmefy.');
+        setMessage('Complete payment in Razorpay, then return to Lookmefy.');
+      } else if (data.razorpay?.orderId) {
+        setMessage('Razorpay order is ready. Complete the payment from the secure checkout, then verify here.');
       } else {
-        setMessage('PhonePe did not return a checkout link. Please try again.');
+        setMessage('Razorpay did not return checkout details. Please try again.');
       }
     } catch (error) {
       setMessage(error.message);
     } finally {
       setCheckoutLoading(false);
     }
-  }, [mode, onRequireAuth, selectedPlan?.id, user]);
+  }, [mode, onRequireAuth, selectedPlan?.id, setUser, user]);
 
   const cancelSubscription = useCallback(() => {
     if (!activeMonthly || cancelLoading) return;
     Alert.alert(
       'Cancel monthly billing?',
-      'Your current credits stay available. Future monthly PhonePe debits will be cancelled.',
+      'Your current credits stay available. Future monthly Razorpay billing will be cancelled.',
       [
         { text: 'Keep Plan', style: 'cancel' },
         {
@@ -5667,6 +6478,7 @@ function TokensScreen({ user, setUser, onNavigate, onRequireAuth }) {
   return (
     <ScrollView style={styles.creditsScreen} contentContainerStyle={styles.creditsContent} {...screenScrollProps}>
       <AppHeader onNavigate={onNavigate} user={user} compact />
+      <PageBackRow onBack={onBack} />
 
       <View style={styles.creditsHero}>
         <View style={styles.creditsHeroCopy}>
@@ -5689,32 +6501,36 @@ function TokensScreen({ user, setUser, onNavigate, onRequireAuth }) {
 
       {mode === 'top_up' ? (
         isAppleCheckout ? (
-          <View style={styles.topUpGrid}>
-            <AppleStoreKitCreditCard
-              product={appleStoreKit.creditsProduct}
-              selected
-              title="150 credit top-up"
-              kicker="TOP-UP"
-              headline="150 credits"
-              subhead="Pay-as-you-go credits"
-              description="One-time consumable App Store purchase. Credits are added only after the server verifies the Apple transaction."
-              onPress={() => {}}
-            />
+          <View style={[styles.topUpGrid, layout.isTablet && styles.creditResponsiveGrid]}>
+            {topUpPlans.map((planItem) => {
+              const productId = storeKitProductIdForTopUpPlan(planItem);
+              return (
+                <AppleStoreKitTopUpCard
+                  key={planItem.id}
+                  plan={planItem}
+                  product={appleStoreKit.creditProductsById[productId]}
+                  selected={selectedPlan.id === planItem.id}
+                  style={topUpCreditCardStyle}
+                  onPress={() => setSelectedTopUpId(planItem.id)}
+                />
+              );
+            })}
           </View>
         ) : (
-          <View style={styles.topUpGrid}>
+          <View style={[styles.topUpGrid, layout.isTablet && styles.creditResponsiveGrid]}>
             {topUpPlans.map((planItem) => (
               <TopUpCreditCard
                 key={planItem.id}
                 plan={planItem}
                 selected={selectedPlan.id === planItem.id}
+                style={topUpCreditCardStyle}
                 onPress={() => setSelectedTopUpId(planItem.id)}
               />
             ))}
           </View>
         )
       ) : (
-        <View style={styles.creditChoiceGrid}>
+        <View style={[styles.creditChoiceGrid, layout.isTablet && styles.creditResponsiveGrid]}>
           {isAppleCheckout ? (
             <AppleStoreKitCreditCard
               product={appleStoreKit.subscriptionProduct}
@@ -5725,12 +6541,13 @@ function TokensScreen({ user, setUser, onNavigate, onRequireAuth }) {
               headline="150 credits every month"
               subhead="Auto-renewable monthly subscription"
               description="Renews through your Apple ID. Monthly credits are added once per verified Apple subscription period."
+              style={creditChoiceCardStyle}
               onPress={() => setMode('subscription')}
             />
           ) : (
-            <MonthlyCreditCard plan={subscriptionPlan} selected={mode === 'subscription'} active={activeMonthly} onPress={() => setMode('subscription')} />
+            <MonthlyCreditCard plan={subscriptionPlan} selected={mode === 'subscription'} active={activeMonthly} style={creditChoiceCardStyle} onPress={() => setMode('subscription')} />
           )}
-          <AddMoreCard selected={false} onPress={() => setMode('top_up')} />
+          <AddMoreCard selected={false} style={creditChoiceCardStyle} onPress={() => setMode('top_up')} />
         </View>
       )}
 
@@ -5749,7 +6566,7 @@ function TokensScreen({ user, setUser, onNavigate, onRequireAuth }) {
             </View>
           )}
           <View>
-            <Text style={styles.paymentMethodText}>{isAppleCheckout ? 'App Store' : 'PhonePe'}</Text>
+            <Text style={styles.paymentMethodText}>{isAppleCheckout ? 'App Store' : 'Razorpay'}</Text>
             <Text style={styles.paymentMethodSubText}>{isAppleCheckout ? 'Apple ID billing' : 'UPI, cards, and net banking'}</Text>
           </View>
         </View>
@@ -5762,11 +6579,11 @@ function TokensScreen({ user, setUser, onNavigate, onRequireAuth }) {
         <View style={styles.orderSummaryDivider} />
         {isAppleCheckout ? (
           <>
-            <PaymentSummaryLine label="Credit Package" value={mode === 'top_up' ? '150 credit top-up' : storeKitProductTitle(appleStoreKit.subscriptionProduct, 'Lookmefy Premium Monthly')} strong />
-            <PaymentSummaryLine label="Tokens" value={mode === 'top_up' ? '150 credits' : '150 credits every month'} strong />
+            <PaymentSummaryLine label="Credit Package" value={mode === 'top_up' ? `${selectedTopUp.credits} credit top-up` : storeKitProductTitle(appleStoreKit.subscriptionProduct, 'Lookmefy Premium Monthly')} strong />
+            <PaymentSummaryLine label="Tokens" value={mode === 'top_up' ? `${selectedTopUp.credits} credits` : '150 credits every month'} strong />
             <PaymentSummaryLine label="Apple Price" value={appleSelectedPrice} strong />
             <PaymentSummaryLine label="Billing" value={mode === 'top_up' ? 'One-time consumable' : 'Monthly auto-renewing'} strong />
-            <PaymentSummaryLine label="Product ID" value={appleSelectedProductId} strong />
+            <PaymentSummaryLine label="Product ID" value={appleSelectedProductId || 'Unavailable'} strong />
           </>
         ) : (
           <>
@@ -5803,17 +6620,17 @@ function TokensScreen({ user, setUser, onNavigate, onRequireAuth }) {
       {visibleMessage ? <Text style={[styles.creditsMessage, messageIsError ? styles.errorText : null]}>{visibleMessage}</Text> : null}
 
       {isAppleCheckout ? (
-        <AppleStoreKitActions mode={mode} appleStoreKit={appleStoreKit} activeMonthly={activeAppleMonthly} />
+        <AppleStoreKitActions mode={mode} appleStoreKit={appleStoreKit} activeMonthly={activeAppleMonthly} selectedTopUp={selectedTopUp} />
       ) : (
         <TouchableOpacity style={[styles.secureCheckoutButton, checkoutLoading && styles.disabledButton]} activeOpacity={0.88} disabled={checkoutLoading} onPress={startCheckout}>
-          <Text style={styles.secureCheckoutText}>{checkoutLoading ? 'OPENING PHONEPE' : mode === 'top_up' ? 'SECURE CHECKOUT' : 'SET UP MANDATE'}</Text>
+          <Text style={styles.secureCheckoutText}>{checkoutLoading ? 'OPENING RAZORPAY' : mode === 'top_up' ? 'SECURE CHECKOUT' : 'SET UP MONTHLY'}</Text>
         </TouchableOpacity>
       )}
 
       {!isAppleCheckout && pendingOrderId ? (
         <TouchableOpacity style={styles.verifyPaymentButton} activeOpacity={0.82} onPress={() => verifyPaymentOrder(pendingOrderId)}>
           <Ionicons name="refresh" size={16} color="#5e3335" />
-          <Text style={styles.verifyPaymentText}>VERIFY PHONEPE PAYMENT</Text>
+          <Text style={styles.verifyPaymentText}>VERIFY RAZORPAY PAYMENT</Text>
         </TouchableOpacity>
       ) : null}
 
@@ -5846,11 +6663,12 @@ function formatFileSize(value) {
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function WishlistScreen({ onNavigate, token, wishlistProducts = [], user }) {
+function WishlistScreen({ onNavigate, onBack, token, wishlistProducts = [], user }) {
   const recommended = useProducts({ sort: 'newest', limit: 6 }, token);
   return (
     <ScrollView style={styles.wishlistScreen} contentContainerStyle={styles.wishlistContent} {...screenScrollProps}>
       <AppHeader onNavigate={onNavigate} user={user} compact />
+      <PageBackRow onBack={onBack} />
 
       <View style={styles.wishlistBody}>
         <Text style={styles.wishlistTitle}>My Wishlist <Text style={styles.wishlistCount}>({wishlistProducts.length})</Text></Text>
@@ -5954,13 +6772,14 @@ function WishlistProductCard({ product, onPress }) {
   );
 }
 
-function OrdersScreen({ onNavigate, token, user }) {
+function OrdersScreen({ onNavigate, onBack, token, user }) {
   const popular = useProducts({ limit: 4, sort: 'newest' }, token);
   const popularProducts = popular.products.slice(0, 4);
 
   return (
     <ScrollView style={styles.ordersScreen} contentContainerStyle={styles.ordersContent} {...screenScrollProps}>
       <AppHeader onNavigate={onNavigate} user={user} compact />
+      <PageBackRow onBack={onBack} />
       <View style={styles.ordersBody}>
         <Text style={styles.wishlistTitle}>My Orders</Text>
         <EmptyStateCard
@@ -6057,7 +6876,7 @@ function GenerationHistoryPreview({ items = [], total = 0, loading, error, onNav
   );
 }
 
-function GenerationHistoryScreen({ user, setUser, setToken, token, onNavigate }) {
+function GenerationHistoryScreen({ user, setUser, setToken, token, onNavigate, onBack }) {
   const history = useApiState('/tryons/history?limit=60', token, Boolean(user), { items: [], total: 0 });
   const [lightbox, setLightbox] = useState(null);
 
@@ -6103,6 +6922,7 @@ function GenerationHistoryScreen({ user, setUser, setToken, token, onNavigate })
   return (
     <View style={styles.generationHistoryScreen}>
       <AppHeader onNavigate={onNavigate} user={user} compact />
+      <PageBackRow onBack={onBack} />
       <FlatList
         data={items}
         keyExtractor={(item) => item.id}
@@ -6151,7 +6971,7 @@ function GenerationHistoryScreen({ user, setUser, setToken, token, onNavigate })
   );
 }
 
-function ProfileScreen({ user, setUser, setToken, token, onNavigate, onLogout, registerTourTarget, tourFocusRequest }) {
+function ProfileScreen({ user, setUser, setToken, token, onNavigate, onBack, onLogout, registerTourTarget, tourFocusRequest }) {
   const [photo, setPhoto] = useState(null);
   const [profilePhotoMode, setProfilePhotoMode] = useState('ai-full-body');
   const [message, setMessage] = useState('');
@@ -6178,6 +6998,10 @@ function ProfileScreen({ user, setUser, setToken, token, onNavigate, onLogout, r
   const [avatarAdjustMessage, setAvatarAdjustMessage] = useState('');
   const [avatarCropSaving, setAvatarCropSaving] = useState(false);
   const [accountDeleting, setAccountDeleting] = useState(false);
+  const [deleteSheetVisible, setDeleteSheetVisible] = useState(false);
+  const [deleteStep, setDeleteStep] = useState('review');
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [deleteMessage, setDeleteMessage] = useState('');
   const profileScrollRef = useRef(null);
   const profileAvatarTourTarget = useTourTarget('profile-avatar', registerTourTarget, { request: tourFocusRequest, scrollRef: profileScrollRef, scrollOffset: 94 });
   const creditHistory = useApiState('/tryons/credit-history?limit=20', token, Boolean(user), { events: [] });
@@ -6213,6 +7037,7 @@ function ProfileScreen({ user, setUser, setToken, token, onNavigate, onLogout, r
   const hiddenCreditEvents = Math.max(0, creditEvents.length - visibleCreditEvents.length);
   const avatarPortraitUri = user.avatarPhotoUrl ? imageUrl(user.avatarPhotoUrl) : '';
   const bodyPortraitUri = user.bodyPhotoUrl ? imageUrl(user.bodyPhotoUrl) : '';
+  const canDeleteAccount = deleteConfirmation === 'DELETE' && !accountDeleting;
   const portraitSeen = new Set();
   const portraitCards = [
     photo?.uri ? { uri: photo.uri, label: 'New photo', resizeMode: 'cover' } : null,
@@ -6475,41 +7300,61 @@ function ProfileScreen({ user, setUser, setToken, token, onNavigate, onLogout, r
   };
 
   const deleteAccount = async () => {
+    if (!canDeleteAccount) {
+      setDeleteMessage('Type DELETE exactly to permanently delete your account.');
+      return;
+    }
     setAccountDeleting(true);
-    setMessage('Deleting account...');
+    setDeleteMessage('Deleting account...');
     let deleted = false;
     try {
-      await api('/auth/me', { method: 'DELETE', timeoutMs: 60000 });
+      const data = await api('/auth/me', {
+        method: 'DELETE',
+        timeoutMs: 60000,
+        body: JSON.stringify({ confirmation: 'DELETE' })
+      });
+      if (!data?.deleted) throw new Error('We could not confirm account deletion. Please try again.');
       await clearToken();
       deleted = true;
     } catch (error) {
-      setMessage(error.message);
+      setDeleteMessage(error.message);
     } finally {
       setAccountDeleting(false);
     }
 
     if (deleted) {
+      setDeleteSheetVisible(false);
+      setDeleteStep('review');
+      setDeleteConfirmation('');
+      setDeleteMessage('');
       setToken(null);
       setUser(null);
-      Alert.alert('Account deleted', 'Your Lookmefy account deletion request has been completed.');
+      setMessage('');
+      Alert.alert('Account deleted', 'Your Lookmefy account has been permanently deleted.');
       onNavigate('home');
     }
   };
 
   const confirmDeleteAccount = () => {
-    Alert.alert(
-      'Delete account?',
-      'This permanently removes your profile, photos, try-on history, wardrobe, credits, and account access. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete Account', style: 'destructive', onPress: deleteAccount }
-      ]
-    );
+    setDeleteStep('review');
+    setDeleteConfirmation('');
+    setDeleteMessage('');
+    setMessage('');
+    setDeleteSheetVisible(true);
+  };
+
+  const closeDeleteSheet = () => {
+    if (accountDeleting) return;
+    setDeleteSheetVisible(false);
+    setDeleteStep('review');
+    setDeleteConfirmation('');
+    setDeleteMessage('');
   };
 
   return (
     <ScrollView ref={profileScrollRef} style={styles.profileScreen} contentContainerStyle={styles.profileContent} {...screenScrollProps}>
       <AppHeader onNavigate={onNavigate} user={user} compact />
+      <PageBackRow onBack={onBack} />
 
       <View style={styles.profileHero}>
         <TouchableOpacity ref={profileAvatarTourTarget.ref} onLayout={profileAvatarTourTarget.onLayout} style={styles.profilePhotoWrap} onPress={openAvatarAdjuster}>
@@ -6656,7 +7501,7 @@ function ProfileScreen({ user, setUser, setToken, token, onNavigate, onLogout, r
             <Text style={styles.profileVisaText}>PAY</Text>
           </View>
           <View style={styles.profilePaymentCopy}>
-            <Text style={styles.profilePaymentTitle}>PhonePe checkout</Text>
+            <Text style={styles.profilePaymentTitle}>Razorpay checkout</Text>
             <Text style={styles.profilePaymentSub}>{user.subscription?.status === 'active' ? 'Monthly mandate active' : 'Add credits when needed'}</Text>
           </View>
           <Ionicons name="chevron-forward" size={22} color="#55514f" />
@@ -6692,6 +7537,68 @@ function ProfileScreen({ user, setUser, setToken, token, onNavigate, onLogout, r
       <TouchableOpacity style={[styles.profileDeleteButton, accountDeleting && styles.disabledButton]} disabled={accountDeleting} onPress={confirmDeleteAccount}>
         {accountDeleting ? <ActivityIndicator size="small" color="#ffffff" /> : <Text style={styles.profileDeleteText}>Delete Account</Text>}
       </TouchableOpacity>
+      <Modal visible={deleteSheetVisible} transparent animationType="fade" onRequestClose={closeDeleteSheet}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.profileEditOverlay}>
+          <Pressable style={styles.profileEditBackdrop} onPress={closeDeleteSheet} />
+          <View style={[styles.profileEditSheet, styles.profileDeleteSheet]}>
+            <View style={styles.profileEditHandle} />
+            <View style={styles.profileEditHead}>
+              <View>
+                <Text style={styles.profileDangerEyebrow}>Danger Zone</Text>
+                <Text style={styles.profileEditSheetTitle}>Delete your account?</Text>
+                <Text style={styles.profileEditSheetSub}>This permanently removes your Lookmefy account and associated account data. This action cannot be undone.</Text>
+              </View>
+              <TouchableOpacity style={styles.profileEditClose} disabled={accountDeleting} onPress={closeDeleteSheet}>
+                <Ionicons name="close" size={21} color="#2b2321" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.profileDeleteList}>
+              {['Profile information', 'Wardrobe items', 'Wishlist', 'AI Try-On generation history', 'Saved portrait', 'Remaining credits', 'Account preferences'].map((item) => (
+                <View key={item} style={styles.profileDeleteListItem}>
+                  <Ionicons name="remove-circle-outline" size={15} color="#9b3f3b" />
+                  <Text style={styles.profileDeleteListText}>{item}</Text>
+                </View>
+              ))}
+            </View>
+            <Text style={styles.profileDeleteWarning}>Any remaining credits will be permanently lost.</Text>
+
+            {deleteStep === 'confirm' ? (
+              <>
+                <Text style={styles.profileEditLabel}>Type DELETE to confirm</Text>
+                <TextInput
+                  style={styles.profileEditInput}
+                  value={deleteConfirmation}
+                  onChangeText={setDeleteConfirmation}
+                  placeholder="DELETE"
+                  placeholderTextColor="#9a918d"
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  editable={!accountDeleting}
+                  returnKeyType="done"
+                />
+              </>
+            ) : null}
+
+            {deleteMessage ? <Text style={[styles.profileEditMessage, /deleting/i.test(deleteMessage) ? null : styles.errorText]}>{deleteMessage}</Text> : null}
+
+            <View style={styles.profileEditActions}>
+              <TouchableOpacity style={styles.profileEditCancelButton} activeOpacity={0.84} disabled={accountDeleting} onPress={closeDeleteSheet}>
+                <Text style={styles.profileEditCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              {deleteStep === 'review' ? (
+                <TouchableOpacity style={styles.profileEditSaveButton} activeOpacity={0.88} onPress={() => setDeleteStep('confirm')}>
+                  <Text style={styles.profileEditSaveText}>Continue</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity style={[styles.profileDeleteFinalButton, !canDeleteAccount && styles.disabledButton]} activeOpacity={0.88} disabled={!canDeleteAccount} onPress={deleteAccount}>
+                  {accountDeleting ? <ActivityIndicator size="small" color="#ffffff" /> : <Text style={[styles.profileEditSaveText, styles.profileDeleteFinalText]} numberOfLines={2}>Permanently Delete Account</Text>}
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
       <Modal visible={avatarAdjustVisible} transparent animationType="fade" onRequestClose={() => !avatarCropSaving && setAvatarAdjustVisible(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.profileEditOverlay}>
           <Pressable style={styles.profileEditBackdrop} onPress={() => !avatarCropSaving && setAvatarAdjustVisible(false)} />
@@ -7306,22 +8213,34 @@ function ImageLightbox({ uri, onClose }) {
 }
 
 export default function App() {
+  const { width } = useWindowDimensions();
+  const responsiveLayout = useMemo(() => responsiveLayoutForWindow(width), [width]);
   const [fontsLoaded, fontLoadError] = useFonts(fontAssets);
   const [routeStack, setRouteStack] = useState([{ name: 'home', params: {} }]);
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
   const [ready, setReady] = useState(false);
   const [wishlistProducts, setWishlistProducts] = useState([]);
+  const [wishlistReady, setWishlistReady] = useState(false);
   const [authPrompt, setAuthPrompt] = useState(null);
   const [onboardingVisible, setOnboardingVisible] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
   const [tourTargetRects, setTourTargetRects] = useState({});
   const [tourFocusRequest, setTourFocusRequest] = useState(null);
   const [aiStudioOwnerKey, setAiStudioOwnerKey] = useState('');
+  const [aiStudioConversationId, setAiStudioConversationId] = useState('');
   const [aiStudioMessages, setAiStudioMessages] = useState([]);
   const [aiStudioTryOns, setAiStudioTryOns] = useState({});
   const [aiStudioTryOnErrors, setAiStudioTryOnErrors] = useState({});
-  const wishlistIds = useMemo(() => new Set(wishlistProducts.map((product) => product.id)), [wishlistProducts]);
+  const wishlistIds = useMemo(() => {
+    const ids = new Set();
+    wishlistProducts.forEach((product) => {
+      if (product?.id == null) return;
+      ids.add(product.id);
+      ids.add(String(product.id));
+    });
+    return ids;
+  }, [wishlistProducts]);
 
   const currentRoute = normalizeRoute(routeStack[routeStack.length - 1]?.name, routeStack[routeStack.length - 1]?.params);
   const routeParamsKey = JSON.stringify(currentRoute.params || {});
@@ -7389,13 +8308,49 @@ export default function App() {
     navigate(name, params);
   }, [navigate, requestAuth, user]);
   const goBack = useCallback(() => {
-    if (routeStack.length <= 1) return false;
-    setRouteStack((current) => {
-      if (current.length <= 1) return current;
-      return current.slice(0, -1);
-    });
-    return true;
-  }, [routeStack.length]);
+    if (routeStack.length > 1) {
+      setRouteStack((current) => {
+        if (current.length <= 1) return current;
+        return current.slice(0, -1);
+      });
+      return true;
+    }
+    const active = normalizeRoute(routeStack[0]?.name, routeStack[0]?.params);
+    if (active.name !== 'home') {
+      setRouteStack([normalizeRoute('home')]);
+      return true;
+    }
+    return false;
+  }, [routeStack]);
+  useEffect(() => {
+    let alive = true;
+    if (!user) {
+      setWishlistProducts([]);
+      setWishlistReady(false);
+      return undefined;
+    }
+    setWishlistReady(false);
+    AsyncStorage.getItem(wishlistStorageKey(user))
+      .then((raw) => {
+        if (!alive) return;
+        const parsed = raw ? JSON.parse(raw) : [];
+        const products = Array.isArray(parsed) ? parsed.map((item) => normalizeProduct(item)).filter((item) => item?.id) : [];
+        setWishlistProducts(products);
+        setWishlistReady(true);
+      })
+      .catch(() => {
+        if (alive) setWishlistReady(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [user?.id, user?.phone, user?.email]);
+
+  useEffect(() => {
+    if (!user || !wishlistReady) return;
+    AsyncStorage.setItem(wishlistStorageKey(user), JSON.stringify(wishlistProducts.slice(0, 100))).catch(() => {});
+  }, [user, user?.id, user?.phone, user?.email, wishlistProducts, wishlistReady]);
+
   const addToWishlist = useCallback((product) => {
     if (!product?.id) return;
     if (!user) {
@@ -7403,8 +8358,8 @@ export default function App() {
       return;
     }
     setWishlistProducts((current) => {
-      if (current.some((item) => item.id === product.id)) return current.filter((item) => item.id !== product.id);
-      return [product, ...current];
+      if (current.some((item) => String(item.id) === String(product.id))) return current.filter((item) => String(item.id) !== String(product.id));
+      return [normalizeProduct(product), ...current].slice(0, 100);
     });
   }, [requestAuth, user]);
 
@@ -7454,6 +8409,7 @@ export default function App() {
     const nextOwnerKey = user ? String(user.id || user._id || user.phone || user.username || 'user') : '';
     if (!nextOwnerKey) {
       if (aiStudioOwnerKey) setAiStudioOwnerKey('');
+      if (aiStudioConversationId) setAiStudioConversationId('');
       if (aiStudioMessages.length) setAiStudioMessages([]);
       if (Object.keys(aiStudioTryOns).length) setAiStudioTryOns({});
       if (Object.keys(aiStudioTryOnErrors).length) setAiStudioTryOnErrors({});
@@ -7461,10 +8417,11 @@ export default function App() {
     }
     if (nextOwnerKey === aiStudioOwnerKey) return;
     setAiStudioOwnerKey(nextOwnerKey);
+    setAiStudioConversationId('');
     setAiStudioMessages(initialAiStudioMessages(user));
     setAiStudioTryOns({});
     setAiStudioTryOnErrors({});
-  }, [aiStudioMessages.length, aiStudioOwnerKey, aiStudioTryOnErrors, aiStudioTryOns, user?.id, user?._id, user?.phone, user?.username]);
+  }, [aiStudioConversationId, aiStudioMessages.length, aiStudioOwnerKey, aiStudioTryOnErrors, aiStudioTryOns, user?.id, user?._id, user?.phone, user?.username]);
 
   useEffect(() => {
     if (!ready || !user) return undefined;
@@ -7550,29 +8507,29 @@ export default function App() {
       case 'home':
         return <HomeScreen onNavigate={guardedNavigate} user={user} token={token} onAddToWishlist={addToWishlist} wishlistIds={wishlistIds} registerTourTarget={registerTourTarget} tourFocusRequest={tourFocusRequest} />;
       case 'shop':
-        return <ShopScreen initial={routeParams} user={user} setUser={setUser} token={token} onNavigate={guardedNavigate} onRequireAuth={requestAuth} onAddToWishlist={addToWishlist} wishlistIds={wishlistIds} />;
+        return <ShopScreen initial={routeParams} user={user} setUser={setUser} token={token} onNavigate={guardedNavigate} onBack={routeStack.length > 1 ? goBack : null} onRequireAuth={requestAuth} onAddToWishlist={addToWishlist} wishlistIds={wishlistIds} />;
       case 'search':
         return <SearchScreen initial={routeParams} user={user} token={token} onNavigate={guardedNavigate} onBack={goBack} onAddToWishlist={addToWishlist} wishlistIds={wishlistIds} />;
       case 'tryon':
-        return user ? <StyleBotScreen user={user} setUser={setUser} setToken={setToken} token={token} onNavigate={guardedNavigate} onRequireAuth={requestAuth} registerTourTarget={registerTourTarget} tourFocusRequest={tourFocusRequest} aiStudioMessages={aiStudioMessages} setAiStudioMessages={setAiStudioMessages} aiStudioTryOns={aiStudioTryOns} setAiStudioTryOns={setAiStudioTryOns} aiStudioTryOnErrors={aiStudioTryOnErrors} setAiStudioTryOnErrors={setAiStudioTryOnErrors} /> : <AuthScreen mode="signup" setUser={setUser} setToken={setToken} onNavigate={navigate} />;
+        return user ? <StyleBotScreen user={user} setUser={setUser} setToken={setToken} token={token} onNavigate={guardedNavigate} onBack={routeStack.length > 1 ? goBack : null} onRequireAuth={requestAuth} registerTourTarget={registerTourTarget} tourFocusRequest={tourFocusRequest} aiStudioConversationId={aiStudioConversationId} setAiStudioConversationId={setAiStudioConversationId} aiStudioMessages={aiStudioMessages} setAiStudioMessages={setAiStudioMessages} aiStudioTryOns={aiStudioTryOns} setAiStudioTryOns={setAiStudioTryOns} aiStudioTryOnErrors={aiStudioTryOnErrors} setAiStudioTryOnErrors={setAiStudioTryOnErrors} /> : <AuthScreen mode="signup" setUser={setUser} setToken={setToken} onNavigate={navigate} />;
       case 'closet':
-        return <ClosetScreen initial={routeParams} user={user} setUser={setUser} setToken={setToken} token={token} onNavigate={guardedNavigate} registerTourTarget={registerTourTarget} tourFocusRequest={tourFocusRequest} />;
+        return <ClosetScreen initial={routeParams} user={user} setUser={setUser} setToken={setToken} token={token} onNavigate={guardedNavigate} onBack={routeStack.length > 1 ? goBack : null} registerTourTarget={registerTourTarget} tourFocusRequest={tourFocusRequest} />;
       case 'custom':
-        return <CustomTryOnScreen user={user} setUser={setUser} setToken={setToken} token={token} onNavigate={guardedNavigate} refreshUser={refreshUser} />;
+        return <CustomTryOnScreen user={user} setUser={setUser} setToken={setToken} token={token} onNavigate={guardedNavigate} onBack={routeStack.length > 1 ? goBack : null} refreshUser={refreshUser} />;
       case 'stylebot':
-        return <StyleBotScreen user={user} setUser={setUser} setToken={setToken} token={token} onNavigate={guardedNavigate} registerTourTarget={registerTourTarget} tourFocusRequest={tourFocusRequest} aiStudioMessages={aiStudioMessages} setAiStudioMessages={setAiStudioMessages} aiStudioTryOns={aiStudioTryOns} setAiStudioTryOns={setAiStudioTryOns} aiStudioTryOnErrors={aiStudioTryOnErrors} setAiStudioTryOnErrors={setAiStudioTryOnErrors} />;
+        return <StyleBotScreen user={user} setUser={setUser} setToken={setToken} token={token} onNavigate={guardedNavigate} onBack={routeStack.length > 1 ? goBack : null} registerTourTarget={registerTourTarget} tourFocusRequest={tourFocusRequest} aiStudioConversationId={aiStudioConversationId} setAiStudioConversationId={setAiStudioConversationId} aiStudioMessages={aiStudioMessages} setAiStudioMessages={setAiStudioMessages} aiStudioTryOns={aiStudioTryOns} setAiStudioTryOns={setAiStudioTryOns} aiStudioTryOnErrors={aiStudioTryOnErrors} setAiStudioTryOnErrors={setAiStudioTryOnErrors} />;
       case 'tokens':
-        return <TokensScreen user={user} setUser={setUser} onNavigate={guardedNavigate} onRequireAuth={requestAuth} />;
+        return <TokensScreen user={user} setUser={setUser} onNavigate={guardedNavigate} onBack={routeStack.length > 1 ? goBack : null} onRequireAuth={requestAuth} />;
       case 'profile':
-        return <ProfileScreen user={user} setUser={setUser} setToken={setToken} token={token} onNavigate={guardedNavigate} onLogout={logout} registerTourTarget={registerTourTarget} tourFocusRequest={tourFocusRequest} />;
+        return <ProfileScreen user={user} setUser={setUser} setToken={setToken} token={token} onNavigate={guardedNavigate} onBack={routeStack.length > 1 ? goBack : null} onLogout={logout} registerTourTarget={registerTourTarget} tourFocusRequest={tourFocusRequest} />;
       case 'generation-history':
-        return user ? <GenerationHistoryScreen user={user} setUser={setUser} setToken={setToken} token={token} onNavigate={guardedNavigate} /> : <AuthScreen mode="login" setUser={setUser} setToken={setToken} onNavigate={navigate} />;
+        return user ? <GenerationHistoryScreen user={user} setUser={setUser} setToken={setToken} token={token} onNavigate={guardedNavigate} onBack={routeStack.length > 1 ? goBack : null} /> : <AuthScreen mode="login" setUser={setUser} setToken={setToken} onNavigate={navigate} />;
       case 'wishlist':
-        return user ? <WishlistScreen onNavigate={guardedNavigate} token={token} wishlistProducts={wishlistProducts} user={user} /> : <AuthScreen mode="login" setUser={setUser} setToken={setToken} onNavigate={navigate} />;
+        return user ? <WishlistScreen onNavigate={guardedNavigate} onBack={routeStack.length > 1 ? goBack : null} token={token} wishlistProducts={wishlistProducts} user={user} /> : <AuthScreen mode="login" setUser={setUser} setToken={setToken} onNavigate={navigate} />;
       case 'orders':
-        return user ? <OrdersScreen onNavigate={guardedNavigate} token={token} user={user} /> : <AuthScreen mode="login" setUser={setUser} setToken={setToken} onNavigate={navigate} />;
+        return user ? <OrdersScreen onNavigate={guardedNavigate} onBack={routeStack.length > 1 ? goBack : null} token={token} user={user} /> : <AuthScreen mode="login" setUser={setUser} setToken={setToken} onNavigate={navigate} />;
       case 'product':
-        return routeParams.id ? <ProductScreen id={routeParams.id} user={user} setUser={setUser} token={token} onNavigate={guardedNavigate} onRequireAuth={requestAuth} onAddToWishlist={addToWishlist} wishlistIds={wishlistIds} /> : <ShopScreen initial={{}} user={user} setUser={setUser} token={token} onNavigate={guardedNavigate} onRequireAuth={requestAuth} onAddToWishlist={addToWishlist} wishlistIds={wishlistIds} />;
+        return routeParams.id ? <ProductScreen id={routeParams.id} user={user} setUser={setUser} token={token} onNavigate={guardedNavigate} onBack={routeStack.length > 1 ? goBack : null} onRequireAuth={requestAuth} onAddToWishlist={addToWishlist} wishlistIds={wishlistIds} /> : <ShopScreen initial={{}} user={user} setUser={setUser} token={token} onNavigate={guardedNavigate} onBack={routeStack.length > 1 ? goBack : null} onRequireAuth={requestAuth} onAddToWishlist={addToWishlist} wishlistIds={wishlistIds} />;
       case 'signup':
         return <AuthScreen mode="signup" setUser={setUser} setToken={setToken} onNavigate={navigate} />;
       case 'login':
@@ -7584,7 +8541,7 @@ export default function App() {
       default:
         return <InfoScreen page="missing" user={user} onNavigate={navigate} />;
     }
-  }, [currentRoute.name, routeParamsKey, user, token, navigate, guardedNavigate, requestAuth, addToWishlist, wishlistIds, wishlistProducts, registerTourTarget, tourFocusRequest, aiStudioMessages, aiStudioTryOns, aiStudioTryOnErrors, refreshUser]);
+  }, [currentRoute.name, routeParamsKey, user, token, navigate, guardedNavigate, requestAuth, addToWishlist, wishlistIds, wishlistProducts, registerTourTarget, tourFocusRequest, aiStudioConversationId, aiStudioMessages, aiStudioTryOns, aiStudioTryOnErrors, refreshUser, routeStack.length, goBack]);
 
   if (!ready || (!fontsLoaded && !fontLoadError)) {
     return (
@@ -7616,10 +8573,11 @@ export default function App() {
   const accountChildRoute = wishlistRoute || ordersRoute || generationHistoryRoute;
 
   return (
+    <ResponsiveLayoutContext.Provider value={responsiveLayout}>
     <SafeAreaView style={[styles.safe, welcomeRoute && styles.authEntrySafe, signupRoute && styles.signupSafe, loginRoute && styles.loginSafe, homeRoute && styles.homeSafe, shopRoute && styles.shopSafe, searchRoute && styles.shopSafe, closetRoute && styles.wardrobeSafe, productRoute && styles.productSafe, aiStudioRoute && styles.aiStudioSafe, tokensRoute && styles.creditsSafe, profileRoute && styles.profileSafe, accountChildRoute && styles.profileSafe]}>
       <StatusBar style={welcomeRoute ? 'light' : 'dark'} />
       {authOnlyRoute || homeRoute || shopRoute || searchRoute || closetRoute || productRoute || aiStudioRoute || tokensRoute || profileRoute || accountChildRoute ? null : <AppHeader onNavigate={guardedNavigate} user={user} compact />}
-      <View style={styles.content}>
+      <View style={[styles.content, responsiveLayout.contentFrameStyle]}>
         <ScreenErrorBoundary routeName={currentRoute.name} onHome={() => navigate('home')}>
           {screen}
         </ScreenErrorBoundary>
@@ -7645,6 +8603,7 @@ export default function App() {
         onDone={completeOnboarding}
       />
     </SafeAreaView>
+    </ResponsiveLayoutContext.Provider>
   );
 }
 
@@ -7722,10 +8681,33 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    maxWidth: 520,
     width: '100%',
     alignSelf: 'center',
     backgroundColor: '#fbf7f6'
+  },
+  pageBackRow: {
+    width: '100%',
+    paddingHorizontal: 12,
+    paddingTop: 5,
+    paddingBottom: 6,
+    backgroundColor: '#fbf7f6',
+    alignItems: 'flex-start',
+    justifyContent: 'center'
+  },
+  pageBackButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#ece5e1',
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#1f1714',
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8
   },
   scrollContent: {
     paddingBottom: Platform.OS === 'android' ? 118 : 132,
@@ -7895,65 +8877,57 @@ const styles = StyleSheet.create({
     lineHeight: 16
   },
   bottomNavFrame: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: Platform.OS === 'ios' ? 28 : 22,
-    zIndex: 40,
     width: '100%',
     alignItems: 'center',
-    backgroundColor: 'transparent',
-    paddingHorizontal: 18,
-    paddingTop: 8,
-    paddingBottom: 0,
+    backgroundColor: '#fbf7f6',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(236, 229, 225, 0.72)',
     shadowColor: '#1f1714',
-    shadowOpacity: 0.12,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 12
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: -8 },
+    elevation: 10
   },
   bottomNav: {
     width: '100%',
-    maxWidth: 560,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    minHeight: 54,
-    borderRadius: 28,
-    borderWidth: 1,
-    borderColor: '#dedede',
-    paddingVertical: 7,
-    paddingHorizontal: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.96)'
+    paddingTop: 10,
+    paddingBottom: Platform.OS === 'ios' ? 22 : 12,
+    paddingHorizontal: 10,
+    backgroundColor: '#fffdfb'
+  },
+  bottomNavTablet: {
+    paddingHorizontal: 18
   },
   navItem: {
     flex: 1,
     minWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 3,
-    minHeight: 40
+    gap: 2,
+    minHeight: 60
   },
   navIconWrap: {
-    width: 24,
-    height: 22,
-    borderRadius: 11,
+    width: 44,
+    height: 30,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'transparent'
   },
   navIconWrapCenter: {
-    width: 24,
-    height: 22,
-    borderRadius: 11,
+    width: 44,
+    height: 30,
+    borderRadius: 0,
     borderWidth: 0,
-    backgroundColor: '#f2f2f2'
+    backgroundColor: 'transparent'
   },
   navText: {
     ...typography.nav,
-    fontSize: 8,
-    lineHeight: 10,
-    color: '#6f6f6f',
+    fontSize: 11,
+    lineHeight: 14,
+    color: '#8d8682',
     fontWeight: '600'
   },
   navTextActive: {
@@ -7962,483 +8936,29 @@ const styles = StyleSheet.create({
     fontWeight: '700'
   },
   navActiveUnderline: {
-    width: 0,
-    height: 0,
-    marginTop: 0,
+    width: 42,
+    height: 3,
+    borderRadius: 2,
+    marginTop: 5,
     backgroundColor: 'transparent'
   },
   navActiveUnderlineVisible: {
-    backgroundColor: 'transparent'
+    backgroundColor: '#111111'
   },
   homeScreen: {
     flex: 1,
-    backgroundColor: '#ffffff'
+    backgroundColor: '#fbf7f6'
   },
   homeScroll: {
     flex: 1,
-    backgroundColor: '#ffffff'
+    backgroundColor: '#fbf7f6'
   },
   homeContent: {
-    paddingTop: Platform.OS === 'ios' ? 10 : appTopInset + 10,
-    paddingBottom: bottomNavigationHeight + screenBottomInset + 56,
-    backgroundColor: '#ffffff'
+    paddingBottom: screenBottomInset,
+    backgroundColor: '#fbf7f6'
   },
-  homeEditorialHeader: {
-    paddingHorizontal: 24,
-    paddingTop: 4,
-    paddingBottom: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between'
-  },
-  homeEditorialBrand: {
-    fontFamily: fontFamilies.logo,
-    color: '#050505',
-    fontSize: 31,
-    lineHeight: 36,
-    fontWeight: '400',
-    letterSpacing: 0
-  },
-  homeEditorialTagline: {
-    ...typography.label,
-    marginTop: 3,
-    color: '#7d8189',
-    fontSize: 10,
-    lineHeight: 13,
-    fontWeight: '600',
-    letterSpacing: 4
-  },
-  homeBellButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#ffffff'
-  },
-  homeTryOnHero: {
-    height: 258,
-    marginHorizontal: 15,
-    borderRadius: 14,
-    overflow: 'hidden',
-    backgroundColor: '#f3f0ec',
-    borderWidth: 1,
-    borderColor: '#eee9e4',
-    position: 'relative'
-  },
-  homeHeroLeftPane: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: '47%',
-    paddingTop: 16,
-    paddingLeft: 13,
-    paddingRight: 9,
-    paddingBottom: 12,
-    zIndex: 6
-  },
-  homeHeroKicker: {
-    ...typography.label,
-    color: '#6f737c',
-    fontSize: 10,
-    lineHeight: 13,
-    fontWeight: '500',
-    letterSpacing: 5
-  },
-  homeHeroEditorialTitle: {
-    fontFamily: fontFamilies.logo,
-    marginTop: 11,
-    color: '#050505',
-    fontSize: 26,
-    lineHeight: 29,
-    fontWeight: '400',
-    letterSpacing: 0
-  },
-  homeHeroEditorialText: {
-    ...typography.body,
-    marginTop: 8,
-    maxWidth: 162,
-    color: '#707782',
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: '500'
-  },
-  homePrimaryTryOnButton: {
-    marginTop: 12,
-    height: 36,
-    width: 146,
-    borderRadius: 7,
-    backgroundColor: '#161719',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingHorizontal: 8,
-    shadowColor: '#000000',
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 4
-  },
-  homePrimaryTryOnText: {
-    ...typography.button,
-    color: '#ffffff',
-    fontSize: 10,
-    lineHeight: 14,
-    fontWeight: '700'
-  },
-  homeSecondaryWardrobeButton: {
-    marginTop: 8,
-    height: 36,
-    width: 146,
-    borderRadius: 7,
-    borderWidth: 1,
-    borderColor: '#2b2b2b',
-    backgroundColor: 'rgba(255, 255, 255, 0.86)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingHorizontal: 10
-  },
-  homeSecondaryWardrobeText: {
-    ...typography.button,
-    color: '#111111',
-    fontSize: 11,
-    lineHeight: 15,
-    fontWeight: '700'
-  },
-  homeHeroRightPane: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    bottom: 0,
-    width: '56%',
-    overflow: 'hidden',
-    backgroundColor: '#ddd8d2',
-    zIndex: 1
-  },
-  homeHeroVisualLayer: {
-    ...StyleSheet.absoluteFillObject
-  },
-  homeHeroLeftBase: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: '49%',
-    backgroundColor: '#f3f0ec',
-    zIndex: 4
-  },
-  homeHeroLeftSlantFill: {
-    position: 'absolute',
-    top: -34,
-    bottom: -34,
-    left: '42.5%',
-    width: 44,
-    backgroundColor: '#f3f0ec',
-    transform: [{ rotate: '8deg' }],
-    zIndex: 5
-  },
-  homeHeroDivider: {
-    position: 'absolute',
-    top: -16,
-    bottom: -16,
-    left: '49.8%',
-    width: 4,
-    borderRadius: 2,
-    backgroundColor: '#ffffff',
-    transform: [{ rotate: '8deg' }],
-    zIndex: 5
-  },
-  homeHeroGarmentPanel: {
-    position: 'absolute',
-    left: 50,
-    top: 162,
-    width: 74,
-    height: 80,
-    borderRadius: 7,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.82)',
-    backgroundColor: 'rgba(255, 255, 255, 0.88)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 3
-  },
-  homeHeroGarment: {
-    position: 'absolute',
-    width: '88%',
-    height: '88%'
-  },
-  homeHeroModel: {
-    width: '150%',
-    height: '100%',
-    marginLeft: -70,
-    backgroundColor: '#ddd8d2'
-  },
-  homeHeroRoundAction: {
-    position: 'absolute',
-    left: '50.5%',
-    top: 108,
-    width: 46,
-    height: 46,
-    marginLeft: -23,
-    borderRadius: 23,
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 7,
-    shadowColor: '#1e1a18',
-    shadowOpacity: 0.14,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4
-  },
-  homeHeroHandwriting: {
-    position: 'absolute',
-    right: 12,
-    top: 64,
-    alignItems: 'center',
-    gap: 7,
-    zIndex: 6
-  },
-  homeHeroHandwritingText: {
-    fontFamily: fontFamilies.logo,
-    color: '#3f3b38',
-    fontSize: 14,
-    lineHeight: 17,
-    textAlign: 'center',
-    transform: [{ rotate: '-9deg' }]
-  },
-  homeSectionBlock: {
-    marginTop: 26,
-    paddingHorizontal: 17
-  },
-  homeEditorialSectionHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12
-  },
-  homeEditorialSectionTitle: {
-    fontFamily: fontFamilies.logo,
-    color: '#0b0b0b',
-    fontSize: 23,
-    lineHeight: 29,
-    fontWeight: '400',
-    letterSpacing: 0
-  },
-  homeEditorialSeeAll: {
-    minHeight: 34,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6
-  },
-  homeEditorialSeeAllText: {
-    ...typography.body,
-    color: '#5f5c58',
-    fontSize: 16,
-    lineHeight: 20,
-    fontWeight: '500'
-  },
-  homeLookGrid: {
-    marginTop: 15,
-    flexDirection: 'row',
-    gap: 11
-  },
-  homeLookCard: {
-    flex: 1,
-    minWidth: 0,
-    borderRadius: 8,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#e5e5e5',
-    backgroundColor: '#ffffff'
-  },
-  homeLookImageWrap: {
-    width: '100%',
-    height: 86,
-    overflow: 'hidden',
-    backgroundColor: '#eeeae5'
-  },
-  homeLookImage: {
-    width: '100%',
-    height: '100%'
-  },
-  homeLookBody: {
-    minHeight: 74,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8
-  },
-  homeLookTextBlock: {
-    flex: 1,
-    minWidth: 0
-  },
-  homeLookTitle: {
-    ...typography.productTitle,
-    color: '#111111',
-    fontSize: 15,
-    lineHeight: 20,
-    fontWeight: '500'
-  },
-  homeLookMeta: {
-    ...typography.smallBody,
-    marginTop: 4,
-    color: '#7a7a7a',
-    fontSize: 13,
-    lineHeight: 17,
-    fontWeight: '400'
-  },
-  homeWardrobeTrack: {
-    paddingTop: 16,
-    paddingRight: 16,
-    gap: 12
-  },
-  homeWardrobeTile: {
-    width: 84,
-    borderRadius: 8,
-    backgroundColor: '#f6f6f6',
-    overflow: 'hidden'
-  },
-  homeWardrobeImageWrap: {
-    height: 82,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 8
-  },
-  homeWardrobeImage: {
-    width: '100%',
-    height: '100%'
-  },
-  homeWardrobeLabel: {
-    ...typography.caption,
-    paddingHorizontal: 6,
-    paddingBottom: 10,
-    color: '#111111',
-    fontSize: 12,
-    lineHeight: 15,
-    textAlign: 'center',
-    fontWeight: '500'
-  },
-  homeWardrobeAddTile: {
-    width: 84,
-    minHeight: 116,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: '#c7c7c7',
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 9
-  },
-  homeWardrobeAddText: {
-    ...typography.body,
-    color: '#111111',
-    fontSize: 15,
-    lineHeight: 19,
-    fontWeight: '500',
-    textAlign: 'center'
-  },
-  homeTryOnTrack: {
-    paddingTop: 14,
-    paddingRight: 18,
-    gap: 10
-  },
-  homeTryOnGrid: {
-    marginTop: 14,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    rowGap: 14
-  },
-  homeTryOnCard: {
-    width: 126,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#e9e4df',
-    backgroundColor: '#ffffff',
-    padding: 7,
-    shadowColor: '#1f1a17',
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 1
-  },
-  homeTryOnGridCard: {
-    width: '48%',
-    padding: 8
-  },
-  homeTryOnImageWrap: {
-    height: 98,
-    borderRadius: 8,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#ffffff'
-  },
-  homeTryOnGridImageWrap: {
-    height: 132
-  },
-  homeTryOnImage: {
-    width: '100%',
-    height: '100%'
-  },
-  homeTryOnTitle: {
-    ...typography.productTitle,
-    marginTop: 8,
-    color: '#111111',
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '500',
-    minHeight: 32
-  },
-  homeTryOnPrice: {
-    ...typography.price,
-    marginTop: 2,
-    color: '#111111',
-    fontSize: 14,
-    lineHeight: 18,
-    fontWeight: '700'
-  },
-  homeTryOnActions: {
-    marginTop: 9,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7
-  },
-  homeTryOnButton: {
-    flex: 1,
-    height: 34,
-    borderRadius: 8,
-    backgroundColor: '#111214',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 5
-  },
-  homeTryOnButtonText: {
-    ...typography.button,
-    color: '#ffffff',
-    fontSize: 12,
-    lineHeight: 15,
-    fontWeight: '600'
-  },
-  homeTryOnHeart: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e2e2e2',
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center'
+  homeContentTablet: {
+    paddingBottom: screenBottomInset + 12
   },
   homeTopBar: {
     height: 52,
@@ -8527,6 +9047,21 @@ const styles = StyleSheet.create({
     marginTop: 26,
     paddingHorizontal: 18
   },
+  homeFindStyleSection: {
+    marginTop: 26,
+    paddingTop: 4,
+    paddingBottom: 4,
+    backgroundColor: '#fffafa'
+  },
+  homeFindStyleTitle: {
+    fontFamily: fontFamilies.logo,
+    color: '#15110f',
+    fontSize: 32,
+    lineHeight: 38,
+    fontWeight: '400',
+    letterSpacing: 0,
+    textAlign: 'center'
+  },
   homeSectionHead: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -8547,27 +9082,41 @@ const styles = StyleSheet.create({
     letterSpacing: 0
   },
   homeCategoryTrack: {
-    paddingTop: 20,
-    gap: 10,
-    paddingRight: 2
+    paddingTop: 16,
+    paddingBottom: 12,
+    paddingLeft: 16,
+    paddingRight: 22,
+    gap: 14
+  },
+  homeCategoryTrackTablet: {
+    gap: 18,
+    paddingRight: 8
   },
   homeCategoryItem: {
-    width: 60,
+    width: 78,
     alignItems: 'center'
   },
+  homeCategoryItemTablet: {
+    width: 76
+  },
   homeCategoryImageFrame: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    padding: 2,
+    width: 74,
+    height: 74,
+    borderRadius: 37,
+    padding: 3,
     borderWidth: 1,
-    borderColor: '#eee3dc',
-    backgroundColor: '#fffdfb',
+    borderColor: '#e8ded9',
+    backgroundColor: '#fffdfc',
     shadowColor: '#2a211d',
-    shadowOpacity: 0.1,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 7 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
     elevation: 3
+  },
+  homeCategoryImageFrameTablet: {
+    width: 68,
+    height: 68,
+    borderRadius: 34
   },
   homeCategoryImageFrameActive: {
     borderColor: '#b66d70',
@@ -8578,18 +9127,29 @@ const styles = StyleSheet.create({
   homeCategoryImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 27,
+    borderRadius: 34,
     backgroundColor: '#f3eee9'
   },
   homeCategoryLabel: {
     ...typography.caption,
     width: '100%',
-    marginTop: 11,
-    color: '#25201d',
+    marginTop: 9,
+    color: '#1f1b19',
     fontSize: 10,
-    lineHeight: 13,
+    lineHeight: 12,
     fontWeight: '700',
     textAlign: 'center'
+  },
+  homeCategoryCount: {
+    ...typography.caption,
+    width: '100%',
+    marginTop: 4,
+    color: '#3e3936',
+    fontSize: 9,
+    lineHeight: 11,
+    fontWeight: '700',
+    textAlign: 'center',
+    letterSpacing: 0.6
   },
   homeCategoryLabelActive: {
     color: '#9b5658'
@@ -8611,8 +9171,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     rowGap: 24
   },
+  homeCuratedGridTablet: {
+    rowGap: 30
+  },
   homeProductCard: {
     width: '47%'
+  },
+  homeProductCardRail: {
+    width: 156,
+    marginRight: 14
   },
   homeProductImageWrap: {
     aspectRatio: productImageAspectRatio,
@@ -8639,6 +9206,22 @@ const styles = StyleSheet.create({
     fontSize: 8,
     fontWeight: '700'
   },
+  homeDealBadge: {
+    ...typography.caption,
+    position: 'absolute',
+    left: 8,
+    top: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 4,
+    overflow: 'hidden',
+    backgroundColor: '#ffd21f',
+    color: '#2a211d',
+    fontSize: 8,
+    lineHeight: 10,
+    fontWeight: '700',
+    letterSpacing: 0
+  },
   homeProductEyebrow: {
     ...typography.caption,
     marginTop: 9,
@@ -8656,12 +9239,165 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     letterSpacing: 0
   },
+  homeProductPriceRow: {
+    marginTop: 3,
+    minHeight: 17,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 5
+  },
   homeProductPrice: {
     ...typography.price,
-    marginTop: 3,
     color: '#171717',
     fontSize: 12,
     fontWeight: '700'
+  },
+  homeProductComparePrice: {
+    ...typography.caption,
+    color: '#b6aaa3',
+    fontSize: 10,
+    lineHeight: 13,
+    textDecorationLine: 'line-through',
+    fontWeight: '600',
+    letterSpacing: 0
+  },
+  homeOfferSection: {
+    marginTop: 26
+  },
+  homeOfferTrack: {
+    paddingHorizontal: 18,
+    paddingRight: 4,
+    gap: 12
+  },
+  homeOfferTrackTablet: {
+    gap: 16
+  },
+  homeOfferCard: {
+    width: 278,
+    height: 132,
+    borderRadius: 8,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#eadfdb',
+    backgroundColor: '#fffdfb',
+    flexDirection: 'row',
+    shadowColor: '#2a211d',
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 2
+  },
+  homeOfferCardTablet: {
+    width: 342,
+    height: 150
+  },
+  homeOfferCopy: {
+    flex: 1,
+    minWidth: 0,
+    paddingVertical: 18,
+    paddingLeft: 16,
+    paddingRight: 10,
+    justifyContent: 'center'
+  },
+  homeOfferKicker: {
+    ...typography.label,
+    color: '#b66d70',
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0
+  },
+  homeOfferTitle: {
+    ...typography.h3,
+    marginTop: 7,
+    color: '#211c1a',
+    fontSize: 20,
+    lineHeight: 24,
+    fontWeight: '600',
+    letterSpacing: 0
+  },
+  homeOfferText: {
+    ...typography.caption,
+    marginTop: 5,
+    color: '#8b817b',
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '500'
+  },
+  homeOfferCta: {
+    ...typography.label,
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    color: '#2b2725',
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
+    letterSpacing: 0
+  },
+  homeOfferImageWrap: {
+    width: 106,
+    height: '100%',
+    backgroundColor: '#f1ebe7'
+  },
+  homeOfferImage: {
+    width: '100%',
+    height: '100%'
+  },
+  homeCommerceSection: {
+    marginTop: 30
+  },
+  homeCommerceHead: {
+    paddingHorizontal: 18,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: 12
+  },
+  homeCommerceTitleWrap: {
+    flex: 1,
+    minWidth: 0
+  },
+  homeCommerceTitle: {
+    ...typography.h2,
+    color: '#1f1b19',
+    fontSize: 23,
+    lineHeight: 29,
+    fontWeight: '600',
+    letterSpacing: 0
+  },
+  homeCommerceSubtitle: {
+    ...typography.label,
+    marginTop: 3,
+    color: '#9d928c',
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0
+  },
+  homeCommerceViewAll: {
+    minHeight: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingLeft: 8
+  },
+  homeCommerceViewAllText: {
+    ...typography.caption,
+    color: '#1f1b19',
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
+    letterSpacing: 0
+  },
+  homeCommerceTrack: {
+    paddingTop: 18,
+    paddingHorizontal: 18,
+    paddingRight: 4
   },
   homeJournalBand: {
     marginTop: 34,
@@ -8714,6 +9450,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
     fontWeight: '500'
+  },
+  homeJournalIntroTablet: {
+    maxWidth: 520
   },
   homeJournalGrid: {
     marginTop: 18,
@@ -8850,6 +9589,14 @@ const styles = StyleSheet.create({
   categoryRailContent: {
     paddingBottom: 18
   },
+  categoryRailContentTablet: {
+    paddingBottom: 28
+  },
+  categoryRailTablet: {
+    width: 96,
+    maxWidth: 96,
+    flexBasis: 96
+  },
   categoryRailItem: {
     minHeight: 82,
     paddingVertical: 8,
@@ -8913,6 +9660,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 28
   },
+  categoryMainContentTablet: {
+    paddingHorizontal: 24,
+    paddingBottom: 36
+  },
   categoryKickerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -8944,6 +9695,9 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'space-between',
     rowGap: 20
+  },
+  categoryTileGridTablet: {
+    rowGap: 26
   },
   categoryTile: {
     width: '31.5%',
@@ -9455,41 +10209,74 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
     gap: 16
   },
+  wardrobeCategoryRail: {
+    position: 'absolute',
+    top: 22,
+    bottom: 22,
+    justifyContent: 'space-evenly',
+    alignItems: 'center',
+    zIndex: 3
+  },
+  wardrobeCategoryRailLeft: {
+    left: 10
+  },
+  wardrobeCategoryRailRight: {
+    right: 10
+  },
   wardrobeCategoryButton: {
-    width: 64,
+    width: 88,
     alignItems: 'center'
   },
   wardrobeCategoryIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     borderWidth: 1,
-    borderColor: '#ebe6e3',
-    backgroundColor: '#ffffff',
+    borderColor: 'rgba(255,255,255,0.86)',
+    backgroundColor: 'rgba(255,255,255,0.94)',
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2
   },
   wardrobeCategoryIconActive: {
     borderWidth: 3,
-    borderColor: '#9b5658'
+    borderColor: '#a84f59'
+  },
+  wardrobeCategoryAssetIcon: {
+    width: 30,
+    height: 30
   },
   wardrobeCategoryLabel: {
     ...typography.caption,
-    marginTop: 8,
-    color: '#444140',
+    marginTop: 6,
+    minHeight: 24,
+    maxWidth: 84,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    color: '#292625',
     textAlign: 'center',
     fontSize: 11,
     lineHeight: 14,
-    fontWeight: '500'
+    fontWeight: '700'
   },
   wardrobeCategoryLabelActive: {
-    color: '#111111',
+    color: '#a84f59',
     fontFamily: fontFamilies.bodyBold,
     fontWeight: '700'
   },
   wardrobePreviewWrap: {
     marginHorizontal: 18,
     gap: 16
+  },
+  wardrobePreviewStage: {
+    position: 'relative'
   },
   wardrobePreviewCard: {
     width: '100%',
@@ -9508,13 +10295,13 @@ const styles = StyleSheet.create({
   },
   wardrobeTryButton: {
     alignSelf: 'center',
-    minHeight: 44,
-    minWidth: 164,
-    borderRadius: 22,
+    minHeight: 42,
+    minWidth: 112,
+    borderRadius: 21,
     backgroundColor: '#050505',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 22
+    paddingHorizontal: 20
   },
   wardrobeTryText: {
     ...typography.caption,
@@ -9757,6 +10544,96 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.88)',
     alignItems: 'center',
     justifyContent: 'center'
+  },
+  addStudioSavedSection: {
+    marginHorizontal: 20,
+    marginTop: 18,
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#eee5e1'
+  },
+  addStudioSavedHead: {
+    minHeight: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12
+  },
+  addStudioSavedTitle: {
+    ...typography.label,
+    color: '#6f3f45',
+    fontSize: 12,
+    lineHeight: 16,
+    textTransform: 'uppercase'
+  },
+  addStudioSavedCount: {
+    minWidth: 26,
+    height: 24,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#f3e4e6',
+    color: '#9b5658',
+    fontSize: 12,
+    lineHeight: 24,
+    textAlign: 'center',
+    fontWeight: '800'
+  },
+  addStudioSavedTrack: {
+    paddingTop: 12,
+    paddingRight: 16,
+    gap: 10
+  },
+  addStudioSavedCard: {
+    width: 116,
+    minHeight: 158,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#eaded9',
+    backgroundColor: '#fffdfb',
+    overflow: 'hidden'
+  },
+  addStudioSavedImage: {
+    width: '100%',
+    height: 104,
+    backgroundColor: '#eee7e2'
+  },
+  addStudioSavedName: {
+    ...typography.caption,
+    marginTop: 8,
+    paddingHorizontal: 8,
+    color: '#211c1a',
+    fontSize: 12,
+    lineHeight: 15,
+    fontWeight: '800'
+  },
+  addStudioSavedMeta: {
+    ...typography.caption,
+    paddingHorizontal: 8,
+    paddingBottom: 8,
+    color: '#756c68',
+    fontSize: 11,
+    lineHeight: 14
+  },
+  addStudioSavedEmpty: {
+    minHeight: 72,
+    marginTop: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#e2d7d2',
+    backgroundColor: '#fffdfb',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12
+  },
+  addStudioSavedEmptyText: {
+    ...typography.caption,
+    marginTop: 6,
+    color: '#756c68',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700'
   },
   itemDetectionCard: {
     marginHorizontal: 20,
@@ -10187,7 +11064,7 @@ const styles = StyleSheet.create({
   },
   productImageWrap: {
     aspectRatio: productImageAspectRatio,
-    backgroundColor: '#f0ece8',
+    backgroundColor: '#ffffff',
     position: 'relative'
   },
   productImage: {
@@ -10196,7 +11073,7 @@ const styles = StyleSheet.create({
   },
   productImageFrame: {
     overflow: 'hidden',
-    backgroundColor: '#f0ece8'
+    backgroundColor: '#ffffff'
   },
   productImageSkeleton: {
     ...StyleSheet.absoluteFillObject,
@@ -11120,6 +11997,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center'
   },
+  productFavoriteButtonSaved: {
+    backgroundColor: '#111111'
+  },
   productSwipeHint: {
     position: 'absolute',
     left: 12,
@@ -11222,73 +12102,6 @@ const styles = StyleSheet.create({
     color: '#4f4a48',
     fontSize: 10,
     fontWeight: '700'
-  },
-  productOptionLabel: {
-    marginTop: 25,
-    color: '#423d3a',
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0
-  },
-  productOptionValue: {
-    color: '#5c5754',
-    fontWeight: '700'
-  },
-  productSwatchRow: {
-    marginTop: 13,
-    flexDirection: 'row',
-    gap: 14
-  },
-  productColorSwatch: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    borderWidth: 1,
-    borderColor: '#d9d2ce'
-  },
-  productColorSwatchActive: {
-    borderWidth: 2,
-    borderColor: '#050505'
-  },
-  productSizeHead: {
-    marginTop: 21,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between'
-  },
-  productSizeGuide: {
-    color: '#9b5658',
-    fontSize: 11,
-    fontWeight: '700',
-    textDecorationLine: 'underline'
-  },
-  productSizeRow: {
-    marginTop: 12,
-    flexDirection: 'row',
-    gap: 10
-  },
-  productSizeButton: {
-    flex: 1,
-    minHeight: 45,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#eadfdb',
-    backgroundColor: '#fbf7f6',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  productSizeButtonActive: {
-    borderWidth: 2,
-    borderColor: '#171412',
-    backgroundColor: '#ffffff'
-  },
-  productSizeText: {
-    color: '#4f4a48',
-    fontSize: 12,
-    fontWeight: '700'
-  },
-  productSizeTextActive: {
-    color: '#171412'
   },
   productActionRow: {
     marginTop: 24,
@@ -11741,6 +12554,96 @@ const styles = StyleSheet.create({
     color: '#9b5658',
     fontWeight: '700'
   },
+  aiOutfitList: {
+    gap: 10
+  },
+  aiOutfitCard: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#ebe3df',
+    backgroundColor: '#fffdfb',
+    padding: 12,
+    gap: 9
+  },
+  aiOutfitHead: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10
+  },
+  aiOutfitTitle: {
+    ...typography.productTitle,
+    flex: 1,
+    minWidth: 0,
+    color: '#211c1a',
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '800'
+  },
+  aiOutfitSource: {
+    ...typography.caption,
+    maxWidth: 110,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#eadbd6',
+    backgroundColor: '#f8efed',
+    color: '#9b5658',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: '800'
+  },
+  aiOutfitReason: {
+    ...typography.caption,
+    color: '#625b57',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '600'
+  },
+  aiOutfitItems: {
+    gap: 8,
+    paddingRight: 8
+  },
+  aiOutfitItem: {
+    width: 94,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#eee4df',
+    backgroundColor: '#ffffff',
+    overflow: 'hidden'
+  },
+  aiOutfitItemImage: {
+    width: '100%',
+    height: 84,
+    backgroundColor: '#eee8e3'
+  },
+  aiOutfitItemFallback: {
+    height: 84,
+    backgroundColor: '#f5ece9',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  aiOutfitItemName: {
+    ...typography.caption,
+    minHeight: 32,
+    paddingHorizontal: 8,
+    paddingTop: 7,
+    color: '#211c1a',
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '800'
+  },
+  aiOutfitItemMeta: {
+    ...typography.caption,
+    paddingHorizontal: 8,
+    paddingTop: 2,
+    paddingBottom: 8,
+    color: '#817873',
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: '700'
+  },
   conciergeSuggestionTrack: {
     paddingTop: 18,
     gap: 12,
@@ -11784,6 +12687,21 @@ const styles = StyleSheet.create({
     fontSize: 10,
     lineHeight: 13,
     fontWeight: '700'
+  },
+  conciergeSourceBadge: {
+    ...typography.caption,
+    alignSelf: 'flex-start',
+    marginBottom: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#eadbd6',
+    backgroundColor: '#f8efed',
+    color: '#9b5658',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: '800'
   },
   conciergeSuggestionName: {
     ...typography.productTitle,
@@ -13101,6 +14019,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12
   },
+  customUploadRowTablet: {
+    gap: 16
+  },
   customProfileCard: {
     width: 116,
     height: 232,
@@ -13109,6 +14030,10 @@ const styles = StyleSheet.create({
     borderColor: '#eaded9',
     backgroundColor: '#fffdfb',
     overflow: 'hidden'
+  },
+  customProfileCardTablet: {
+    width: 160,
+    height: 260
   },
   customProfileImage: {
     width: '100%',
@@ -13168,6 +14093,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center'
+  },
+  customGarmentDropTablet: {
+    height: 260
   },
   customGarmentDropReady: {
     borderStyle: 'solid',
@@ -13491,6 +14419,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 20,
     gap: 14
+  },
+  creditResponsiveGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'stretch'
+  },
+  creditGridCardHalf: {
+    width: '48.8%'
+  },
+  creditGridCardThird: {
+    width: '31.8%'
   },
   creditMandateCard: {
     minHeight: 252,
@@ -14492,6 +15431,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -8 },
     elevation: 8
   },
+  profileDeleteSheet: {
+    borderColor: '#edd1ce',
+    backgroundColor: '#fffafa'
+  },
   profileEditHandle: {
     alignSelf: 'center',
     width: 42,
@@ -14520,6 +15463,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     fontWeight: '500'
+  },
+  profileDangerEyebrow: {
+    ...typography.caption,
+    marginBottom: 5,
+    color: '#9b3f3b',
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: '800',
+    textTransform: 'uppercase'
   },
   profileEditClose: {
     width: 36,
@@ -14632,6 +15584,52 @@ const styles = StyleSheet.create({
     marginTop: 20,
     flexDirection: 'row',
     gap: 10
+  },
+  profileDeleteList: {
+    marginTop: 17,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#f0dedb',
+    backgroundColor: '#fffdfb',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8
+  },
+  profileDeleteListItem: {
+    minHeight: 22,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8
+  },
+  profileDeleteListText: {
+    ...typography.caption,
+    flex: 1,
+    color: '#4e4742',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700'
+  },
+  profileDeleteWarning: {
+    ...typography.caption,
+    marginTop: 12,
+    color: '#9b3f3b',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '800'
+  },
+  profileDeleteFinalButton: {
+    flex: 1,
+    minHeight: 52,
+    borderRadius: 8,
+    backgroundColor: '#9b3f3b',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8
+  },
+  profileDeleteFinalText: {
+    textAlign: 'center',
+    fontSize: 12,
+    lineHeight: 16
   },
   profilePasswordNotice: {
     marginTop: 18,
@@ -15722,6 +16720,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12
   },
+  wardrobeHeaderCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  wardrobeHeaderActions: {
+    alignItems: 'flex-end',
+    gap: 8,
+    flexShrink: 0
+  },
   smallOutlineButton: {
     minHeight: 38,
     paddingHorizontal: 12,
@@ -16216,6 +17223,44 @@ const styles = StyleSheet.create({
   },
   selectTextActive: {
     color: '#0f766e'
+  },
+  wardrobeGenerateFooter: {
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 6
+  },
+  wardrobeGenerateLookButton: {
+    minHeight: 54,
+    borderRadius: 27,
+    backgroundColor: '#111111',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.16,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 3
+  },
+  wardrobeGenerateLookText: {
+    color: '#ffffff',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '900',
+    letterSpacing: 0
+  },
+  wardrobeGenerateLookCount: {
+    minWidth: 24,
+    height: 24,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#a84f59',
+    color: '#ffffff',
+    textAlign: 'center',
+    lineHeight: 24,
+    fontSize: 12,
+    fontWeight: '900'
   },
   closetMessage: {
     marginHorizontal: 16,

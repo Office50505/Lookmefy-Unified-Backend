@@ -11,7 +11,28 @@ import {
 } from '@apple/app-store-server-library';
 
 export const APP_STORE_MONTHLY_SUBSCRIPTION_PRODUCT_ID = 'com.lookmefy.premium.monthly';
-export const APP_STORE_CREDITS_150_PRODUCT_ID = 'com.lookmefy.credits150';
+export const APP_STORE_CREDIT_TOP_UP_PRODUCTS = Object.freeze([
+  { productId: 'com.lookmefy.credits50', planId: 'top_up_50_credits', name: '50 credit top-up', credits: 50 },
+  { productId: 'com.lookmefy.credits75', planId: 'top_up_75_credits', name: '75 credit top-up', credits: 75 },
+  { productId: 'com.lookmefy.credits110', planId: 'top_up_110_credits', name: '110 credit top-up', credits: 110 },
+  { productId: 'com.lookmefy.credits135', planId: 'top_up_135_credits', name: '135 credit top-up', credits: 135 },
+  { productId: 'com.lookmefy.credits400', planId: 'top_up_400_credits', name: '400 credit top-up', credits: 400 }
+]);
+export const APP_STORE_CREDIT_TOP_UP_PRODUCT_IDS = Object.freeze(APP_STORE_CREDIT_TOP_UP_PRODUCTS.map((item) => item.productId));
+export const APP_STORE_CREDIT_TOP_UP_PRODUCT_ID_BY_PLAN_ID = Object.freeze(
+  Object.fromEntries(APP_STORE_CREDIT_TOP_UP_PRODUCTS.map((item) => [item.planId, item.productId]))
+);
+const APP_STORE_CREDIT_TOP_UP_PRODUCT_CONFIG_BY_ID = Object.freeze(
+  Object.fromEntries(APP_STORE_CREDIT_TOP_UP_PRODUCTS.map((item) => [
+    item.productId,
+    {
+      kind: 'consumable',
+      planId: item.planId,
+      name: item.name,
+      credits: item.credits
+    }
+  ]))
+);
 
 const APPLE_PRODUCT_CONFIG = Object.freeze({
   [APP_STORE_MONTHLY_SUBSCRIPTION_PRODUCT_ID]: {
@@ -20,12 +41,7 @@ const APPLE_PRODUCT_CONFIG = Object.freeze({
     name: 'FitLook Monthly',
     credits: 150
   },
-  [APP_STORE_CREDITS_150_PRODUCT_ID]: {
-    kind: 'consumable',
-    planId: 'apple_credits_150',
-    name: '150 credit top-up',
-    credits: 150
-  }
+  ...APP_STORE_CREDIT_TOP_UP_PRODUCT_CONFIG_BY_ID
 });
 
 const contextCache = new Map();

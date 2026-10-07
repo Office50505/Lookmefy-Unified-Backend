@@ -7,7 +7,7 @@ import User from '../models/User.js';
 import { requireUser } from './auth.js';
 import { requireAdmin } from '../utils/adminAuth.js';
 import {
-  APP_STORE_CREDITS_150_PRODUCT_ID,
+  APP_STORE_CREDIT_TOP_UP_PRODUCT_ID_BY_PLAN_ID,
   APP_STORE_MONTHLY_SUBSCRIPTION_PRODUCT_ID,
   appleAppAccountTokenForUserId,
   appleProductConfig,
@@ -65,6 +65,7 @@ const TOP_UP_PLANS = [
     tokens: 50,
     billingFrequency: 'one_time',
     cadence: 'One-time',
+    appStoreProductId: APP_STORE_CREDIT_TOP_UP_PRODUCT_ID_BY_PLAN_ID.top_up_50_credits,
     description: 'One-time refill for extra image try-ons and videos.'
   }),
   plan({
@@ -77,6 +78,7 @@ const TOP_UP_PLANS = [
     tokens: 75,
     billingFrequency: 'one_time',
     cadence: 'One-time',
+    appStoreProductId: APP_STORE_CREDIT_TOP_UP_PRODUCT_ID_BY_PLAN_ID.top_up_75_credits,
     description: 'One-time refill for extra image try-ons and videos.'
   }),
   plan({
@@ -89,6 +91,7 @@ const TOP_UP_PLANS = [
     tokens: 110,
     billingFrequency: 'one_time',
     cadence: 'One-time',
+    appStoreProductId: APP_STORE_CREDIT_TOP_UP_PRODUCT_ID_BY_PLAN_ID.top_up_110_credits,
     description: 'Better value for product batches and style exploration.'
   }),
   plan({
@@ -101,6 +104,7 @@ const TOP_UP_PLANS = [
     tokens: 135,
     billingFrequency: 'one_time',
     cadence: 'One-time',
+    appStoreProductId: APP_STORE_CREDIT_TOP_UP_PRODUCT_ID_BY_PLAN_ID.top_up_135_credits,
     description: 'Better value for product batches and style exploration.'
   }),
   plan({
@@ -113,6 +117,7 @@ const TOP_UP_PLANS = [
     tokens: 400,
     billingFrequency: 'one_time',
     cadence: 'One-time',
+    appStoreProductId: APP_STORE_CREDIT_TOP_UP_PRODUCT_ID_BY_PLAN_ID.top_up_400_credits,
     badge: 'Best value',
     description: 'Best value for bulk catalog work and repeated video trials.'
   })
@@ -193,7 +198,7 @@ function availablePlansPayload() {
     plans: [subscription, ...topUps],
     appStoreProductIds: {
       monthlySubscription: APP_STORE_MONTHLY_SUBSCRIPTION_PRODUCT_ID,
-      credits150: APP_STORE_CREDITS_150_PRODUCT_ID
+      creditTopUps: APP_STORE_CREDIT_TOP_UP_PRODUCT_ID_BY_PLAN_ID
     },
     creditCosts: {
       starterCredits: Number(process.env.SIGNUP_FREE_TOKENS || 8),
@@ -1313,7 +1318,7 @@ router.get('/apple/config', requireUser, (req, res) => {
   res.json({
     products: {
       monthlySubscription: APP_STORE_MONTHLY_SUBSCRIPTION_PRODUCT_ID,
-      credits150: APP_STORE_CREDITS_150_PRODUCT_ID
+      creditTopUps: APP_STORE_CREDIT_TOP_UP_PRODUCT_ID_BY_PLAN_ID
     },
     appAccountToken: appleAppAccountTokenForUserId(req.user._id),
     configured: status.configured,

@@ -5,7 +5,7 @@ import mongoose from 'mongoose';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import authRoutes from './routes/auth.js';
-import closetRoutes from './routes/closet.js';
+import closetRoutes, { registerClosetJobHandlers } from './routes/closet.js';
 import jobRoutes from './routes/jobs.js';
 import paymentRoutes from './routes/payments.js';
 import productRoutes, { registerProductJobHandlers } from './routes/products.js';
@@ -262,6 +262,7 @@ async function start() {
   registerProductJobHandlers();
   registerRecommendationJobHandlers();
   registerTryOnJobHandlers();
+  registerClosetJobHandlers();
   startJobWorker();
 
   app.listen(port, () => {
