@@ -2129,7 +2129,7 @@ function HomeOfferCards({ offers = [], onNavigate }) {
 
 function HomeProductRail({ title, subtitle, products = [], loading, error, viewParams = {}, onNavigate, onAddToWishlist, wishlistIds }) {
   const visibleProducts = uniqueProductsWithImages(products).slice(0, 8);
-  if (!loading && !error && !visibleProducts.length) return null;
+  if (!loading && (error || !visibleProducts.length)) return null;
   return (
     <View style={styles.homeCommerceSection}>
       <View style={styles.homeCommerceHead}>
