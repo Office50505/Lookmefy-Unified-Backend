@@ -1401,13 +1401,13 @@ function BottomNav({ route = { name: 'home' }, onNavigate = () => {} }) {
       : routeName;
   const items = [
     ['home', 'home-outline', 'Home'],
-    ['shop', 'grid-outline', 'Categories'],
+    ['shop', 'search-outline', 'Categories'],
     ['tryon', 'camera-outline', 'Try-On'],
     ['closet', 'shirt-outline', 'Wardrobe'],
-    ['stylebot', 'sparkles-outline', 'AI Stylist']
+    ['stylebot', 'sparkles-outline', 'AI Styles']
   ];
   return (
-    <View style={[styles.bottomNav, layout.isTablet && styles.bottomNavTablet, layout.contentFrameStyle]}>
+    <View style={[styles.bottomNav, layout.isTablet && styles.bottomNavTablet]}>
       {items.map(([name, icon, label]) => {
         const active = activeRoute === name;
         return (
@@ -1417,10 +1417,10 @@ function BottomNav({ route = { name: 'home' }, onNavigate = () => {} }) {
             accessibilityRole="tab"
             accessibilityState={{ selected: active }}
             style={styles.navItem}
-            onPress={() => onNavigate(name, name === 'closet' ? { view: 'stylist' } : {})}
+            onPress={() => onNavigate(name)}
           >
             <View style={[styles.navIconWrap, active && styles.navIconWrapCenter]}>
-              <Ionicons name={icon} size={active ? 20 : 21} color={active ? '#111111' : '#8d8682'} />
+              <Ionicons name={icon} size={active ? 13 : 12} color={active ? '#111111' : '#6f6f6f'} />
             </View>
             <Text style={[styles.navText, active && styles.navTextActive]}>{label}</Text>
             <View style={[styles.navActiveUnderline, active && styles.navActiveUnderlineVisible]} />
@@ -9005,25 +9005,36 @@ const styles = StyleSheet.create({
     lineHeight: 16
   },
   bottomNavFrame: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: Platform.OS === 'ios' ? 28 : 22,
+    zIndex: 40,
     width: '100%',
     alignItems: 'center',
-    backgroundColor: '#fbf7f6',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(236, 229, 225, 0.72)',
+    backgroundColor: 'transparent',
+    paddingHorizontal: 18,
+    paddingTop: 8,
+    paddingBottom: 0,
     shadowColor: '#1f1714',
-    shadowOpacity: 0.08,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: -8 },
-    elevation: 10
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 12
   },
   bottomNav: {
     width: '100%',
+    maxWidth: 560,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingTop: 10,
-    paddingBottom: Platform.OS === 'ios' ? 22 : 12,
-    paddingHorizontal: 10,
-    backgroundColor: '#fffdfb'
+    alignItems: 'center',
+    minHeight: 54,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: '#dedede',
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.96)'
   },
   bottomNavTablet: {
     paddingHorizontal: 18
@@ -9033,29 +9044,29 @@ const styles = StyleSheet.create({
     minWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
-    minHeight: 60
+    gap: 3,
+    minHeight: 40
   },
   navIconWrap: {
-    width: 44,
-    height: 30,
-    borderRadius: 18,
+    width: 24,
+    height: 22,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'transparent'
   },
   navIconWrapCenter: {
-    width: 44,
-    height: 30,
-    borderRadius: 0,
+    width: 24,
+    height: 22,
+    borderRadius: 11,
     borderWidth: 0,
-    backgroundColor: 'transparent'
+    backgroundColor: '#f2f2f2'
   },
   navText: {
     ...typography.nav,
-    fontSize: 11,
-    lineHeight: 14,
-    color: '#8d8682',
+    fontSize: 8,
+    lineHeight: 10,
+    color: '#6f6f6f',
     fontWeight: '600'
   },
   navTextActive: {
@@ -9064,14 +9075,13 @@ const styles = StyleSheet.create({
     fontWeight: '700'
   },
   navActiveUnderline: {
-    width: 42,
-    height: 3,
-    borderRadius: 2,
-    marginTop: 5,
+    width: 0,
+    height: 0,
+    marginTop: 0,
     backgroundColor: 'transparent'
   },
   navActiveUnderlineVisible: {
-    backgroundColor: '#111111'
+    backgroundColor: 'transparent'
   },
   homeScreen: {
     flex: 1,
