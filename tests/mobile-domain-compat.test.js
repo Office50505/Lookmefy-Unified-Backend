@@ -9,6 +9,7 @@ import {
   creditEventToClient,
   customHistoryItem,
   externalHistoryItem,
+  parseVideoByteRange,
   productHistoryItem,
   tryOnMediaTokenKind
 } from '../server/routes/tryons.js';
@@ -83,6 +84,20 @@ test('product try-on history item preserves mobile fields', () => {
     kind: tryOnMediaTokenKind({ kind: 'image', scope: 'product', field: 'image' })
   });
   assert.equal(claims.sub, userId.toString());
+});
+
+test('mobile video ranges support suffix and open-ended playback requests', () => {
+  assert.equal(parseVideoByteRange('', 1_080_000), null);
+  assert.deepEqual(parseVideoByteRange('bytes=0-479999', 1_080_000), { start: 0, end: 479_999 });
+  assert.deepEqual(parseVideoByteRange('bytes=480000-', 1_080_000), { start: 480_000, end: 1_079_999 });
+  assert.deepEqual(parseVideoByteRange('bytes=-480000', 1_080_000), { start: 600_000, end: 1_079_999 });
+  assert.deepEqual(parseVideoByteRange('bytes=-2000000', 1_080_000), { start: 0, end: 1_079_999 });
+  assert.deepEqual(parseVideoByteRange('bytes=0-', 480_000), { start: 0, end: 479_999 });
+  assert.deepEqual(parseVideoByteRange(' bytes = -65536 ', 480_000), { start: 414_464, end: 479_999 });
+  assert.deepEqual(parseVideoByteRange('BYTES=240000-480000', 480_000), { start: 240_000, end: 479_999 });
+  assert.equal(parseVideoByteRange('bytes=1080000-', 1_080_000), false);
+  assert.equal(parseVideoByteRange('bytes=-0', 1_080_000), false);
+  assert.equal(parseVideoByteRange('bytes=10-5', 1_080_000), false);
 });
 
 test('custom and external history items map app-compatible media fields', () => {

@@ -41040,8 +41040,8 @@ label,
 .reference-hero-demo {
   position: absolute;
   z-index: 3;
-  top: clamp(176px, 25%, 210px);
-  right: clamp(18px, 2.4vw, 46px);
+  top: clamp(158px, 22%, 190px);
+  right: clamp(120px, 10vw, 210px);
   display: grid;
   align-items: center;
   min-width: 500px;
@@ -41096,23 +41096,6 @@ label,
 }
 .reference-photo-step strong,
 .reference-result-step strong { font-family: var(--font-body); font-size: 15px; font-weight: 800; }
-.reference-result-step > span {
-  position: absolute;
-  top: -14px;
-  right: -14px;
-  display: inline-flex;
-  min-height: 38px;
-  align-items: center;
-  gap: 7px;
-  border-radius: 999px;
-  padding: 0 18px;
-  background: #f7f5f2;
-  box-shadow: 0 10px 24px rgba(32, 28, 25, .12);
-  font-family: var(--font-body);
-  font-size: 14px;
-  font-weight: 800;
-}
-.reference-result-step > span svg { width: 16px; height: 16px; }
 .reference-demo-arrow { color: #fff; font-family: var(--font-heading); font-size: 34px; text-shadow: 0 2px 12px rgba(0, 0, 0, .28); }
 .reference-piece-stack { display: grid; gap: 7px; width: 78px; padding: 7px; }
 .reference-piece-stack a {
@@ -41397,7 +41380,7 @@ label,
 .reference-side-note {
   position: absolute;
   z-index: 2;
-  right: clamp(34px, 4vw, 78px);
+  right: clamp(14px, 2vw, 34px);
   color: #191715;
   font-family: var(--font-interface);
   font-size: 12px;
@@ -42038,7 +42021,7 @@ label,
 }
 
 @media (max-width: 1280px) {
-  .reference-hero-demo { right: 36px; transform: scale(.86); transform-origin: right center; }
+  .reference-hero-demo { top: clamp(146px, 21%, 178px); right: clamp(118px, 13vw, 176px); transform: scale(.86); transform-origin: right center; }
   .reference-side-note,
   .reference-handwriting { display: none; }
   .reference-hub-grid,

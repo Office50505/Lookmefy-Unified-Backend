@@ -18,6 +18,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  RefreshControl,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -108,6 +109,7 @@ const aiTryOnRequestTimeoutMs = 420000;
 const aiTryOnJobTimeoutMs = 420000;
 const avatarCropReferenceSize = 132;
 const wishlistStorageVersion = 'v1';
+const collectionStorageVersion = 'v1';
 const homeHeroSlideIntervalMs = 4200;
 const homeHeroSlides = [
   { key: 'summer', title: 'SUMMER ESSENTIALS', cta: 'SHOP NOW', image: 'homeSliderAtelier', route: 'shop' },
@@ -253,7 +255,7 @@ const onboardingTourSteps = [
     })
   }
 ];
-const validRoutes = new Set(['auth', 'home', 'shop', 'search', 'tryon', 'closet', 'custom', 'stylebot', 'tokens', 'profile', 'generation-history', 'product', 'wishlist', 'orders', 'signup', 'login', 'how', 'info']);
+const validRoutes = new Set(['auth', 'home', 'shop', 'search', 'tryon', 'closet', 'custom', 'stylebot', 'tokens', 'profile', 'generation-history', 'product', 'wishlist', 'collections', 'orders', 'signup', 'login', 'how', 'info']);
 const tabletLayoutMinWidth = 768;
 const tabletContentMaxWidth = 1180;
 
@@ -350,9 +352,19 @@ function titleCase(value = '') {
 }
 
 function normalizePhoneInput(value = '') {
+  const raw = String(value || '').trim();
+  const digits = raw.replace(/\D/g, '').slice(0, 15);
+  return raw.startsWith('+') ? `+${digits}` : digits;
+}
+
+function authPhoneValue(value = '') {
   const digits = String(value || '').replace(/\D/g, '');
-  if (digits.length > 10 && digits.startsWith('91')) return digits.slice(-10);
-  return digits.slice(0, 10);
+  let local = '';
+  if (digits.length === 10) local = digits;
+  else if (digits.length === 11 && digits.startsWith('0')) local = digits.slice(1);
+  else if (digits.length === 12 && digits.startsWith('91')) local = digits.slice(2);
+  else if (digits.length === 14 && digits.startsWith('0091')) local = digits.slice(4);
+  return /^[6-9]\d{9}$/.test(local) ? local : '';
 }
 
 function normalizeOtpInput(value = '') {
@@ -728,6 +740,11 @@ function wishlistStorageKey(user) {
   return `lookmefy:wishlist:${wishlistStorageVersion}:${identity}`;
 }
 
+function collectionStorageKey(user) {
+  const identity = user?.id || user?.phone || user?.email || 'guest';
+  return `lookmefy:collections:${collectionStorageVersion}:${identity}`;
+}
+
 const ResilientImage = memo(function ResilientImage({ source, fallbackSource, style, imageStyle, imageBaseStyle, resizeMode = 'cover', alt, fallbackIcon = 'image-outline', fallbackText }) {
   const [sourceIndex, setSourceIndex] = useState(0);
   const [loaded, setLoaded] = useState(false);
@@ -1016,7 +1033,7 @@ function useProducts(params, token) {
   const query = useMemo(() => {
     const search = new URLSearchParams();
     Object.entries(params || {}).forEach(([key, value]) => {
-      if (key === 'all' || key === 'enabled') return;
+      if (key === 'all' || key === 'enabled' || key === 'refreshKey') return;
       if (value !== undefined && value !== null && value !== '') search.set(key, value);
     });
     return search.toString();
@@ -1082,7 +1099,7 @@ function useProducts(params, token) {
   return { ...state, reload: load };
 }
 
-function useRecommendedProducts(user, token, limit = 8) {
+function useRecommendedProducts(user, token, limit = 8, refreshKey = 0) {
   const [state, setState] = useState({
     products: [],
     total: 0,
@@ -1119,7 +1136,7 @@ function useRecommendedProducts(user, token, limit = 8) {
     return () => {
       alive = false;
     };
-  }, [Boolean(user), user?.id, user?._id, token, limit]);
+  }, [Boolean(user), user?.id, user?._id, token, limit, refreshKey]);
 
   return state;
 }
@@ -1362,10 +1379,8 @@ function AppHeader({ onNavigate, title = 'Lookmefy', leftIcon = 'menu-outline', 
   const openLeft = () => leftRoute && onNavigate(leftRoute);
   const openRight = () => rightRoute && onNavigate(rightRoute);
   const showWishlistAction = showWishlist && !showAvatar;
-  const showSearchAction = showSearch && !showAvatar;
   const showProfileAction = Boolean(user) && !showAvatar;
   const brandLeft = brandAlign === 'left';
-  const searchTourTarget = useTourTarget(tourTargetKeys.search, registerTourTarget);
   const avatarTourTarget = useTourTarget(tourTargetKeys.avatar, registerTourTarget);
   const avatarUri = userAvatarUrl(user);
   const avatarResizeMode = userAvatarResizeMode(user);
@@ -1388,11 +1403,6 @@ function AppHeader({ onNavigate, title = 'Lookmefy', leftIcon = 'menu-outline', 
         {title === 'Lookmefy' ? <BrandLogo compact={compact} /> : <Text style={styles.appHeaderBrand} numberOfLines={1}>{title}</Text>}
       </Pressable>
       <View style={[styles.appHeaderSide, styles.appHeaderRightSide]}>
-        {showSearchAction ? (
-          <TouchableOpacity ref={searchTourTarget.ref} onLayout={searchTourTarget.onLayout} accessibilityRole="button" accessibilityLabel="Search products" style={styles.appHeaderAction} onPress={() => onNavigate('search')}>
-            <Ionicons name="search-outline" size={22} color="#171412" />
-          </TouchableOpacity>
-        ) : null}
         {showWishlistAction ? (
           <TouchableOpacity accessibilityRole="button" accessibilityLabel="Open wishlist" style={styles.appHeaderAction} onPress={() => onNavigate('wishlist')}>
             <Ionicons name="heart-outline" size={21} color="#171412" />
@@ -2004,13 +2014,48 @@ const homeProductFeedPageSize = 48;
 const shopProductGridLimit = 50;
 const searchQuickSuggestions = ['short kurti', 'saree', 'kurti', 'tshirt', 'earring', 'top for women', 'slipper', 'watch', 'top', 'kurti set', 'shoes', 'eyewear'];
 
-function PageBackRow({ onBack }) {
-  if (!onBack) return null;
+function categorySearchText(value = '') {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+const categorySearchReferences = (() => {
+  const references = [];
+  const seen = new Set();
+  const addReference = (item = {}, sectionKey = '', sectionLabel = '') => {
+    const label = categorySearchText(item.label);
+    if (!label) return;
+    const params = item.params || (sectionKey ? { section: sectionKey } : { q: label });
+    const key = `${label.toLowerCase()}|${JSON.stringify(params)}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    references.push({
+      ...item,
+      label,
+      params,
+      sectionKey,
+      sectionLabel
+    });
+  };
+
+  categoryRailItems.forEach((item) => addReference(item, item.key, item.label));
+  Object.entries(categoryPageContent).forEach(([sectionKey, content]) => {
+    const rail = categoryRailItems.find((item) => item.key === sectionKey);
+    const sectionLabel = categorySearchText(rail?.label || content.title || sectionKey);
+    [...(content.featured || []), ...(content.items || [])].forEach((item) => addReference(item, sectionKey, sectionLabel));
+  });
+  return references;
+})();
+
+function PageBackRow({ onBack, children }) {
+  if (!onBack && !children) return null;
   return (
     <View style={styles.pageBackRow}>
-      <TouchableOpacity accessibilityRole="button" accessibilityLabel="Go back" activeOpacity={0.86} style={styles.pageBackButton} onPress={onBack}>
-        <Ionicons name="chevron-back" size={21} color="#111111" />
-      </TouchableOpacity>
+      {onBack ? (
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Go back" activeOpacity={0.86} style={styles.pageBackButton} onPress={onBack}>
+          <Ionicons name="chevron-back" size={21} color="#111111" />
+        </TouchableOpacity>
+      ) : null}
+      {children}
     </View>
   );
 }
@@ -2026,9 +2071,9 @@ function ShopTopBar({ onNavigate, user, onBack }) {
 
 function CategoryBubble({ item, size = 'large', active = false }) {
   const imageSource = item.image ? images[item.image] : null;
-  const frameStyle = size === 'rail' ? styles.categoryRailImageFrame : styles.categoryContentImageFrame;
-  const imageStyle = size === 'rail' ? styles.categoryRailImage : styles.categoryContentImage;
-  const iconSize = size === 'rail' ? 30 : 38;
+  const frameStyle = size === 'rail' ? styles.categoryRailImageFrame : size === 'reference' ? styles.categoryReferenceImageFrame : styles.categoryContentImageFrame;
+  const imageStyle = size === 'rail' ? styles.categoryRailImage : size === 'reference' ? styles.categoryReferenceImage : styles.categoryContentImage;
+  const iconSize = size === 'rail' ? 30 : size === 'reference' ? 17 : 38;
 
   return (
     <View style={[frameStyle, active && styles.categoryRailImageFrameActive]}>
@@ -2043,12 +2088,89 @@ function CategoryBubble({ item, size = 'large', active = false }) {
 
 function CategoryLandingScreen({ selectedCategory, onSelectCategory, onNavigate, onBack, user }) {
   const layout = useResponsiveLayout();
+  const [categoryQuery, setCategoryQuery] = useState('');
   const content = categoryPageContent[selectedCategory] || categoryPageContent.popular;
+  const normalizedCategoryQuery = categorySearchText(categoryQuery).toLowerCase();
+  const categoryMatches = useMemo(() => {
+    if (!normalizedCategoryQuery) return [];
+    return categorySearchReferences
+      .map((item) => {
+        const label = categorySearchText(item.label).toLowerCase();
+        const section = categorySearchText(item.sectionLabel).toLowerCase();
+        const params = categorySearchText([item.params?.q, item.params?.category, item.params?.gender].filter(Boolean).join(' ')).toLowerCase();
+        const haystack = `${label} ${section} ${params}`;
+        if (!haystack.includes(normalizedCategoryQuery)) return null;
+        return { item, score: label.startsWith(normalizedCategoryQuery) ? 0 : section.startsWith(normalizedCategoryQuery) ? 1 : 2 };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.score - b.score || a.item.label.localeCompare(b.item.label))
+      .map(({ item }) => item)
+      .slice(0, 6);
+  }, [normalizedCategoryQuery]);
+  const openCategoryReference = (item) => {
+    setCategoryQuery('');
+    if (item.sectionKey && item.params?.section === item.sectionKey) {
+      onSelectCategory(item.sectionKey);
+      return;
+    }
+    onNavigate('shop', item.params || { q: item.label });
+  };
+  const submitCategorySearch = () => {
+    const firstMatch = categoryMatches[0];
+    if (firstMatch) {
+      openCategoryReference(firstMatch);
+      return;
+    }
+    const query = categorySearchText(categoryQuery);
+    if (query) onNavigate('shop', { q: query });
+  };
   const openTile = (item) => onNavigate('shop', item.params || { sort: 'newest' });
 
   return (
     <View style={styles.categoryScreen}>
-      <ShopTopBar onNavigate={onNavigate} user={user} onBack={onBack} />
+      <AppHeader onNavigate={onNavigate} user={user} compact />
+      <PageBackRow onBack={onBack}>
+        <View style={styles.categorySearchDock}>
+          <View style={styles.categorySearchBox}>
+            <Ionicons name="search-outline" size={18} color="#706a75" />
+            <TextInput
+              value={categoryQuery}
+              onChangeText={setCategoryQuery}
+              placeholder="Search categories"
+              placeholderTextColor="#8b8491"
+              returnKeyType="search"
+              onSubmitEditing={submitCategorySearch}
+              style={styles.categorySearchInput}
+            />
+            {categoryQuery ? (
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Clear category search" style={styles.categorySearchIconButton} onPress={() => setCategoryQuery('')}>
+                <Ionicons name="close" size={16} color="#706a75" />
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Search categories" style={styles.categorySearchSubmit} onPress={submitCategorySearch}>
+              <Ionicons name="arrow-forward" size={16} color="#ffffff" />
+            </TouchableOpacity>
+          </View>
+          {categoryQuery ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.categoryReferenceTrack}>
+              {categoryMatches.length ? categoryMatches.map((item) => (
+                <TouchableOpacity key={`${item.sectionKey}-${item.label}-${JSON.stringify(item.params || {})}`} style={styles.categoryReferenceChip} activeOpacity={0.82} onPress={() => openCategoryReference(item)}>
+                  <CategoryBubble item={item} size="reference" />
+                  <View style={styles.categoryReferenceCopy}>
+                    <Text style={styles.categoryReferenceText} numberOfLines={1}>{item.label}</Text>
+                    <Text style={styles.categoryReferenceMeta} numberOfLines={1}>{item.sectionLabel || 'Category'}</Text>
+                  </View>
+                </TouchableOpacity>
+              )) : (
+                <TouchableOpacity style={styles.categoryReferenceChip} activeOpacity={0.82} onPress={submitCategorySearch}>
+                  <Ionicons name="search-outline" size={15} color="#9b5658" />
+                  <Text style={styles.categoryReferenceText} numberOfLines={1}>Search "{categorySearchText(categoryQuery)}"</Text>
+                </TouchableOpacity>
+              )}
+            </ScrollView>
+          ) : null}
+        </View>
+      </PageBackRow>
       <View style={styles.categoryBrowser}>
         <ScrollView style={[styles.categoryRail, layout.isTablet && styles.categoryRailTablet]} contentContainerStyle={[styles.categoryRailContent, layout.isTablet && styles.categoryRailContentTablet]} showsVerticalScrollIndicator={false}>
           {categoryRailItems.map((item) => {
@@ -2206,27 +2328,6 @@ function HomeProductRail({ title, subtitle, products = [], loading, error, onNav
         </View>
       )}
     </View>
-  );
-}
-
-function HomeLookCard({ product, fallbackImage, title, meta, onPress }) {
-  return (
-    <TouchableOpacity style={styles.homeLookCard} activeOpacity={0.88} onPress={onPress}>
-      <View style={styles.homeLookImageWrap}>
-        {product ? (
-          <ProductImage product={product} style={styles.homeLookImage} resizeMode="cover" alt={product.title || product.name} />
-        ) : (
-          <Image source={fallbackImage} style={styles.homeLookImage} resizeMode="cover" />
-        )}
-      </View>
-      <View style={styles.homeLookBody}>
-        <View style={styles.homeLookTextBlock}>
-          <Text style={styles.homeLookTitle} numberOfLines={1}>{title}</Text>
-          <Text style={styles.homeLookMeta} numberOfLines={1}>{meta}</Text>
-        </View>
-        <Ionicons name="chevron-forward" size={22} color="#34302e" />
-      </View>
-    </TouchableOpacity>
   );
 }
 
@@ -2421,15 +2522,17 @@ function AiStudioOutfitCard({ outfit }) {
 function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, registerTourTarget, tourFocusRequest }) {
   const layout = useResponsiveLayout();
   const homeScrollRef = useRef(null);
+  const [homeRefreshKey, setHomeRefreshKey] = useState(0);
+  const [homeRefreshing, setHomeRefreshing] = useState(false);
   const preferredGender = productGenderForUser(user);
-  const curated = useProducts({ sort: 'newest', limit: homeProductFeedPageSize, gender: preferredGender }, token);
-  const recommended = useRecommendedProducts(user, token, 16);
+  const curated = useProducts({ sort: 'newest', limit: homeProductFeedPageSize, gender: preferredGender, refreshKey: homeRefreshKey }, token);
+  const recommended = useRecommendedProducts(user, token, 16, homeRefreshKey);
   const shopLookQuery = preferredGender === 'women'
     ? { category: 'dresses', gender: 'women', sort: 'newest', limit: 8 }
     : preferredGender === 'men'
       ? { gender: 'men', sort: 'newest', limit: 8 }
       : { sort: 'newest', limit: 8 };
-  const shopLooks = useProducts(shopLookQuery, token);
+  const shopLooks = useProducts({ ...shopLookQuery, refreshKey: homeRefreshKey }, token);
   const catalogProducts = useMemo(() => uniqueProductsWithImages(curated.products), [curated.products]);
   const arrivalProducts = useMemo(() => {
     const newArrivalProducts = catalogProducts.filter((product) => product.isNew);
@@ -2529,33 +2632,44 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
     : preferredGender === 'men'
       ? { gender: 'men', sort: 'newest' }
       : { sort: 'newest' };
-  const continueLooks = [
-    {
-      title: preferredGender === 'men' ? 'Tailored Day Look' : 'Casual Day Look',
-      meta: '3 items  -  2 days ago',
-      product: null,
-      fallbackImage: images.homeSliderNaturalLight
-    },
-    {
-      title: 'Denim Vibes',
-      meta: '4 items  -  4 days ago',
-      product: null,
-      fallbackImage: images.homeSliderArchway
-    }
-  ];
   const catalogTourTarget = useTourTarget('home-catalog', registerTourTarget, { request: tourFocusRequest, scrollRef: homeScrollRef, scrollOffset: 92 });
+  const handleHomeRefresh = useCallback(() => {
+    setHomeRefreshing(true);
+    setHomeRefreshKey(Date.now());
+  }, []);
+
+  useEffect(() => {
+    if (!homeRefreshing) return undefined;
+    const refreshTimer = setTimeout(() => {
+      if (!curated.loading && !recommended.loading && !shopLooks.loading) setHomeRefreshing(false);
+    }, 500);
+    return () => clearTimeout(refreshTimer);
+  }, [curated.loading, homeRefreshing, recommended.loading, shopLooks.loading]);
 
   return (
     <View style={styles.homeScreen}>
-      <ScrollView ref={homeScrollRef} style={styles.homeScroll} contentContainerStyle={[styles.homeContent, layout.isTablet && styles.homeContentTablet]} {...screenScrollProps}>
-        <AppHeader onNavigate={onNavigate} user={user} compact />
-
+      <AppHeader onNavigate={onNavigate} user={user} compact />
+      <ScrollView
+        ref={homeScrollRef}
+        style={styles.homeScroll}
+        contentContainerStyle={[styles.homeContent, layout.isTablet && styles.homeContentTablet]}
+        refreshControl={(
+          <RefreshControl
+            refreshing={homeRefreshing}
+            onRefresh={handleHomeRefresh}
+            tintColor="#9b5658"
+            colors={['#9b5658']}
+            progressBackgroundColor="#fffdfb"
+          />
+        )}
+        {...screenScrollProps}
+      >
         <View style={styles.homeTryOnHero}>
           <HomeHeroShowcase />
           <View pointerEvents="none" style={styles.homeHeroLeftBase} />
           <View pointerEvents="none" style={styles.homeHeroLeftSlantFill} />
           <View pointerEvents="none" style={styles.homeHeroDivider} />
-          <TouchableOpacity style={styles.homeHeroRoundAction} activeOpacity={0.88} onPress={() => onNavigate('tryon')}>
+          <TouchableOpacity style={styles.homeHeroRoundAction} activeOpacity={0.88} onPress={() => onNavigate('shop')}>
             <Ionicons name="arrow-forward" size={26} color="#111111" />
           </TouchableOpacity>
           <View style={styles.homeHeroLeftPane}>
@@ -2564,7 +2678,7 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
             <Text style={styles.homeHeroEditorialText}>Try fashion on yourself before you shop.</Text>
             <TouchableOpacity style={styles.homePrimaryTryOnButton} activeOpacity={0.88} onPress={() => onNavigate('tryon')}>
               <Ionicons name="camera-outline" size={19} color="#ffffff" />
-              <Text style={styles.homePrimaryTryOnText}>AI Try On</Text>
+              <Text style={styles.homePrimaryTryOnText}>Try On</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.homeSecondaryWardrobeButton} activeOpacity={0.88} onPress={() => onNavigate('closet')}>
               <Ionicons name="shirt-outline" size={19} color="#111111" />
@@ -2573,23 +2687,30 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
           </View>
         </View>
 
-        <View style={styles.homeSectionBlock}>
-          <View style={styles.homeEditorialSectionHead}>
-            <Text style={styles.homeEditorialSectionTitle}>Continue Your Looks</Text>
+        <TouchableOpacity style={styles.homeStylistPromptCard} activeOpacity={0.88} onPress={() => onNavigate('stylebot')}>
+          <View style={styles.homeStylistPromptCopy}>
+            <View style={styles.homeStylistPromptTitleRow}>
+              <Ionicons name="sparkles" size={17} color="#171412" />
+              <Text style={styles.homeStylistPromptTitle} numberOfLines={1}>Not sure what to wear?</Text>
+            </View>
+            <Text style={styles.homeStylistPromptText} numberOfLines={2}>Let AI create stylish looks from your wardrobe.</Text>
+            <View style={styles.homeStylistPromptButton}>
+              <Text style={styles.homeStylistPromptButtonText}>Ask AI Stylist</Text>
+              <Ionicons name="arrow-forward" size={15} color="#ffffff" />
+            </View>
           </View>
-          <View style={styles.homeLookGrid}>
-            {continueLooks.map((look) => (
-              <HomeLookCard
-                key={look.title}
-                product={look.product}
-                fallbackImage={look.fallbackImage}
-                title={look.title}
-                meta={look.meta}
-                onPress={() => look.product ? onNavigate('product', { id: look.product.id }) : onNavigate('generation-history')}
-              />
-            ))}
+          <View style={styles.homeStylistPromptVisual} pointerEvents="none">
+            <View style={[styles.homeStylistPromptLookTile, styles.homeStylistPromptLookTileBack]}>
+              <Image source={images['category-generated/tops.png']} style={styles.homeStylistPromptLookImage} resizeMode="contain" />
+            </View>
+            <View style={[styles.homeStylistPromptLookTile, styles.homeStylistPromptLookTileFront]}>
+              <Image source={images['category-generated/bottomwear.png']} style={styles.homeStylistPromptLookImage} resizeMode="contain" />
+            </View>
+            <View style={[styles.homeStylistPromptLookTile, styles.homeStylistPromptLookTileAccent]}>
+              <Image source={images['category-generated/accessories.png']} style={styles.homeStylistPromptLookImage} resizeMode="contain" />
+            </View>
           </View>
-        </View>
+        </TouchableOpacity>
 
         <View ref={catalogTourTarget.ref} onLayout={catalogTourTarget.onLayout} />
 
@@ -3437,13 +3558,15 @@ const phoneAuthPerks = [
   { label: 'Wardrobe', icon: 'shirt-outline' }
 ];
 
-function AuthPasswordField({ value, onChangeText, placeholder, visible, onToggle, fieldHeight, autoComplete = 'password' }) {
+function AuthPasswordField({ value, onChangeText, placeholder, visible, onToggle, fieldHeight, autoComplete = 'password', textContentType = 'password' }) {
+  const inputRef = useRef(null);
   return (
     <View style={[styles.loginInputWrap, { minHeight: fieldHeight }]}>
       <Ionicons name="lock-closed-outline" size={23} color="#555a5d" />
       <TextInput
+        ref={inputRef}
         style={styles.loginInput}
-        value={value}
+        defaultValue={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
         placeholderTextColor="#6f7687"
@@ -3451,7 +3574,10 @@ function AuthPasswordField({ value, onChangeText, placeholder, visible, onToggle
         autoCapitalize="none"
         autoCorrect={false}
         autoComplete={autoComplete}
-        textContentType={autoComplete === 'new-password' ? 'newPassword' : 'password'}
+        textContentType={textContentType}
+        returnKeyType="done"
+        contextMenuHidden
+        selectTextOnFocus={false}
       />
       <TouchableOpacity style={styles.passwordVisibilityButton} activeOpacity={0.72} onPress={onToggle}>
         <Ionicons name={visible ? 'eye-off-outline' : 'eye-outline'} size={21} color="#5d5754" />
@@ -3472,6 +3598,10 @@ function AuthScreen({ mode, setUser, setToken, onNavigate }) {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const phoneInputRef = useRef(null);
+  const phoneDraftRef = useRef('');
+  const passwordDraftRef = useRef('');
+  const confirmPasswordDraftRef = useRef('');
   const [signupStage, setSignupStage] = useState('otp');
   const [signupToken, setSignupToken] = useState('');
   const [resetStage, setResetStage] = useState('idle');
@@ -3483,17 +3613,26 @@ function AuthScreen({ mode, setUser, setToken, onNavigate }) {
   const titleSize = clamp(width * 0.082, 31, 38);
   const fieldHeight = clamp(height * 0.052, 54, 60);
   const authEditorialHeight = clamp(height * 0.17, 118, 158);
-  const phoneValue = normalizePhoneInput(phone);
   const completingSignup = isSignup && signupStage === 'details';
   const resetOtpStage = !isSignup && resetStage === 'otp';
   const resetPasswordStage = !isSignup && resetStage === 'password';
   const baseLoginStage = !isSignup && resetStage === 'idle';
+  const currentPhoneValue = () => authPhoneValue(phoneDraftRef.current || phone);
+  const currentPassword = () => passwordDraftRef.current || password;
+  const currentConfirmPassword = () => confirmPasswordDraftRef.current || confirmPassword;
+  const clearPasswordDrafts = () => {
+    passwordDraftRef.current = '';
+    confirmPasswordDraftRef.current = '';
+    setPassword('');
+    setConfirmPassword('');
+  };
 
   useEffect(() => {
     setOtp('');
     setOtpSent(false);
-    setPassword('');
-    setConfirmPassword('');
+    setPhone('');
+    phoneDraftRef.current = '';
+    clearPasswordDrafts();
     setShowPassword(false);
     setShowConfirmPassword(false);
     setMessage('');
@@ -3511,6 +3650,7 @@ function AuthScreen({ mode, setUser, setToken, onNavigate }) {
   };
 
   const sendSignupOtp = async () => {
+    const phoneValue = currentPhoneValue();
     if (phoneValue.length !== 10) {
       setMessage('Enter a valid 10 digit mobile number.');
       return;
@@ -3533,6 +3673,7 @@ function AuthScreen({ mode, setUser, setToken, onNavigate }) {
   };
 
   const verifySignupOtp = async () => {
+    const phoneValue = currentPhoneValue();
     const cleanOtp = normalizeOtpInput(otp);
     if (phoneValue.length !== 10 || !cleanOtp) {
       setMessage('Enter your mobile number and OTP.');
@@ -3549,8 +3690,7 @@ function AuthScreen({ mode, setUser, setToken, onNavigate }) {
       setDetailName('');
       setDetailGender('');
       setDetailPhoto(null);
-      setPassword('');
-      setConfirmPassword('');
+      clearPasswordDrafts();
       setSignupStage('details');
       setMessage('');
     } catch (error) {
@@ -3561,11 +3701,13 @@ function AuthScreen({ mode, setUser, setToken, onNavigate }) {
   };
 
   const loginWithPassword = async () => {
+    const phoneValue = currentPhoneValue();
+    const passwordValue = currentPassword();
     if (phoneValue.length !== 10) {
       setMessage('Enter a valid 10 digit mobile number.');
       return;
     }
-    if (!password) {
+    if (!passwordValue) {
       setMessage('Enter your password.');
       return;
     }
@@ -3574,7 +3716,7 @@ function AuthScreen({ mode, setUser, setToken, onNavigate }) {
     try {
       const data = await api('/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ phone: phoneValue, password })
+        body: JSON.stringify({ phone: phoneValue, password: passwordValue })
       });
       await finishAuthenticated(data);
     } catch (error) {
@@ -3585,6 +3727,7 @@ function AuthScreen({ mode, setUser, setToken, onNavigate }) {
   };
 
   const startPasswordReset = async () => {
+    const phoneValue = currentPhoneValue();
     if (phoneValue.length !== 10) {
       setMessage('Enter your mobile number first.');
       return;
@@ -3608,6 +3751,7 @@ function AuthScreen({ mode, setUser, setToken, onNavigate }) {
   };
 
   const verifyPasswordResetOtp = async () => {
+    const phoneValue = currentPhoneValue();
     const cleanOtp = normalizeOtpInput(otp);
     if (phoneValue.length !== 10 || !cleanOtp) {
       setMessage('Enter your mobile number and OTP.');
@@ -3624,8 +3768,7 @@ function AuthScreen({ mode, setUser, setToken, onNavigate }) {
       setResetStage('password');
       setOtp('');
       setOtpSent(false);
-      setPassword('');
-      setConfirmPassword('');
+      clearPasswordDrafts();
       setMessage('');
     } catch (error) {
       setMessage(error.message);
@@ -3635,12 +3778,14 @@ function AuthScreen({ mode, setUser, setToken, onNavigate }) {
   };
 
   const completePasswordReset = async () => {
-    const passwordError = passwordValidationMessage(password);
+    const passwordValue = currentPassword();
+    const confirmPasswordValue = currentConfirmPassword();
+    const passwordError = passwordValidationMessage(passwordValue);
     if (passwordError) {
       setMessage(passwordError);
       return;
     }
-    if (password !== confirmPassword) {
+    if (passwordValue !== confirmPasswordValue) {
       setMessage('Passwords do not match.');
       return;
     }
@@ -3654,7 +3799,7 @@ function AuthScreen({ mode, setUser, setToken, onNavigate }) {
     try {
       const data = await api('/auth/password/reset', {
         method: 'POST',
-        body: JSON.stringify({ resetToken, password, confirmPassword }),
+        body: JSON.stringify({ resetToken, password: passwordValue, confirmPassword: confirmPasswordValue }),
         timeoutMs: 60000
       });
       await finishAuthenticated(data);
@@ -3677,8 +3822,7 @@ function AuthScreen({ mode, setUser, setToken, onNavigate }) {
     setResetToken('');
     setOtp('');
     setOtpSent(false);
-    setPassword('');
-    setConfirmPassword('');
+    clearPasswordDrafts();
     setMessage('');
   };
 
@@ -3686,8 +3830,7 @@ function AuthScreen({ mode, setUser, setToken, onNavigate }) {
     await clearToken();
     setSignupToken('');
     setSignupStage('otp');
-    setPassword('');
-    setConfirmPassword('');
+    clearPasswordDrafts();
     setMessage('');
     onNavigate('home');
   };
@@ -3698,6 +3841,8 @@ function AuthScreen({ mode, setUser, setToken, onNavigate }) {
   };
 
   const completeSignupDetails = async () => {
+    const passwordValue = currentPassword();
+    const confirmPasswordValue = currentConfirmPassword();
     const cleanName = detailName.trim().replace(/\s+/g, ' ');
     if (cleanName.length < 2) {
       setMessage('Enter your full name.');
@@ -3711,12 +3856,12 @@ function AuthScreen({ mode, setUser, setToken, onNavigate }) {
       setMessage('Upload a profile photo.');
       return;
     }
-    const passwordError = passwordValidationMessage(password);
+    const passwordError = passwordValidationMessage(passwordValue);
     if (passwordError) {
       setMessage(passwordError);
       return;
     }
-    if (password !== confirmPassword) {
+    if (passwordValue !== confirmPasswordValue) {
       setMessage('Passwords do not match.');
       return;
     }
@@ -3728,8 +3873,8 @@ function AuthScreen({ mode, setUser, setToken, onNavigate }) {
       form.append('signupToken', signupToken);
       form.append('name', cleanName);
       form.append('genderPreference', detailGender);
-      form.append('password', password);
-      form.append('confirmPassword', confirmPassword);
+      form.append('password', passwordValue);
+      form.append('confirmPassword', confirmPasswordValue);
       form.append('requireBodyPhoto', 'true');
       form.append('profilePhotoMode', 'ai-full-body');
       form.append('bodyPhoto', filePart(detailPhoto, 'body-photo.jpg'));
@@ -3929,26 +4074,38 @@ function AuthScreen({ mode, setUser, setToken, onNavigate }) {
             <View style={[styles.loginInputWrap, { minHeight: fieldHeight }]}>
               <Ionicons name="call-outline" size={23} color="#555a5d" />
               <TextInput
+                ref={phoneInputRef}
                 style={styles.loginInput}
-                value={phone}
-                onChangeText={(value) => setPhone(normalizePhoneInput(value))}
+                defaultValue={phone}
+                onChangeText={(value) => {
+                  phoneDraftRef.current = value;
+                }}
+                onBlur={() => setPhone(normalizePhoneInput(phoneDraftRef.current))}
                 placeholder="Mobile number"
                 placeholderTextColor="#6f7687"
                 keyboardType="phone-pad"
                 autoComplete="tel"
-                maxLength={10}
+                textContentType="telephoneNumber"
+                maxLength={16}
                 editable={!loading && !resetPasswordStage}
+                returnKeyType="next"
+                contextMenuHidden
+                selectTextOnFocus={false}
               />
             </View>
 
             {baseLoginStage ? (
               <AuthPasswordField
                 value={password}
-                onChangeText={setPassword}
+                onChangeText={(value) => {
+                  passwordDraftRef.current = value;
+                }}
                 placeholder="Password"
                 visible={showPassword}
                 onToggle={() => setShowPassword((value) => !value)}
                 fieldHeight={fieldHeight}
+                autoComplete="current-password"
+                textContentType="password"
               />
             ) : null}
 
@@ -3974,21 +4131,27 @@ function AuthScreen({ mode, setUser, setToken, onNavigate }) {
               <>
                 <AuthPasswordField
                   value={password}
-                  onChangeText={setPassword}
+                  onChangeText={(value) => {
+                    passwordDraftRef.current = value;
+                  }}
                   placeholder="New password"
                   visible={showPassword}
                   onToggle={() => setShowPassword((value) => !value)}
                   fieldHeight={fieldHeight}
                   autoComplete="new-password"
+                  textContentType="newPassword"
                 />
                 <AuthPasswordField
                   value={confirmPassword}
-                  onChangeText={setConfirmPassword}
+                  onChangeText={(value) => {
+                    confirmPasswordDraftRef.current = value;
+                  }}
                   placeholder="Confirm new password"
                   visible={showConfirmPassword}
                   onToggle={() => setShowConfirmPassword((value) => !value)}
                   fieldHeight={fieldHeight}
                   autoComplete="new-password"
+                  textContentType="newPassword"
                 />
               </>
             ) : null}
@@ -4175,6 +4338,72 @@ const wardrobeFallbackRecommendations = [
   { title: 'Neutral Casual', images: ['arrival-1.jpg', 'arrival-2.jpg', 'category-8.jpg'] },
   { title: 'Soft Gallery Fit', images: ['arrival-4.jpg', 'category-4.jpg', 'category-6.jpg'] }
 ];
+const wardrobeFreshLookTitles = ['Fresh Closet Pair', 'New Daily Combo', 'Smart Wardrobe Mix', 'Easy Outfit Idea', 'Balanced Style Set'];
+
+function rotateWardrobePick(entries = [], seed = 0, offset = 0) {
+  if (!entries.length) return null;
+  return entries[Math.abs(seed + offset) % entries.length];
+}
+
+function uniqueWardrobeItems(entries = []) {
+  const seen = new Set();
+  return entries.filter((item) => {
+    if (!item?.id || seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+}
+
+function buildLocalWardrobeSuggestions(entries = [], occasion = 'today casual', seed = Date.now()) {
+  const wardrobeItems = entries.filter((item) => item?.id);
+  if (!wardrobeItems.length) return [];
+
+  const tops = wardrobeItems.filter((item) => ['tops', 'outerwear', 'activewear', 'ethnic'].includes(item.category));
+  const statementPieces = wardrobeItems.filter((item) => ['dresses', 'suits'].includes(item.category));
+  const bottoms = wardrobeItems.filter((item) => item.category === 'bottoms');
+  const shoes = wardrobeItems.filter((item) => item.category === 'shoes');
+  const accessories = wardrobeItems.filter((item) => item.category === 'accessories');
+  const fallbackPool = wardrobeItems.filter((item) => !['accessories'].includes(item.category));
+  const suggestions = [];
+
+  for (let index = 0; index < 3; index += 1) {
+    const baseSeed = seed + index * 7;
+    const statement = rotateWardrobePick(statementPieces, baseSeed, 1);
+    const top = rotateWardrobePick(tops, baseSeed, 2);
+    const bottom = rotateWardrobePick(bottoms, baseSeed, 3);
+    const shoe = rotateWardrobePick(shoes, baseSeed, 4);
+    const accessory = rotateWardrobePick(accessories, baseSeed, 5);
+    const fallback = rotateWardrobePick(fallbackPool, baseSeed, 6);
+    const outfitItems = uniqueWardrobeItems(statement
+      ? [statement, rotateWardrobePick(tops, baseSeed, 8), shoe, accessory, fallback]
+      : [top, bottom, rotateWardrobePick(statementPieces, baseSeed, 9), shoe, accessory, fallback]
+    ).slice(0, 4);
+    if (!outfitItems.length) continue;
+    const itemNames = outfitItems.slice(0, 2).map((item) => item.name).filter(Boolean).join(' + ');
+    suggestions.push({
+      key: `local-look-${seed}-${index}`,
+      title: wardrobeFreshLookTitles[(seed + index) % wardrobeFreshLookTitles.length],
+      reason: itemNames
+        ? `${titleCase(occasion)} idea using ${itemNames}.`
+        : `${titleCase(occasion)} idea from your wardrobe.`,
+      itemIds: outfitItems.map((item) => item.id),
+      items: outfitItems,
+      source: 'local'
+    });
+  }
+
+  return suggestions;
+}
+
+function mergeWardrobeSuggestions(primary = [], secondary = []) {
+  const seen = new Set();
+  return [...primary, ...secondary].filter((suggestion) => {
+    const key = (suggestion.itemIds || suggestion.items?.map((item) => item.id) || []).filter(Boolean).join(':') || suggestion.title || suggestion.key;
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 6);
+}
 
 function WardrobeTopBar({ user, onNavigate, onBack }) {
   return (
@@ -4795,18 +5024,21 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, onBack, init
   };
 
   const askForSuggestions = async (nextOccasion = occasion) => {
+    const generationSeed = Date.now();
+    const localSuggestions = buildLocalWardrobeSuggestions(items, nextOccasion, generationSeed);
     setOccasion(nextOccasion);
     setBusy('suggest');
-    setMessage('Finding the best combos from your closet...');
+    if (localSuggestions.length) setSuggestionOverrides(localSuggestions);
+    setMessage(localSuggestions.length ? 'Fresh wardrobe ideas ready.' : 'Finding the best combos from your closet...');
     try {
       const data = await api('/closet/suggest', {
         method: 'POST',
-        body: JSON.stringify({ occasion: nextOccasion, weather, mood })
+        body: JSON.stringify({ occasion: nextOccasion, weather, mood, seed: generationSeed, avoidItemSets: localSuggestions.map((suggestion) => suggestion.itemIds || []) })
       });
-      setSuggestionOverrides(data.suggestions || []);
+      setSuggestionOverrides(mergeWardrobeSuggestions(localSuggestions, data.suggestions || []));
       setMessage('Suggestions ready.');
     } catch (error) {
-      setMessage(error.message);
+      setMessage(localSuggestions.length ? 'Fresh wardrobe ideas ready.' : error.message);
     } finally {
       setBusy('');
     }
@@ -6445,6 +6677,8 @@ function TokensScreen({ user, setUser, onNavigate, onBack, onRequireAuth }) {
   const visibleMessage = isAppleCheckout
     ? appleStoreKit.error || appleStoreKit.statusMessage || appleStoreKit.unavailableReason
     : message;
+  const remainingCredits = userCreditBalance(user);
+  const creditBalanceLabel = user?.devMode ? 'Unlimited' : String(remainingCredits);
   const creditChoiceCardStyle = layout.isTablet ? styles.creditGridCardHalf : null;
   const topUpCreditCardStyle = layout.isTablet ? (layout.isLargeTablet ? styles.creditGridCardThird : styles.creditGridCardHalf) : null;
   const firstPaymentDate = formatDate(addDays(new Date(), 1));
@@ -6638,6 +6872,17 @@ function TokensScreen({ user, setUser, onNavigate, onBack, onRequireAuth }) {
         </Text>
       </View>
 
+      <View style={styles.creditsBalanceCard}>
+        <View style={styles.creditsBalanceIcon}>
+          <Ionicons name="sparkles" size={21} color="#9b5658" />
+        </View>
+        <View style={styles.creditsBalanceCopy}>
+          <Text style={styles.creditsBalanceLabel}>Available credits</Text>
+          <Text style={styles.creditsBalanceHelp}>Images use {creditCosts.image} credit. Videos use {creditCosts.video} credits.</Text>
+        </View>
+        <Text style={styles.creditsBalanceNumber}>{creditBalanceLabel}</Text>
+      </View>
+
       {plansLoading || (isAppleCheckout && appleStoreKit.loading) ? <ActivityIndicator style={styles.creditsLoader} size="small" color="#9b5658" /> : null}
 
       {mode === 'top_up' ? (
@@ -6804,20 +7049,110 @@ function formatFileSize(value) {
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function WishlistScreen({ onNavigate, onBack, token, wishlistProducts = [], user }) {
-  const recommended = useProducts({ sort: 'newest', limit: 6 }, token);
-  return (
-    <ScrollView style={styles.wishlistScreen} contentContainerStyle={styles.wishlistContent} {...screenScrollProps}>
-      <AppHeader onNavigate={onNavigate} user={user} compact />
-      <PageBackRow onBack={onBack} />
+const wishlistFilterTabs = [
+  { key: 'all', label: 'All Items' },
+  { key: 'clothing', label: 'Clothing' },
+  { key: 'footwear', label: 'Footwear' },
+  { key: 'accessories', label: 'Accessories' }
+];
 
-      <View style={styles.wishlistBody}>
-        <Text style={styles.wishlistTitle}>My Wishlist <Text style={styles.wishlistCount}>({wishlistProducts.length})</Text></Text>
-        <View style={styles.wishlistActionRow}>
-          <TouchableOpacity style={styles.wishlistCreateButton}>
-            <Ionicons name="add" size={18} color="#ffffff" />
-            <Text style={styles.wishlistCreateText}>Create Collection</Text>
-          </TouchableOpacity>
+const wishlistSortOptions = [
+  { key: 'recent', label: 'Recently Added' },
+  { key: 'oldest', label: 'Oldest Added' },
+  { key: 'price-low', label: 'Price Low to High' },
+  { key: 'price-high', label: 'Price High to Low' },
+  { key: 'brand', label: 'Brand A-Z' }
+];
+
+function wishlistProductGroup(product = {}) {
+  const text = [
+    product.category,
+    product.subcategory,
+    product.type,
+    product.displayLabel,
+    product.title,
+    product.name
+  ].join(' ').toLowerCase();
+  if (/(?:\bbottomwear\b|\bbottoms?\b|\bjeans?\b|\bdenim\b|\bpants?\b|\btrousers?\b|\bshorts?\b|\bskirts?\b|\bleggings?\b|\bpalazzos?\b)/.test(text)) return 'clothing';
+  if (/(?:\btops?\b|\bshirts?\b|\bt-?shirts?\b|\bkurtas?\b|\bdresses?\b|\bsarees?\b|\bsuits?\b|\bjackets?\b|\bouterwear\b|\bactivewear\b|\bethnic\b|\bclothing\b)/.test(text)) return 'clothing';
+  if (/(?:footwear|shoe|sneaker|sandal|heel|loafer|boot|slipper|toe|pump|flat|mule)/.test(text)) return 'footwear';
+  if (/(?:\baccessor(?:y|ies)\b|\bjewel(?:ry|lery)?\b|\bearrings?\b|\bpiercings?\b|\bchains?\b|\bnecklaces?\b|\bbracelets?\b|\bwatches?\b|\beyewear\b|\bsunglasses?\b|\bglasses?\b|\bbags?\b|\bpurses?\b|\bbelts?\b|\bwallets?\b|\bscarves?\b|\bhats?\b|\bcaps?\b)/.test(text)) return 'accessories';
+  return 'clothing';
+}
+
+function wishlistSavedTime(product = {}, index = 0, total = 0) {
+  const candidate = product.wishlistAddedAt || product.savedAt || product.addedAt || product.createdAt || product.updatedAt;
+  const time = candidate ? new Date(candidate).getTime() : NaN;
+  return Number.isFinite(time) ? time : total - index;
+}
+
+function WishlistScreen({ onNavigate, onBack, token, wishlistProducts = [], user, onRemoveFromWishlist, onCreateCollection }) {
+  const [activeFilter, setActiveFilter] = useState('all');
+  const [wishlistViewMode, setWishlistViewMode] = useState('grid');
+  const [wishlistGridColumns, setWishlistGridColumns] = useState(2);
+  const [wishlistSortKey, setWishlistSortKey] = useState('recent');
+  const [wishlistSortOpen, setWishlistSortOpen] = useState(false);
+  const [collectionSheetVisible, setCollectionSheetVisible] = useState(false);
+  const [collectionName, setCollectionName] = useState('');
+  const [collectionProductIds, setCollectionProductIds] = useState([]);
+  const recommended = useProducts({ sort: 'newest', limit: 6 }, token);
+  const activeFilterLabel = wishlistFilterTabs.find((tab) => tab.key === activeFilter)?.label || 'All Items';
+  const activeSortLabel = wishlistSortOptions.find((option) => option.key === wishlistSortKey)?.label || 'Recently Added';
+  const wishlistSortHeading = activeFilter === 'all' ? activeSortLabel : `${activeFilterLabel} • ${activeSortLabel}`;
+  const displayedWishlistProducts = useMemo(() => {
+    const decorated = wishlistProducts.map((product, index) => ({
+      product,
+      index,
+      group: wishlistProductGroup(product),
+      savedTime: wishlistSavedTime(product, index, wishlistProducts.length)
+    }));
+    return decorated
+      .filter((item) => activeFilter === 'all' || item.group === activeFilter)
+      .sort((a, b) => {
+        if (wishlistSortKey === 'oldest') return a.savedTime - b.savedTime || a.index - b.index;
+        if (wishlistSortKey === 'price-low') return (Number(a.product.price) || 0) - (Number(b.product.price) || 0) || a.index - b.index;
+        if (wishlistSortKey === 'price-high') return (Number(b.product.price) || 0) - (Number(a.product.price) || 0) || a.index - b.index;
+        if (wishlistSortKey === 'brand') return String(a.product.displayLabel || a.product.brand || '').localeCompare(String(b.product.displayLabel || b.product.brand || '')) || a.index - b.index;
+        return b.savedTime - a.savedTime || a.index - b.index;
+      })
+      .map((item) => item.product);
+  }, [activeFilter, wishlistProducts, wishlistSortKey]);
+  const filteredEmpty = Boolean(wishlistProducts.length) && !displayedWishlistProducts.length;
+  const selectedCollectionCount = collectionProductIds.length;
+  const canCreateCollection = collectionName.trim().length > 0 && selectedCollectionCount > 0;
+  const openCollectionSheet = () => {
+    setCollectionName('');
+    setCollectionProductIds([]);
+    setCollectionSheetVisible(true);
+  };
+  const toggleCollectionProduct = (productId) => {
+    const id = String(productId || '');
+    if (!id) return;
+    setCollectionProductIds((current) => current.includes(id) ? current.filter((itemId) => itemId !== id) : [...current, id]);
+  };
+  const saveCollection = () => {
+    if (!canCreateCollection) return;
+    onCreateCollection?.({
+      name: collectionName.trim(),
+      productIds: collectionProductIds
+    });
+    setCollectionSheetVisible(false);
+    setCollectionName('');
+    setCollectionProductIds([]);
+  };
+  return (
+    <>
+      <ScrollView style={styles.wishlistScreen} contentContainerStyle={styles.wishlistContent} {...screenScrollProps}>
+        <AppHeader onNavigate={onNavigate} user={user} compact />
+        <PageBackRow onBack={onBack} />
+
+        <View style={styles.wishlistBody}>
+          <Text style={styles.wishlistTitle}>My Wishlist <Text style={styles.wishlistCount}>({wishlistProducts.length})</Text></Text>
+          <View style={styles.wishlistActionRow}>
+            <TouchableOpacity style={styles.wishlistCreateButton} activeOpacity={0.86} onPress={openCollectionSheet}>
+              <Ionicons name="add" size={18} color="#ffffff" />
+              <Text style={styles.wishlistCreateText}>Create Collection</Text>
+            </TouchableOpacity>
           <TouchableOpacity style={styles.wishlistShareButton}>
             <Ionicons name="share-social-outline" size={16} color="#111111" />
             <Text style={styles.wishlistShareText}>Share</Text>
@@ -6825,29 +7160,82 @@ function WishlistScreen({ onNavigate, onBack, token, wishlistProducts = [], user
         </View>
 
         <ScrollView {...horizontalScrollProps} contentContainerStyle={styles.wishlistTabs}>
-          {['All Items', 'Clothing', 'Footwear', 'Accessories'].map((tab, index) => (
-            <TouchableOpacity key={tab} style={styles.wishlistTab}>
-              <Text style={[styles.wishlistTabText, index === 0 && styles.wishlistTabTextActive]}>{tab}</Text>
+          {wishlistFilterTabs.map((tab) => (
+            <TouchableOpacity
+              key={tab.key}
+              accessibilityRole="button"
+              accessibilityState={{ selected: activeFilter === tab.key }}
+              activeOpacity={0.78}
+              style={styles.wishlistTab}
+              onPress={() => setActiveFilter(tab.key)}
+            >
+              <Text style={[styles.wishlistTabText, activeFilter === tab.key && styles.wishlistTabTextActive]}>{tab.label}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
 
         <View style={styles.wishlistSortRow}>
-          <Text style={styles.wishlistSortText}>Sort: <Text style={styles.wishlistSortStrong}>Recently Added</Text></Text>
+          <Text style={styles.wishlistSortText}>Sort: <Text style={styles.wishlistSortStrong}>{wishlistSortHeading}</Text></Text>
           <View style={styles.wishlistViewToggle}>
-            <Ionicons name="grid-outline" size={17} color="#3f3937" />
-            <Ionicons name="list-outline" size={19} color="#3f3937" />
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel={`Change wishlist grid size, currently ${wishlistGridColumns} columns`}
+              accessibilityState={{ selected: wishlistViewMode === 'grid' }}
+              activeOpacity={0.78}
+              style={[styles.wishlistViewButton, wishlistViewMode === 'grid' && styles.wishlistViewButtonActive]}
+              onPress={() => {
+                setWishlistViewMode('grid');
+                setWishlistGridColumns((current) => (current === 2 ? 3 : 2));
+                setWishlistSortOpen(false);
+              }}
+            >
+              <Ionicons name="grid-outline" size={17} color={wishlistViewMode === 'grid' ? '#ffffff' : '#3f3937'} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="Organize wishlist"
+              accessibilityState={{ expanded: wishlistSortOpen, selected: wishlistViewMode === 'list' }}
+              activeOpacity={0.78}
+              style={[styles.wishlistViewButton, wishlistViewMode === 'list' && styles.wishlistViewButtonActive]}
+              onPress={() => {
+                setWishlistViewMode('list');
+                setWishlistSortOpen((current) => !current);
+              }}
+            >
+              <Ionicons name="list-outline" size={19} color={wishlistViewMode === 'list' ? '#ffffff' : '#3f3937'} />
+            </TouchableOpacity>
           </View>
         </View>
 
-        <View style={styles.wishlistGrid}>
-          {wishlistProducts.length ? wishlistProducts.map((product) => (
-            <WishlistProductCard key={product.id} product={product} onPress={() => onNavigate('product', { id: product.id })} />
+        {wishlistSortOpen ? (
+          <View style={styles.wishlistSortMenu}>
+            {wishlistSortOptions.map((option) => (
+              <TouchableOpacity
+                key={option.key}
+                accessibilityRole="button"
+                accessibilityState={{ selected: wishlistSortKey === option.key }}
+                activeOpacity={0.8}
+                style={[styles.wishlistSortOption, wishlistSortKey === option.key && styles.wishlistSortOptionActive]}
+                onPress={() => {
+                  setWishlistSortKey(option.key);
+                  setWishlistSortOpen(false);
+                }}
+              >
+                <Text style={[styles.wishlistSortOptionText, wishlistSortKey === option.key && styles.wishlistSortOptionTextActive]}>{option.label}</Text>
+                {wishlistSortKey === option.key ? <Ionicons name="checkmark" size={16} color="#ffffff" /> : null}
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : null}
+
+        <View style={[styles.wishlistGrid, wishlistViewMode === 'list' && styles.wishlistList]}>
+          {displayedWishlistProducts.length ? displayedWishlistProducts.map((product) => (
+            <WishlistProductCard key={product.id} product={product} viewMode={wishlistViewMode} gridColumns={wishlistGridColumns} onPress={() => onNavigate('product', { id: product.id })} onRemove={() => onRemoveFromWishlist?.(product)} />
           )) : (
             <EmptyStateCard
               icon="heart-outline"
-              title="No saved styles yet"
-              text="Heart products while browsing and your favourites will stay here."
+              title={filteredEmpty ? `No ${activeFilterLabel.toLowerCase()} saved yet` : 'No saved styles yet'}
+              text={filteredEmpty ? `Items you save in ${activeFilterLabel.toLowerCase()} will appear here.` : 'Heart products while browsing and your favourites will stay here.'}
               actionLabel="Start Shopping"
               onAction={() => onNavigate('shop')}
             />
@@ -6888,27 +7276,181 @@ function WishlistScreen({ onNavigate, onBack, token, wishlistProducts = [], user
             );
           })}
         </ScrollView>
+        </View>
+      </ScrollView>
+
+      <Modal visible={collectionSheetVisible} transparent animationType="slide" onRequestClose={() => setCollectionSheetVisible(false)}>
+        <Pressable style={styles.collectionSheetBackdrop} onPress={() => setCollectionSheetVisible(false)}>
+          <Pressable style={styles.collectionSheet} onPress={(event) => event.stopPropagation()}>
+            <View style={styles.collectionSheetHandle} />
+            <View style={styles.collectionSheetHead}>
+              <View>
+                <Text style={styles.collectionSheetTitle}>Create Collection</Text>
+                <Text style={styles.collectionSheetSub}>Name it and choose saved items.</Text>
+              </View>
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close collection form" style={styles.collectionSheetClose} onPress={() => setCollectionSheetVisible(false)}>
+                <Ionicons name="close" size={18} color="#5d5754" />
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              value={collectionName}
+              onChangeText={setCollectionName}
+              placeholder="Collection name"
+              placeholderTextColor="#8d8682"
+              style={styles.collectionNameInput}
+              autoCapitalize="words"
+              returnKeyType="done"
+            />
+            <View style={styles.collectionPickerHead}>
+              <Text style={styles.collectionPickerTitle}>Add from wishlist</Text>
+              <Text style={styles.collectionPickerCount}>{selectedCollectionCount} selected</Text>
+            </View>
+            <ScrollView style={styles.collectionPickerList} contentContainerStyle={styles.collectionPickerContent} showsVerticalScrollIndicator={false}>
+              {wishlistProducts.length ? wishlistProducts.map((product) => {
+                const selected = collectionProductIds.includes(String(product.id));
+                return (
+                  <TouchableOpacity key={product.id} style={[styles.collectionPickerItem, selected && styles.collectionPickerItemSelected]} activeOpacity={0.82} onPress={() => toggleCollectionProduct(product.id)}>
+                    <ProductImage product={product} style={styles.collectionPickerImage} resizeMode="cover" alt={product.title || product.name} />
+                    <View style={styles.collectionPickerCopy}>
+                      <Text style={styles.collectionPickerBrand} numberOfLines={1}>{product.displayLabel || titleCase(product.category || 'Catalog')}</Text>
+                      <Text style={styles.collectionPickerName} numberOfLines={2}>{product.title || product.name}</Text>
+                    </View>
+                    <View style={[styles.collectionPickerCheck, selected && styles.collectionPickerCheckSelected]}>
+                      {selected ? <Ionicons name="checkmark" size={15} color="#ffffff" /> : null}
+                    </View>
+                  </TouchableOpacity>
+                );
+              }) : (
+                <EmptyStateCard compact icon="heart-outline" title="No wishlist items" text="Save styles first, then add them to collections." />
+              )}
+            </ScrollView>
+            <TouchableOpacity style={[styles.collectionCreateSubmit, !canCreateCollection && styles.disabledButton]} activeOpacity={0.88} disabled={!canCreateCollection} onPress={saveCollection}>
+              <Text style={styles.collectionCreateSubmitText}>Create Collection</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </>
+  );
+}
+
+function collectionProducts(collection, wishlistProducts = []) {
+  const ids = new Set((collection?.productIds || []).map(String));
+  return wishlistProducts.filter((product) => ids.has(String(product.id)));
+}
+
+function CollectionsScreen({ onNavigate, onBack, user, collections = [], wishlistProducts = [] }) {
+  const [selectedCollectionId, setSelectedCollectionId] = useState(collections[0]?.id || '');
+
+  useEffect(() => {
+    if (!collections.length) {
+      setSelectedCollectionId('');
+      return;
+    }
+    if (!collections.some((collection) => collection.id === selectedCollectionId)) {
+      setSelectedCollectionId(collections[0].id);
+    }
+  }, [collections, selectedCollectionId]);
+
+  const selectedCollection = collections.find((collection) => collection.id === selectedCollectionId) || collections[0] || null;
+  const selectedProducts = collectionProducts(selectedCollection, wishlistProducts);
+
+  return (
+    <ScrollView style={styles.collectionsScreen} contentContainerStyle={styles.collectionsContent} {...screenScrollProps}>
+      <AppHeader onNavigate={onNavigate} user={user} compact />
+      <PageBackRow onBack={onBack} />
+
+      <View style={styles.collectionsHero}>
+        <Text style={styles.collectionsEyebrow}>Saved groups</Text>
+        <Text style={styles.collectionsTitle}>My Collections</Text>
+        <Text style={styles.collectionsText}>Collections you create from Wishlist live here, like playlists for saved styles.</Text>
       </View>
+
+      {collections.length ? (
+        <ScrollView {...horizontalScrollProps} contentContainerStyle={styles.collectionCardsTrack}>
+          {collections.map((collection) => {
+            const products = collectionProducts(collection, wishlistProducts);
+            const selected = collection.id === selectedCollection?.id;
+            return (
+              <TouchableOpacity key={collection.id} style={[styles.collectionSummaryCard, selected && styles.collectionSummaryCardActive]} activeOpacity={0.86} onPress={() => setSelectedCollectionId(collection.id)}>
+                <View style={styles.collectionSummaryThumbs}>
+                  {products.slice(0, 3).map((product) => (
+                    <ProductImage key={product.id} product={product} style={styles.collectionSummaryThumb} resizeMode="cover" alt={product.title || product.name} />
+                  ))}
+                  {!products.length ? (
+                    <View style={styles.collectionSummaryEmptyThumb}>
+                      <Ionicons name="albums-outline" size={22} color="#9b5658" />
+                    </View>
+                  ) : null}
+                </View>
+                <Text style={styles.collectionSummaryTitle} numberOfLines={1}>{collection.name}</Text>
+                <Text style={styles.collectionSummaryMeta}>{products.length} item{products.length === 1 ? '' : 's'}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      ) : (
+        <View style={styles.collectionsEmptyWrap}>
+          <EmptyStateCard
+            icon="albums-outline"
+            title="No collections yet"
+            text="Create a collection from Wishlist and selected saved styles will appear here."
+            actionLabel="Open Wishlist"
+            onAction={() => onNavigate('wishlist')}
+          />
+        </View>
+      )}
+
+      {selectedCollection ? (
+        <View style={styles.collectionDetailBlock}>
+          <View style={styles.collectionDetailHead}>
+            <View>
+              <Text style={styles.collectionDetailTitle}>{selectedCollection.name}</Text>
+              <Text style={styles.collectionDetailMeta}>{selectedProducts.length} saved style{selectedProducts.length === 1 ? '' : 's'}</Text>
+            </View>
+            <TouchableOpacity style={styles.collectionAddMoreButton} activeOpacity={0.84} onPress={() => onNavigate('wishlist')}>
+              <Ionicons name="add" size={16} color="#111111" />
+              <Text style={styles.collectionAddMoreText}>Add More</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.collectionProductGrid}>
+            {selectedProducts.length ? selectedProducts.map((product) => (
+              <WishlistProductCard key={product.id} product={product} onPress={() => onNavigate('product', { id: product.id })} />
+            )) : (
+              <EmptyStateCard compact icon="heart-outline" title="No items in this collection" text="Open Wishlist to create a fuller collection." />
+            )}
+          </View>
+        </View>
+      ) : null}
     </ScrollView>
   );
 }
 
-function WishlistProductCard({ product, onPress }) {
+function WishlistProductCard({ product, onPress, onRemove, viewMode = 'grid', gridColumns = 2 }) {
   const price = Number(product?.price);
+  const listMode = viewMode === 'list';
+  const compactGrid = !listMode && gridColumns === 3;
+  const handleRemove = (event) => {
+    event?.stopPropagation?.();
+    onRemove?.();
+  };
   return (
-    <TouchableOpacity style={styles.wishlistProductCard} activeOpacity={0.86} onPress={onPress}>
-      <View style={styles.wishlistProductImageWrap}>
+    <TouchableOpacity style={[styles.wishlistProductCard, compactGrid && styles.wishlistProductCardCompact, listMode && styles.wishlistProductCardList]} activeOpacity={0.86} onPress={onPress}>
+      <View style={[styles.wishlistProductImageWrap, listMode && styles.wishlistProductImageWrapList]}>
         <ProductImage product={product} style={styles.wishlistProductImage} resizeMode="cover" alt={product?.title || product?.name} />
-        <TouchableOpacity style={styles.wishlistHeartButton}>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Remove product from wishlist" activeOpacity={0.84} style={styles.wishlistHeartButton} onPress={handleRemove}>
           <Ionicons name="heart" size={22} color="#9b5658" />
         </TouchableOpacity>
       </View>
-      <Text style={styles.wishlistProductBrand} numberOfLines={1}>{product?.displayLabel || titleCase(product?.category || 'Catalog')}</Text>
-      <Text style={styles.wishlistProductName} numberOfLines={2}>{product?.title || product?.name}</Text>
-      <Text style={styles.wishlistProductPrice}>{Number.isFinite(price) ? formatMoney(price, product?.currency) : 'Price unavailable'}</Text>
-      <TouchableOpacity style={styles.wishlistMoveButton} onPress={onPress}>
-        <Text style={styles.wishlistMoveText}>View Product</Text>
-      </TouchableOpacity>
+      <View style={listMode && styles.wishlistProductCopyList}>
+        <Text style={[styles.wishlistProductBrand, compactGrid && styles.wishlistProductBrandCompact, listMode && styles.wishlistProductBrandList]} numberOfLines={1}>{product?.displayLabel || titleCase(product?.category || 'Catalog')}</Text>
+        <Text style={[styles.wishlistProductName, compactGrid && styles.wishlistProductNameCompact]} numberOfLines={listMode ? 3 : 2}>{product?.title || product?.name}</Text>
+        <Text style={[styles.wishlistProductPrice, compactGrid && styles.wishlistProductPriceCompact]}>{Number.isFinite(price) ? formatMoney(price, product?.currency) : 'Price unavailable'}</Text>
+        <TouchableOpacity style={[styles.wishlistMoveButton, compactGrid && styles.wishlistMoveButtonCompact, listMode && styles.wishlistMoveButtonList]} onPress={onPress}>
+          <Text style={styles.wishlistMoveText}>View Product</Text>
+        </TouchableOpacity>
+      </View>
     </TouchableOpacity>
   );
 }
@@ -7167,7 +7709,7 @@ function ProfileScreen({ user, setUser, setToken, token, onNavigate, onBack, onL
   const username = user.username || (user.email ? user.email.split('@')[0] : '');
   const displayName = user.name || username || 'Lookmefy member';
   const displayEmail = /@phone\.(?:fitlook|lookmefy)\.local$/i.test(user.email || '') ? '' : user.email;
-  const accountPhone = normalizePhoneInput(user.phone || '');
+  const accountPhone = authPhoneValue(user.phone || '');
   const accountPhoneLabel = accountPhone.length === 10 ? `mobile ending ${accountPhone.slice(-4)}` : 'your saved mobile number';
   const remainingCredits = userCreditBalance(user);
   const monthlyAllowance = Number(user.subscription?.tokensPerMonth) || 0;
@@ -7633,6 +8175,16 @@ function ProfileScreen({ user, setUser, setToken, token, onNavigate, onBack, onL
           </View>
           <Ionicons name="chevron-forward" size={20} color="#77716f" />
         </TouchableOpacity>
+        <TouchableOpacity style={styles.profileQuickCard} activeOpacity={0.86} onPress={() => onNavigate('collections')}>
+          <View style={styles.profileQuickIcon}>
+            <Ionicons name="albums-outline" size={23} color="#9b5658" />
+          </View>
+          <View style={styles.profileQuickCopy}>
+            <Text style={styles.profileQuickTitle}>My Collections</Text>
+            <Text style={styles.profileQuickSub}>Saved style groups</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#77716f" />
+        </TouchableOpacity>
       </View>
 
       <View style={styles.profileSection}>
@@ -7935,6 +8487,7 @@ function ProfileScreen({ user, setUser, setToken, token, onNavigate, onBack, onL
                   onToggle={() => setShowProfilePassword((current) => !current)}
                   fieldHeight={54}
                   autoComplete="new-password"
+                  textContentType="newPassword"
                 />
                 <Text style={styles.profileEditLabel}>Confirm password</Text>
                 <AuthPasswordField
@@ -7945,6 +8498,7 @@ function ProfileScreen({ user, setUser, setToken, token, onNavigate, onBack, onL
                   onToggle={() => setShowProfileConfirmPassword((current) => !current)}
                   fieldHeight={54}
                   autoComplete="new-password"
+                  textContentType="newPassword"
                 />
                 <View style={styles.profileEditActions}>
                   <TouchableOpacity style={styles.profileEditCancelButton} disabled={passwordLoading} onPress={() => setPasswordStage('otp')}>
@@ -8363,6 +8917,8 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const [wishlistProducts, setWishlistProducts] = useState([]);
   const [wishlistReady, setWishlistReady] = useState(false);
+  const [collections, setCollections] = useState([]);
+  const [collectionsReady, setCollectionsReady] = useState(false);
   const [authPrompt, setAuthPrompt] = useState(null);
   const [onboardingVisible, setOnboardingVisible] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
@@ -8492,6 +9048,45 @@ export default function App() {
     AsyncStorage.setItem(wishlistStorageKey(user), JSON.stringify(wishlistProducts.slice(0, 100))).catch(() => {});
   }, [user, user?.id, user?.phone, user?.email, wishlistProducts, wishlistReady]);
 
+  useEffect(() => {
+    let alive = true;
+    if (!user) {
+      setCollections([]);
+      setCollectionsReady(false);
+      return undefined;
+    }
+    setCollectionsReady(false);
+    AsyncStorage.getItem(collectionStorageKey(user))
+      .then((raw) => {
+        if (!alive) return;
+        const parsed = raw ? JSON.parse(raw) : [];
+        const nextCollections = Array.isArray(parsed)
+          ? parsed
+              .map((collection) => ({
+                id: String(collection.id || `collection-${Date.now()}-${Math.random().toString(36).slice(2)}`),
+                name: String(collection.name || '').trim(),
+                productIds: [...new Set((collection.productIds || []).map(String).filter(Boolean))],
+                createdAt: collection.createdAt || new Date().toISOString(),
+                updatedAt: collection.updatedAt || collection.createdAt || new Date().toISOString()
+              }))
+              .filter((collection) => collection.name)
+          : [];
+        setCollections(nextCollections);
+        setCollectionsReady(true);
+      })
+      .catch(() => {
+        if (alive) setCollectionsReady(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [user?.id, user?.phone, user?.email]);
+
+  useEffect(() => {
+    if (!user || !collectionsReady) return;
+    AsyncStorage.setItem(collectionStorageKey(user), JSON.stringify(collections.slice(0, 60))).catch(() => {});
+  }, [collections, collectionsReady, user, user?.email, user?.id, user?.phone]);
+
   const addToWishlist = useCallback((product) => {
     if (!product?.id) return;
     if (!user) {
@@ -8500,8 +9095,26 @@ export default function App() {
     }
     setWishlistProducts((current) => {
       if (current.some((item) => String(item.id) === String(product.id))) return current.filter((item) => String(item.id) !== String(product.id));
-      return [normalizeProduct(product), ...current].slice(0, 100);
+      return [{ ...normalizeProduct(product), wishlistAddedAt: new Date().toISOString() }, ...current].slice(0, 100);
     });
+  }, [requestAuth, user]);
+
+  const createCollection = useCallback(({ name, productIds }) => {
+    const cleanName = String(name || '').trim();
+    const ids = [...new Set((productIds || []).map(String).filter(Boolean))];
+    if (!cleanName || !ids.length) return;
+    if (!user) {
+      requestAuth('Log in with your mobile number to create collections.');
+      return;
+    }
+    const now = new Date().toISOString();
+    setCollections((current) => [{
+      id: `collection-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      name: cleanName,
+      productIds: ids,
+      createdAt: now,
+      updatedAt: now
+    }, ...current].slice(0, 60));
   }, [requestAuth, user]);
 
   const refreshUser = useCallback(async (options = {}) => {
@@ -8666,7 +9279,9 @@ export default function App() {
       case 'generation-history':
         return user ? <GenerationHistoryScreen user={user} setUser={setUser} setToken={setToken} token={token} onNavigate={guardedNavigate} onBack={routeStack.length > 1 ? goBack : null} /> : <AuthScreen mode="login" setUser={setUser} setToken={setToken} onNavigate={navigate} />;
       case 'wishlist':
-        return user ? <WishlistScreen onNavigate={guardedNavigate} onBack={routeStack.length > 1 ? goBack : null} token={token} wishlistProducts={wishlistProducts} user={user} /> : <AuthScreen mode="login" setUser={setUser} setToken={setToken} onNavigate={navigate} />;
+        return user ? <WishlistScreen onNavigate={guardedNavigate} onBack={routeStack.length > 1 ? goBack : null} token={token} wishlistProducts={wishlistProducts} user={user} onRemoveFromWishlist={addToWishlist} onCreateCollection={createCollection} /> : <AuthScreen mode="login" setUser={setUser} setToken={setToken} onNavigate={navigate} />;
+      case 'collections':
+        return user ? <CollectionsScreen onNavigate={guardedNavigate} onBack={routeStack.length > 1 ? goBack : null} user={user} collections={collections} wishlistProducts={wishlistProducts} /> : <AuthScreen mode="login" setUser={setUser} setToken={setToken} onNavigate={navigate} />;
       case 'orders':
         return user ? <OrdersScreen onNavigate={guardedNavigate} onBack={routeStack.length > 1 ? goBack : null} token={token} user={user} /> : <AuthScreen mode="login" setUser={setUser} setToken={setToken} onNavigate={navigate} />;
       case 'product':
@@ -8682,7 +9297,7 @@ export default function App() {
       default:
         return <InfoScreen page="missing" user={user} onNavigate={navigate} />;
     }
-  }, [currentRoute.name, routeParamsKey, user, token, navigate, guardedNavigate, requestAuth, addToWishlist, wishlistIds, wishlistProducts, registerTourTarget, tourFocusRequest, aiStudioConversationId, aiStudioMessages, aiStudioTryOns, aiStudioTryOnErrors, refreshUser, routeStack.length, goBack]);
+  }, [currentRoute.name, routeParamsKey, user, token, navigate, guardedNavigate, requestAuth, addToWishlist, createCollection, collections, wishlistIds, wishlistProducts, registerTourTarget, tourFocusRequest, aiStudioConversationId, aiStudioMessages, aiStudioTryOns, aiStudioTryOnErrors, refreshUser, routeStack.length, goBack]);
 
   if (!ready || (!fontsLoaded && !fontLoadError)) {
     return (
@@ -8710,8 +9325,9 @@ export default function App() {
   const profileRoute = currentRoute.name === 'profile';
   const generationHistoryRoute = currentRoute.name === 'generation-history';
   const wishlistRoute = currentRoute.name === 'wishlist';
+  const collectionsRoute = currentRoute.name === 'collections';
   const ordersRoute = currentRoute.name === 'orders';
-  const accountChildRoute = wishlistRoute || ordersRoute || generationHistoryRoute;
+  const accountChildRoute = wishlistRoute || collectionsRoute || ordersRoute || generationHistoryRoute;
 
   return (
     <ResponsiveLayoutContext.Provider value={responsiveLayout}>
@@ -8832,8 +9448,10 @@ const styles = StyleSheet.create({
     paddingTop: 5,
     paddingBottom: 6,
     backgroundColor: '#fbf7f6',
+    flexDirection: 'row',
     alignItems: 'flex-start',
-    justifyContent: 'center'
+    justifyContent: 'flex-start',
+    gap: 10
   },
   pageBackButton: {
     width: 36,
@@ -8849,6 +9467,105 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
     elevation: 8
+  },
+  categorySearchDock: {
+    flex: 1,
+    minWidth: 0
+  },
+  categorySearchBox: {
+    minHeight: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#eadfda',
+    backgroundColor: '#fffdfb',
+    paddingLeft: 12,
+    paddingRight: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    shadowColor: '#1f1714',
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3
+  },
+  categorySearchInput: {
+    ...typography.body,
+    flex: 1,
+    minHeight: 34,
+    paddingVertical: 0,
+    color: '#1f1b1a',
+    fontSize: 13,
+    lineHeight: 17,
+    fontWeight: '600'
+  },
+  categorySearchIconButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f7f0ed'
+  },
+  categorySearchSubmit: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#111111'
+  },
+  categoryReferenceTrack: {
+    paddingTop: 7,
+    paddingRight: 12,
+    gap: 8
+  },
+  categoryReferenceChip: {
+    maxWidth: 190,
+    minHeight: 42,
+    borderRadius: 21,
+    borderWidth: 1,
+    borderColor: '#eadfda',
+    backgroundColor: '#fffdfb',
+    paddingLeft: 5,
+    paddingRight: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8
+  },
+  categoryReferenceImageFrame: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff5f3'
+  },
+  categoryReferenceImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 16,
+    backgroundColor: '#f1eef4'
+  },
+  categoryReferenceCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  categoryReferenceText: {
+    ...typography.caption,
+    color: '#211c1a',
+    fontSize: 12,
+    lineHeight: 15,
+    fontWeight: '800'
+  },
+  categoryReferenceMeta: {
+    ...typography.caption,
+    marginTop: 1,
+    color: '#8c8580',
+    fontSize: 9,
+    lineHeight: 11,
+    fontWeight: '700'
   },
   scrollContent: {
     paddingBottom: Platform.OS === 'android' ? 118 : 132,
@@ -9165,6 +9882,7 @@ const styles = StyleSheet.create({
   },
   homeTryOnHero: {
     height: 258,
+    marginTop: 12,
     marginHorizontal: 15,
     borderRadius: 14,
     overflow: 'hidden',
@@ -9343,6 +10061,113 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     elevation: 4
   },
+  homeStylistPromptCard: {
+    marginTop: 22,
+    marginHorizontal: 17,
+    height: 130,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#f4e2dc',
+    borderWidth: 1,
+    borderColor: '#ecd3ca',
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  homeStylistPromptCopy: {
+    flex: 1,
+    minWidth: 0,
+    paddingLeft: 20,
+    paddingRight: 10,
+    paddingVertical: 16,
+    justifyContent: 'flex-start'
+  },
+  homeStylistPromptTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    maxWidth: 220
+  },
+  homeStylistPromptTitle: {
+    fontFamily: fontFamilies.logo,
+    color: '#171412',
+    fontSize: 16,
+    lineHeight: 21,
+    fontWeight: '400',
+    letterSpacing: 0
+  },
+  homeStylistPromptText: {
+    ...typography.smallBody,
+    maxWidth: 168,
+    marginTop: 6,
+    color: '#342d2a',
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '600'
+  },
+  homeStylistPromptButton: {
+    alignSelf: 'flex-start',
+    minHeight: 38,
+    marginTop: 11,
+    borderRadius: 19,
+    backgroundColor: '#050505',
+    paddingHorizontal: 17,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7
+  },
+  homeStylistPromptButtonText: {
+    ...typography.button,
+    color: '#ffffff',
+    fontSize: 12,
+    lineHeight: 15,
+    fontWeight: '800',
+    letterSpacing: 0
+  },
+  homeStylistPromptVisual: {
+    position: 'relative',
+    width: 128,
+    height: 108,
+    marginRight: 13
+  },
+  homeStylistPromptLookTile: {
+    position: 'absolute',
+    overflow: 'hidden',
+    borderRadius: 4,
+    backgroundColor: '#fffaf5',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.82)',
+    shadowColor: '#5b4038',
+    shadowOpacity: 0.11,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2
+  },
+  homeStylistPromptLookTileBack: {
+    left: 5,
+    top: 30,
+    width: 58,
+    height: 62,
+    transform: [{ rotate: '-7deg' }]
+  },
+  homeStylistPromptLookTileFront: {
+    right: 6,
+    top: 20,
+    width: 68,
+    height: 76,
+    transform: [{ rotate: '5deg' }]
+  },
+  homeStylistPromptLookTileAccent: {
+    left: 48,
+    bottom: 8,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    transform: [{ rotate: '-3deg' }]
+  },
+  homeStylistPromptLookImage: {
+    width: '100%',
+    height: '100%'
+  },
   homeSectionBlock: {
     marginTop: 26,
     paddingHorizontal: 17
@@ -9373,58 +10198,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 20,
     fontWeight: '500'
-  },
-  homeLookGrid: {
-    marginTop: 15,
-    flexDirection: 'row',
-    gap: 11
-  },
-  homeLookCard: {
-    flex: 1,
-    minWidth: 0,
-    borderRadius: 8,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#e5e5e5',
-    backgroundColor: '#ffffff'
-  },
-  homeLookImageWrap: {
-    width: '100%',
-    height: 86,
-    overflow: 'hidden',
-    backgroundColor: '#eeeae5'
-  },
-  homeLookImage: {
-    width: '100%',
-    height: '100%'
-  },
-  homeLookBody: {
-    minHeight: 74,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8
-  },
-  homeLookTextBlock: {
-    flex: 1,
-    minWidth: 0
-  },
-  homeLookTitle: {
-    ...typography.productTitle,
-    color: '#111111',
-    fontSize: 15,
-    lineHeight: 20,
-    fontWeight: '500'
-  },
-  homeLookMeta: {
-    ...typography.smallBody,
-    marginTop: 4,
-    color: '#7a7a7a',
-    fontSize: 13,
-    lineHeight: 17,
-    fontWeight: '400'
   },
   homeWardrobeTrack: {
     paddingTop: 12,
@@ -10237,7 +11010,8 @@ const styles = StyleSheet.create({
     marginTop: 16,
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
+    columnGap: 8,
     rowGap: 20
   },
   categoryTileGridTablet: {
@@ -14956,6 +15730,55 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     textTransform: 'uppercase'
   },
+  creditsBalanceCard: {
+    marginTop: 4,
+    marginHorizontal: 24,
+    minHeight: 86,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ead8bf',
+    backgroundColor: '#fff3df',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 13
+  },
+  creditsBalanceIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#fffdfc',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  creditsBalanceCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  creditsBalanceLabel: {
+    ...typography.label,
+    color: '#9b5658',
+    fontSize: 11,
+    lineHeight: 15,
+    letterSpacing: 0,
+    textTransform: 'uppercase'
+  },
+  creditsBalanceHelp: {
+    ...typography.caption,
+    marginTop: 4,
+    color: '#5f5550',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '600'
+  },
+  creditsBalanceNumber: {
+    ...typography.display,
+    color: '#171414',
+    fontSize: 36,
+    lineHeight: 40,
+    textAlign: 'right'
+  },
   creditsLoader: {
     marginTop: 8
   },
@@ -16684,6 +17507,310 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     fontWeight: '700'
   },
+  collectionsScreen: {
+    flex: 1,
+    backgroundColor: '#fbf7f6'
+  },
+  collectionsContent: {
+    paddingBottom: bottomNavigationHeight + screenBottomInset + 28
+  },
+  collectionsHero: {
+    paddingHorizontal: 24,
+    paddingTop: 30,
+    paddingBottom: 18
+  },
+  collectionsEyebrow: {
+    ...typography.label,
+    color: '#9b5658',
+    fontSize: 11,
+    lineHeight: 15,
+    letterSpacing: 0,
+    textTransform: 'uppercase'
+  },
+  collectionsTitle: {
+    ...typography.display,
+    marginTop: 8,
+    color: '#171414',
+    fontSize: 42,
+    lineHeight: 47
+  },
+  collectionsText: {
+    ...typography.smallBody,
+    marginTop: 10,
+    color: '#6f6967',
+    fontSize: 14,
+    lineHeight: 20
+  },
+  collectionCardsTrack: {
+    paddingHorizontal: 24,
+    paddingTop: 8,
+    gap: 12
+  },
+  collectionSummaryCard: {
+    width: 156,
+    minHeight: 172,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e5dcd9',
+    backgroundColor: '#fffdfc',
+    padding: 12
+  },
+  collectionSummaryCardActive: {
+    borderColor: '#9b5658',
+    backgroundColor: '#fff5f3'
+  },
+  collectionSummaryThumbs: {
+    height: 92,
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  collectionSummaryThumb: {
+    width: 58,
+    height: 82,
+    marginRight: -18,
+    borderRadius: 7,
+    borderWidth: 2,
+    borderColor: '#fffdfc',
+    backgroundColor: '#eee8e3'
+  },
+  collectionSummaryEmptyThumb: {
+    width: 72,
+    height: 82,
+    borderRadius: 8,
+    backgroundColor: '#f4eeee',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  collectionSummaryTitle: {
+    ...typography.productTitle,
+    marginTop: 10,
+    color: '#2b2321',
+    fontSize: 15,
+    lineHeight: 19,
+    fontWeight: '700'
+  },
+  collectionSummaryMeta: {
+    ...typography.caption,
+    marginTop: 3,
+    color: '#77716f',
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '700'
+  },
+  collectionsEmptyWrap: {
+    paddingHorizontal: 24,
+    paddingTop: 8
+  },
+  collectionDetailBlock: {
+    marginTop: 28,
+    paddingHorizontal: 24
+  },
+  collectionDetailHead: {
+    marginBottom: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 14
+  },
+  collectionDetailTitle: {
+    ...typography.h2,
+    color: '#2b2321',
+    fontSize: 24,
+    lineHeight: 29,
+    fontWeight: '700'
+  },
+  collectionDetailMeta: {
+    ...typography.caption,
+    marginTop: 3,
+    color: '#77716f',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700'
+  },
+  collectionAddMoreButton: {
+    minHeight: 34,
+    borderRadius: 17,
+    backgroundColor: '#eee9e7',
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5
+  },
+  collectionAddMoreText: {
+    ...typography.caption,
+    color: '#111111',
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '800'
+  },
+  collectionProductGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 24
+  },
+  collectionSheetBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(23, 20, 19, 0.36)'
+  },
+  collectionSheet: {
+    maxHeight: '86%',
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    backgroundColor: '#fbf7f6',
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    paddingBottom: screenBottomInset + 18
+  },
+  collectionSheetHandle: {
+    alignSelf: 'center',
+    width: 42,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#d9cfcb',
+    marginBottom: 16
+  },
+  collectionSheetHead: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 14
+  },
+  collectionSheetTitle: {
+    ...typography.h2,
+    color: '#2b2321',
+    fontSize: 24,
+    lineHeight: 29,
+    fontWeight: '700'
+  },
+  collectionSheetSub: {
+    ...typography.caption,
+    marginTop: 4,
+    color: '#77716f',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '600'
+  },
+  collectionSheetClose: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#f0e9e6',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  collectionNameInput: {
+    ...typography.body,
+    marginTop: 18,
+    minHeight: 50,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e5dcd9',
+    backgroundColor: '#fffdfc',
+    paddingHorizontal: 14,
+    color: '#1f1b1a',
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '700'
+  },
+  collectionPickerHead: {
+    marginTop: 18,
+    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  collectionPickerTitle: {
+    ...typography.caption,
+    color: '#2b2321',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '800',
+    textTransform: 'uppercase'
+  },
+  collectionPickerCount: {
+    ...typography.caption,
+    color: '#9b5658',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '800'
+  },
+  collectionPickerList: {
+    maxHeight: 320
+  },
+  collectionPickerContent: {
+    gap: 9,
+    paddingBottom: 6
+  },
+  collectionPickerItem: {
+    minHeight: 78,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e5dcd9',
+    backgroundColor: '#fffdfc',
+    padding: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10
+  },
+  collectionPickerItemSelected: {
+    borderColor: '#9b5658',
+    backgroundColor: '#fff5f3'
+  },
+  collectionPickerImage: {
+    width: 54,
+    height: 64,
+    borderRadius: 7,
+    backgroundColor: '#eee8e3'
+  },
+  collectionPickerCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  collectionPickerBrand: {
+    ...typography.caption,
+    color: '#77716f',
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: '800'
+  },
+  collectionPickerName: {
+    ...typography.smallBody,
+    marginTop: 3,
+    color: '#1e1a19',
+    fontSize: 13,
+    lineHeight: 17,
+    fontWeight: '600'
+  },
+  collectionPickerCheck: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#d9cfcb',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  collectionPickerCheckSelected: {
+    backgroundColor: '#111111',
+    borderColor: '#111111'
+  },
+  collectionCreateSubmit: {
+    marginTop: 16,
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: '#050505',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  collectionCreateSubmitText: {
+    ...typography.button,
+    color: '#ffffff',
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '800'
+  },
   wishlistScreen: {
     flex: 1,
     backgroundColor: '#fbf7f6'
@@ -16813,7 +17940,55 @@ const styles = StyleSheet.create({
   wishlistViewToggle: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8
+  },
+  wishlistViewButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent'
+  },
+  wishlistViewButtonActive: {
+    backgroundColor: '#111111'
+  },
+  wishlistSortMenu: {
+    marginTop: -15,
+    marginBottom: 24,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#eadfda',
+    backgroundColor: '#fffdfc',
+    padding: 6,
+    gap: 5,
+    shadowColor: '#2a211d',
+    shadowOpacity: 0.07,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4
+  },
+  wishlistSortOption: {
+    minHeight: 38,
+    borderRadius: 7,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 12
+  },
+  wishlistSortOptionActive: {
+    backgroundColor: '#111111'
+  },
+  wishlistSortOptionText: {
+    ...typography.caption,
+    color: '#4b4644',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700'
+  },
+  wishlistSortOptionTextActive: {
+    color: '#ffffff'
   },
   wishlistGrid: {
     flexDirection: 'row',
@@ -16821,8 +17996,28 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     rowGap: 30
   },
+  wishlistList: {
+    flexDirection: 'column',
+    flexWrap: 'nowrap',
+    justifyContent: 'flex-start',
+    rowGap: 14
+  },
   wishlistProductCard: {
     width: '47%'
+  },
+  wishlistProductCardCompact: {
+    width: '31%'
+  },
+  wishlistProductCardList: {
+    width: '100%',
+    minHeight: 136,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#eee7e4',
+    backgroundColor: '#fffdfc',
+    padding: 10,
+    flexDirection: 'row',
+    gap: 13
   },
   wishlistProductImageWrap: {
     width: '100%',
@@ -16830,6 +18025,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     overflow: 'hidden',
     backgroundColor: '#eee8e3'
+  },
+  wishlistProductImageWrapList: {
+    width: 92,
+    height: 122,
+    aspectRatio: undefined,
+    flexShrink: 0
   },
   wishlistProductImage: {
     width: '100%',
@@ -16846,6 +18047,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center'
   },
+  wishlistProductCopyList: {
+    flex: 1,
+    minWidth: 0,
+    paddingTop: 2
+  },
   wishlistProductBrand: {
     ...typography.caption,
     marginTop: 12,
@@ -16853,6 +18059,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     letterSpacing: 0,
     fontWeight: '700'
+  },
+  wishlistProductBrandList: {
+    marginTop: 0
+  },
+  wishlistProductBrandCompact: {
+    fontSize: 10,
+    lineHeight: 13
   },
   wishlistProductName: {
     ...typography.smallBody,
@@ -16863,12 +18076,21 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     fontWeight: '500'
   },
+  wishlistProductNameCompact: {
+    minHeight: 34,
+    fontSize: 11,
+    lineHeight: 14
+  },
   wishlistProductPrice: {
     ...typography.price,
     marginTop: 4,
     color: '#050505',
     fontSize: 15,
     fontWeight: '700'
+  },
+  wishlistProductPriceCompact: {
+    fontSize: 12,
+    lineHeight: 15
   },
   wishlistSizeRow: {
     marginTop: 10,
@@ -16902,6 +18124,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#050505',
     alignItems: 'center',
     justifyContent: 'center'
+  },
+  wishlistMoveButtonCompact: {
+    marginTop: 8,
+    height: 28,
+    borderRadius: 6
+  },
+  wishlistMoveButtonList: {
+    alignSelf: 'flex-start',
+    minWidth: 118,
+    paddingHorizontal: 16
   },
   wishlistMoveText: {
     ...typography.caption,

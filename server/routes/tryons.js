@@ -1766,6 +1766,32 @@ function generatedTryOnGarmentUrl(tryOn, scope, fallback = '') {
   }) || fallback || storedFileToClientUrl(garment);
 }
 
+function parseVideoByteRange(rangeHeader, size) {
+  const range = String(rangeHeader || '').trim();
+  if (!range) return null;
+  const match = range.match(/^bytes\s*=\s*(\d*)\s*-\s*(\d*)$/i);
+  if (!match || (!match[1] && !match[2]) || size <= 0) return false;
+
+  let start;
+  let end;
+  if (!match[1]) {
+    const suffixLength = Number(match[2]);
+    if (!Number.isFinite(suffixLength) || suffixLength <= 0) return false;
+    start = Math.max(0, size - suffixLength);
+    end = size - 1;
+  } else {
+    start = Number(match[1]);
+    end = match[2] ? Number(match[2]) : size - 1;
+  }
+
+  start = Math.max(0, start);
+  end = Math.min(size - 1, end);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || start >= size) {
+    return false;
+  }
+  return { start, end };
+}
+
 function sendVideoBytes(req, res, { bytes, mimetype }) {
   const size = bytes.length;
   const contentType = mimetype?.startsWith('video/') ? mimetype : 'video/mp4';
@@ -1775,22 +1801,17 @@ function sendVideoBytes(req, res, { bytes, mimetype }) {
     'Cache-Control': 'private, max-age=300'
   });
 
-  const range = String(req.headers.range || '');
-  const match = range.match(/^bytes=(\d*)-(\d*)$/);
-  if (!match) {
+  const byteRange = parseVideoByteRange(req.headers.range || '', size);
+  if (!byteRange) {
+    if (byteRange === false) {
+      res.set('Content-Range', `bytes */${size}`);
+      return res.sendStatus(416);
+    }
     res.set('Content-Length', String(size));
     return res.status(200).send(bytes);
   }
 
-  const requestedStart = match[1] ? Number(match[1]) : 0;
-  const requestedEnd = match[2] ? Number(match[2]) : size - 1;
-  const start = Math.max(0, requestedStart);
-  const end = Math.min(size - 1, requestedEnd);
-  if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || start >= size) {
-    res.set('Content-Range', `bytes */${size}`);
-    return res.sendStatus(416);
-  }
-
+  const { start, end } = byteRange;
   const chunk = bytes.subarray(start, end + 1);
   res.set({
     'Content-Length': String(chunk.length),
@@ -2988,6 +3009,7 @@ export {
   externalHistoryItem,
   fitRoomClothTypeForProduct,
   fitRoomClothTypeForPromptKey,
+  parseVideoByteRange,
   productHistoryItem,
   runProductTryOnJob,
   sareeImageQuality,
