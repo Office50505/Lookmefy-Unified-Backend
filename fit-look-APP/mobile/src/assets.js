@@ -24,6 +24,8 @@ export const images = {
   'lookmefy_model_07.png': require('../assets/lookmefy_model_07.png'),
   'lookmefy_model_08.png': require('../assets/lookmefy_model_08.png'),
   lookmefyStaticHeroModel: require('../assets/lookmefy_static_hero_model.png'),
+  lookmefyTryOnBefore: require('../assets/lookmefy_tryon_before.png'),
+  lookmefyTryOnAfter: require('../assets/lookmefy_tryon_after.png'),
   homeStarterExplore: require('../assets/home-starter-explore.png'),
   homeStarterWardrobe: require('../assets/home-starter-wardrobe.png'),
   shopHeroConfidence: require('../assets/shop-hero-confidence.png'),

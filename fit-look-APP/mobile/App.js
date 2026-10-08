@@ -2474,6 +2474,100 @@ function HomeMissionStoryShowcase() {
   );
 }
 
+function HomeBeforeAfterSlider() {
+  const dividerX = useRef(new Animated.Value(0)).current;
+  const dividerXRef = useRef(0);
+  const dragStartXRef = useRef(0);
+  const [frameWidth, setFrameWidth] = useState(0);
+
+  const handleFrameLayout = useCallback((event) => {
+    const nextWidth = event.nativeEvent.layout.width;
+    if (!nextWidth) {
+      return;
+    }
+    setFrameWidth((previousWidth) => {
+      if (Math.abs(previousWidth - nextWidth) < 1) {
+        return previousWidth;
+      }
+      const nextDividerX = previousWidth
+        ? clamp(dividerXRef.current, 0, nextWidth)
+        : Math.round(nextWidth / 2);
+      dividerXRef.current = nextDividerX;
+      dividerX.setValue(nextDividerX);
+      return nextWidth;
+    });
+  }, [dividerX]);
+
+  const panResponder = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: (event) => (
+      frameWidth > 0
+      && Math.abs(event.nativeEvent.locationX - dividerXRef.current) <= 30
+    ),
+    onMoveShouldSetPanResponder: (_, gesture) => (
+      frameWidth > 0
+      && Math.abs(gesture.dx) > 6
+      && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.15
+    ),
+    onPanResponderGrant: () => {
+      dragStartXRef.current = dividerXRef.current;
+    },
+    onPanResponderMove: (_, gesture) => {
+      const nextDividerX = clamp(dragStartXRef.current + gesture.dx, 0, frameWidth);
+      dividerXRef.current = nextDividerX;
+      dividerX.setValue(nextDividerX);
+    },
+    onPanResponderTerminationRequest: () => true
+  }), [dividerX, frameWidth]);
+
+  const afterImageStyle = frameWidth
+    ? [
+      styles.homeTryOnSliderImage,
+      {
+        width: frameWidth,
+        transform: [{ translateX: Animated.multiply(dividerX, -1) }]
+      }
+    ]
+    : styles.homeTryOnSliderImage;
+  const beforeBadgeOpacity = dividerX.interpolate({
+    inputRange: [0, 32, 64],
+    outputRange: [0, 0, 1],
+    extrapolate: 'clamp'
+  });
+  const afterBadgeOpacity = frameWidth
+    ? dividerX.interpolate({
+      inputRange: [Math.max(frameWidth - 64, 0), Math.max(frameWidth - 32, 0), frameWidth],
+      outputRange: [1, 0, 0],
+      extrapolate: 'clamp'
+    })
+    : 1;
+
+  return (
+    <View
+      style={styles.homeTryOnCompareFrame}
+      onLayout={handleFrameLayout}
+      {...panResponder.panHandlers}
+    >
+      <Image source={images.lookmefyTryOnBefore} style={styles.homeTryOnSliderImage} resizeMode="cover" />
+      <Animated.View pointerEvents="none" style={[styles.homeTryOnSliderAfterClip, { left: dividerX }]}>
+        <Animated.Image source={images.lookmefyTryOnAfter} style={afterImageStyle} resizeMode="cover" />
+      </Animated.View>
+      <Animated.View pointerEvents="none" style={[styles.homeTryOnSliderDivider, { left: dividerX }]} />
+      <Animated.View style={[styles.homeTryOnCompareHandle, { left: dividerX }]}>
+        <Ionicons name="chevron-back" size={13} color="#111111" />
+        <Ionicons name="chevron-forward" size={13} color="#111111" />
+      </Animated.View>
+      <View pointerEvents="none" style={styles.homeTryOnCompareBadgeLayer}>
+        <Animated.View style={[styles.homeTryOnCompareBadge, { opacity: beforeBadgeOpacity }]}>
+          <Text style={styles.homeTryOnCompareBadgeText}>Before</Text>
+        </Animated.View>
+        <Animated.View style={[styles.homeTryOnCompareBadge, styles.homeTryOnCompareBadgeRight, { opacity: afterBadgeOpacity }]}>
+          <Text style={styles.homeTryOnCompareBadgeText}>After</Text>
+        </Animated.View>
+      </View>
+    </View>
+  );
+}
+
 function ProductTopBar({ onNavigate, user, onBack }) {
   return (
     <>
@@ -2802,35 +2896,19 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
           ))}
         </ScrollView>
 
+        <View style={styles.homeTryOnStudioHead}>
+          <Text style={styles.homeCommerceTitle}>Try-On Studio</Text>
+          <Text style={styles.homeCommerceSubtitle}>See how it looks on you before you wear it.</Text>
+        </View>
         <View style={styles.homeTryOnStudioCard}>
-          <View style={styles.homeTryOnStudioCopy}>
-            <Text style={styles.homeTryOnStudioTitle}>Try-On Studio</Text>
-            <Text style={styles.homeTryOnStudioSubtitle}>See how it looks on you,{'\n'}before you wear it.</Text>
-          </View>
           <View style={styles.homeTryOnStudioBody}>
-            <View style={styles.homeTryOnCompareFrame}>
-              <View style={styles.homeTryOnComparePane}>
-                <Image source={images['lookmefy_model_02.png']} style={styles.homeTryOnCompareImageBefore} resizeMode="contain" />
-                <View style={styles.homeTryOnCompareBadge}>
-                  <Text style={styles.homeTryOnCompareBadgeText}>Before</Text>
-                </View>
-              </View>
-              <View style={styles.homeTryOnCompareDivider} />
-              <View style={styles.homeTryOnComparePane}>
-                <Image source={images['lookmefy_model_01.png']} style={styles.homeTryOnCompareImageAfter} resizeMode="contain" />
-                <View style={[styles.homeTryOnCompareBadge, styles.homeTryOnCompareBadgeRight]}>
-                  <Text style={styles.homeTryOnCompareBadgeText}>After</Text>
-                </View>
-              </View>
-              <View style={styles.homeTryOnCompareHandle}>
-                <Ionicons name="chevron-back" size={13} color="#111111" />
-                <Ionicons name="chevron-forward" size={13} color="#111111" />
-              </View>
+            <HomeBeforeAfterSlider />
+            <View style={styles.homeTryOnStudioCopy}>
+              <TouchableOpacity style={styles.homeTryOnStudioButton} activeOpacity={0.88} onPress={() => onNavigate('tryon')}>
+                <Text style={styles.homeTryOnStudioButtonText}>Try Now</Text>
+                <Ionicons name="arrow-forward" size={15} color="#ffffff" />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity style={styles.homeTryOnStudioButton} activeOpacity={0.88} onPress={() => onNavigate('tryon')}>
-              <Text style={styles.homeTryOnStudioButtonText}>Try Now</Text>
-              <Ionicons name="arrow-forward" size={15} color="#ffffff" />
-            </TouchableOpacity>
           </View>
         </View>
 
@@ -5464,34 +5542,6 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, onBack, init
                 </View>
               </View>
             </View>
-
-            <View style={styles.wardrobeRecommendationsHead}>
-              <Text style={styles.wardrobeSectionTitle}>AI Recommendations</Text>
-              <TouchableOpacity style={styles.wardrobeGenerateLink} onPress={() => askForSuggestions('today casual')} disabled={busy === 'suggest'}>
-                <Ionicons name="refresh-outline" size={22} color="#9b5658" />
-                <Text style={styles.wardrobeGenerateText}>{busy === 'suggest' ? 'Generating' : 'Generate Look'}</Text>
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView {...horizontalScrollProps} contentContainerStyle={styles.wardrobeRecommendationTrack}>
-              {recommendationSource.length ? recommendationSource.map((suggestion, index) => {
-                const fallback = wardrobeFallbackRecommendations[index % wardrobeFallbackRecommendations.length];
-                return (
-                  <WardrobeRecommendationCard
-                    key={suggestion?.key || suggestion?.title || fallback.title}
-                    suggestion={suggestion}
-                    fallback={fallback}
-                    onPress={() => suggestion ? applySuggestion(suggestion) : askForSuggestions('today casual')}
-                  />
-                );
-              }) : (
-                <TouchableOpacity style={styles.wardrobeEmptyRecommendation} onPress={() => askForSuggestions('today casual')} disabled={busy === 'suggest'}>
-                  <Ionicons name="sparkles-outline" size={22} color="#9b5658" />
-                  <Text style={styles.wardrobeEmptyRecommendationTitle}>{busy === 'suggest' ? 'Generating suggestions...' : 'No AI recommendations yet'}</Text>
-                  <Text style={styles.wardrobeEmptyRecommendationText}>Generate ideas from your uploaded closet.</Text>
-                </TouchableOpacity>
-              )}
-            </ScrollView>
           </>
         ) : (
           <View style={styles.wardrobeModeTabs}>
@@ -9620,9 +9670,9 @@ const styles = StyleSheet.create({
   },
   pageBackRow: {
     width: '100%',
-    paddingHorizontal: 14,
-    paddingTop: 7,
-    paddingBottom: 8,
+    paddingHorizontal: 0,
+    paddingTop: 0,
+    paddingBottom: 0,
     backgroundColor: '#fbf7f6',
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -9634,26 +9684,27 @@ const styles = StyleSheet.create({
     minWidth: 0
   },
   categorySearchBox: {
-    minHeight: 42,
-    borderRadius: 21,
-    borderWidth: 1,
-    borderColor: '#e6ddd9',
+    minHeight: 46,
+    borderRadius: 0,
+    borderWidth: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e6ddd9',
     backgroundColor: '#ffffff',
-    paddingLeft: 13,
-    paddingRight: 4,
+    paddingLeft: 14,
+    paddingRight: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,
     shadowColor: '#1f1714',
-    shadowOpacity: 0.07,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 4
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 0
   },
   categorySearchInput: {
     ...typography.body,
     flex: 1,
-    minHeight: 38,
+    minHeight: 46,
     paddingVertical: 0,
     color: '#1f1b1a',
     fontSize: 14,
@@ -9663,15 +9714,15 @@ const styles = StyleSheet.create({
   categorySearchIconButton: {
     width: 28,
     height: 28,
-    borderRadius: 14,
+    borderRadius: 7,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#f7f0ed'
   },
   categorySearchSubmit: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 46,
+    height: 46,
+    borderRadius: 0,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#111111'
@@ -10530,16 +10581,20 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontWeight: '500'
   },
-  homeTryOnStudioCard: {
+  homeTryOnStudioHead: {
     marginTop: 18,
+    paddingHorizontal: 18
+  },
+  homeTryOnStudioCard: {
+    marginTop: 10,
     marginHorizontal: 18,
-    minHeight: 226,
+    minHeight: 170,
     borderRadius: 13,
     borderWidth: 1,
     borderColor: '#e6ded8',
     backgroundColor: '#fffdf9',
     paddingHorizontal: 12,
-    paddingTop: 13,
+    paddingTop: 12,
     paddingBottom: 12,
     shadowColor: '#301f17',
     shadowOpacity: 0.04,
@@ -10548,38 +10603,65 @@ const styles = StyleSheet.create({
     elevation: 2
   },
   homeTryOnStudioCopy: {
-    paddingLeft: 3
+    width: 112,
+    minHeight: 140,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 2
   },
   homeTryOnStudioTitle: {
     fontFamily: fontFamilies.logo,
     color: '#0b0b0b',
-    fontSize: 24,
-    lineHeight: 27,
+    fontSize: 23,
+    lineHeight: 25,
     fontWeight: '400',
     letterSpacing: 0
   },
   homeTryOnStudioSubtitle: {
     ...typography.smallBody,
-    marginTop: 3,
+    marginTop: 5,
     color: '#504841',
-    fontSize: 13,
-    lineHeight: 16,
+    fontSize: 12,
+    lineHeight: 15,
     fontWeight: '500'
   },
   homeTryOnStudioBody: {
-    marginTop: 7,
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'stretch',
     gap: 10
   },
   homeTryOnCompareFrame: {
     flex: 1,
-    height: 140,
+    height: 146,
     borderRadius: 8,
     overflow: 'hidden',
     backgroundColor: '#e6dfd8',
-    flexDirection: 'row',
     position: 'relative'
+  },
+  homeTryOnSliderImage: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    width: '100%',
+    height: '100%'
+  },
+  homeTryOnSliderAfterClip: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    overflow: 'hidden',
+    zIndex: 1
+  },
+  homeTryOnSliderDivider: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 2,
+    marginLeft: -1,
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+    zIndex: 3,
+    elevation: 3
   },
   homeTryOnComparePane: {
     flex: 1,
@@ -10611,7 +10693,6 @@ const styles = StyleSheet.create({
   },
   homeTryOnCompareHandle: {
     position: 'absolute',
-    left: '50%',
     top: '50%',
     width: 28,
     height: 28,
@@ -10628,18 +10709,27 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 7,
     shadowOffset: { width: 0, height: 3 },
-    elevation: 3
+    elevation: 3,
+    zIndex: 4
+  },
+  homeTryOnCompareBadgeLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 5,
+    elevation: 5
   },
   homeTryOnCompareBadge: {
     position: 'absolute',
     left: 7,
     bottom: 7,
+    minWidth: 54,
     minHeight: 24,
     borderRadius: 12,
-    backgroundColor: 'rgba(0, 0, 0, 0.62)',
+    backgroundColor: 'rgba(0, 0, 0, 0.72)',
     paddingHorizontal: 8,
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.16)'
   },
   homeTryOnCompareBadgeRight: {
     left: undefined,
@@ -10653,8 +10743,9 @@ const styles = StyleSheet.create({
     fontWeight: '700'
   },
   homeTryOnStudioButton: {
-    width: 105,
-    minHeight: 44,
+    alignSelf: 'flex-start',
+    minWidth: 98,
+    minHeight: 42,
     borderRadius: 10,
     backgroundColor: '#050505',
     flexDirection: 'row',
@@ -10671,8 +10762,8 @@ const styles = StyleSheet.create({
   homeTryOnStudioButtonText: {
     fontFamily: fontFamilies.logo,
     color: '#ffffff',
-    fontSize: 14,
-    lineHeight: 17,
+    fontSize: 13,
+    lineHeight: 16,
     fontWeight: '400',
     letterSpacing: 0
   },
