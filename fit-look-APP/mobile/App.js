@@ -13,10 +13,12 @@ import {
   BackHandler,
   FlatList,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Linking,
   Modal,
   NativeModules,
+  PanResponder,
   Platform,
   Pressable,
   RefreshControl,
@@ -117,6 +119,22 @@ const homeHeroSlides = [
   { key: 'natural-light', title: 'LIGHT LAYERING', cta: 'EXPLORE', image: 'homeSliderNaturalLight', route: 'shop' },
   { key: 'archway', title: 'NEW SEASON EDIT', cta: 'VIEW ALL', image: 'homeSliderArchway', route: 'shop' }
 ];
+const homeMissionTiles = [
+  { label: 'College', image: 'lookmefy_model_07.png', tileStyle: { backgroundColor: '#ddd4ca' }, imageStyle: { top: -5, height: 142 } },
+  { label: 'Office', image: 'lookmefy_model_06.png', tileStyle: { backgroundColor: '#d8d2ca' }, imageStyle: { top: -6, height: 145 } },
+  { label: 'Date', image: 'lookmefy_model_02.png', tileStyle: { backgroundColor: '#d6cfc8' }, imageStyle: { top: -4, height: 142 } },
+  { label: 'Wedding', image: 'lookmefy_model_03.png', tileStyle: { backgroundColor: '#d8cec3' }, imageStyle: { top: -6, height: 146 } },
+  { label: 'Travel', image: 'lookmefy_model_01.png', tileStyle: { backgroundColor: '#ded7ce' }, imageStyle: { top: -8, height: 148 } },
+  { label: 'Festive', image: 'lookmefy_model_08.png', tileStyle: { backgroundColor: '#d2cbc3' }, imageStyle: { top: -4, height: 142 } }
+];
+const homeMissionCopy = {
+  title: 'Choose your\noutfit mission',
+  subtitle: 'Same you. New looks.\nFor every part of your life.'
+};
+const homeMissionModel = {
+  image: 'lookmefyStaticHeroModel',
+  modelStyle: { right: -30, top: -18, width: 236, height: 278 }
+};
 const fontAssets = {
   BodoniModa_400Regular: require('@expo-google-fonts/bodoni-moda/400Regular/BodoniModa_400Regular.ttf'),
   PlusJakartaSans_600SemiBold: require('@expo-google-fonts/plus-jakarta-sans/600SemiBold/PlusJakartaSans_600SemiBold.ttf'),
@@ -925,6 +943,36 @@ function fillProductRailProducts(products = [], fallbackProducts = [], minimum =
   return uniqueProductsWithImages([...primary, ...fillers]).slice(0, minimum);
 }
 
+function buildHomeAiRecommendationCards(products = [], seed = 0, feedGender = '') {
+  const allProducts = uniqueProductsWithImages(products).filter((product) => {
+    if (product.isAvailable === false) return false;
+    if (!feedGender) return true;
+    const gender = String(product.gender || '').toLowerCase();
+    return !gender || gender === feedGender || gender === 'unisex';
+  });
+  const outfitProducts = allProducts.filter((product) => (
+    productMatchesAnyCategory(product, ['dress', 'gown', 'saree', 'kurti', 'lehenga', 'jumpsuit', 'co-ord', 'set', 'top', 'shirt', 'blazer', 'jacket', 'pants', 'jeans', 'skirt'])
+  ));
+  const pool = outfitProducts.length >= 4 ? outfitProducts : allProducts;
+  const stablePool = stableExploreProducts(pool);
+  if (!stablePool.length) return [];
+  const offset = Math.abs(Number(seed) || 0) % stablePool.length;
+  const rotated = [...stablePool.slice(offset), ...stablePool.slice(0, offset)];
+  const labels = ['Best for today', 'One-piece easy', 'Fresh pairing', 'Style match'];
+  const cards = [];
+  for (let index = 0; index < rotated.length && cards.length < 4; index += 2) {
+    const pair = [rotated[index], rotated[(index + 1) % rotated.length]].filter(Boolean);
+    const uniquePair = uniqueProductsWithImages(pair);
+    if (!uniquePair.length) continue;
+    cards.push({
+      id: uniquePair.map((product) => product.id).join('-'),
+      title: labels[cards.length % labels.length],
+      products: uniquePair
+    });
+  }
+  return cards;
+}
+
 function buildHomeOfferCards({ catalogProducts = [], arrivalProducts = [], tryOnPickProducts = [], feedGender = '' }) {
   const pricedProducts = catalogProducts.filter((product) => Number(product.price || 0) > 0);
   const catalogProductsWithImages = uniqueProductsWithImages(catalogProducts);
@@ -1322,11 +1370,6 @@ function Header({ user, canGoBack, onBack, onNavigate, onLogout }) {
   return (
     <View style={styles.header}>
       <View style={styles.headerLeft}>
-        {canGoBack ? (
-          <TouchableOpacity style={styles.iconButton} onPress={onBack}>
-            <Ionicons name="chevron-back" size={22} color="#111827" />
-          </TouchableOpacity>
-        ) : null}
         <View>
           <Pressable onPress={() => onNavigate('home')}>
             <BrandLogo />
@@ -1373,6 +1416,9 @@ function userCreditBalance(user) {
 
 function headerCreditLabel(user) {
   const rawCredits = userCreditBalance(user);
+  if (rawCredits >= 1000000) return `${Math.floor(rawCredits / 100000) / 10}M`;
+  if (rawCredits >= 10000) return `${Math.floor(rawCredits / 100) / 10}k`;
+  if (rawCredits >= 1000) return `${Math.floor(rawCredits / 100) / 10}k`;
   return rawCredits.toLocaleString('en-IN');
 }
 
@@ -2047,15 +2093,10 @@ const categorySearchReferences = (() => {
   return references;
 })();
 
-function PageBackRow({ onBack, children }) {
-  if (!onBack && !children) return null;
+function PageBackRow({ children }) {
+  if (!children) return null;
   return (
     <View style={styles.pageBackRow}>
-      {onBack ? (
-        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Go back" activeOpacity={0.86} style={styles.pageBackButton} onPress={onBack}>
-          <Ionicons name="chevron-back" size={21} color="#111111" />
-        </TouchableOpacity>
-      ) : null}
       {children}
     </View>
   );
@@ -2072,9 +2113,21 @@ function ShopTopBar({ onNavigate, user, onBack }) {
 
 function CategoryBubble({ item, size = 'large', active = false }) {
   const imageSource = item.image ? images[item.image] : null;
-  const frameStyle = size === 'rail' ? styles.categoryRailImageFrame : size === 'reference' ? styles.categoryReferenceImageFrame : styles.categoryContentImageFrame;
-  const imageStyle = size === 'rail' ? styles.categoryRailImage : size === 'reference' ? styles.categoryReferenceImage : styles.categoryContentImage;
-  const iconSize = size === 'rail' ? 30 : size === 'reference' ? 17 : 38;
+  const frameStyle = size === 'rail'
+    ? styles.categoryRailImageFrame
+    : size === 'reference'
+      ? styles.categoryReferenceImageFrame
+      : size === 'featured'
+        ? styles.categoryFeaturedImageFrame
+        : styles.categoryContentImageFrame;
+  const imageStyle = size === 'rail'
+    ? styles.categoryRailImage
+    : size === 'reference'
+      ? styles.categoryReferenceImage
+      : size === 'featured'
+        ? styles.categoryFeaturedImage
+        : styles.categoryContentImage;
+  const iconSize = size === 'rail' ? 30 : size === 'reference' ? 17 : size === 'featured' ? 42 : 38;
 
   return (
     <View style={[frameStyle, active && styles.categoryRailImageFrameActive]}>
@@ -2194,22 +2247,26 @@ function CategoryLandingScreen({ selectedCategory, onSelectCategory, onNavigate,
         </ScrollView>
 
         <ScrollView style={styles.categoryMain} contentContainerStyle={[styles.categoryMainContent, layout.isTablet && styles.categoryMainContentTablet]} showsVerticalScrollIndicator={false}>
-          <View style={styles.categoryKickerRow}>
-            <Text style={styles.categoryKicker}>{content.kicker}</Text>
-            <View style={styles.categoryKickerLine} />
+          <View style={styles.categoryFeatureBand}>
+            <View style={styles.categoryKickerRow}>
+              <Text style={styles.categoryKicker}>{content.kicker}</Text>
+              <View style={styles.categoryKickerLine} />
+            </View>
+            <Text style={styles.categoryHeadline}>{content.title}</Text>
+            <View style={[styles.categoryFeaturedGrid, layout.isTablet && styles.categoryTileGridTablet]}>
+              {content.featured.map((item) => (
+                <TouchableOpacity key={`${content.kicker}-${item.label}`} accessibilityRole="button" activeOpacity={0.86} style={[styles.categoryFeaturedTile, layout.categoryTileStyle]} onPress={() => openTile(item)}>
+                  <CategoryBubble item={item} size="featured" />
+                  <Text style={styles.categoryFeaturedLabel} numberOfLines={2}>{item.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
-          <Text style={styles.categoryHeadline}>{content.title}</Text>
 
-          <View style={[styles.categoryTileGrid, layout.isTablet && styles.categoryTileGridTablet]}>
-            {content.featured.map((item) => (
-              <TouchableOpacity key={`${content.kicker}-${item.label}`} accessibilityRole="button" activeOpacity={0.86} style={[styles.categoryTile, layout.categoryTileStyle]} onPress={() => openTile(item)}>
-                <CategoryBubble item={item} />
-                <Text style={styles.categoryTileLabel} numberOfLines={2}>{item.label}</Text>
-              </TouchableOpacity>
-            ))}
+          <View style={styles.categorySectionHeader}>
+            <Text style={styles.categorySectionTitle}>{content.sectionTitle}</Text>
+            <View style={styles.categorySectionRule} />
           </View>
-
-          <Text style={styles.categorySectionTitle}>{content.sectionTitle}</Text>
           <View style={[styles.categoryTileGrid, layout.isTablet && styles.categoryTileGridTablet]}>
             {content.items.map((item) => (
               <TouchableOpacity key={`${content.sectionTitle}-${item.label}`} accessibilityRole="button" activeOpacity={0.86} style={[styles.categoryTile, layout.categoryTileStyle]} onPress={() => openTile(item)}>
@@ -2403,6 +2460,20 @@ function HomeHeroShowcase() {
   );
 }
 
+function HomeMissionStoryShowcase() {
+  return (
+    <View style={styles.homeMissionStoryFrame}>
+      <View style={styles.homeMissionModelLayer}>
+        <Image source={images[homeMissionModel.image]} style={[styles.homeMissionModel, homeMissionModel.modelStyle]} resizeMode="contain" />
+      </View>
+      <View style={styles.homeMissionCopy}>
+        <Text style={styles.homeMissionTitle}>{homeMissionCopy.title}</Text>
+        <Text style={styles.homeMissionSubtitle}>{homeMissionCopy.subtitle}</Text>
+      </View>
+    </View>
+  );
+}
+
 function ProductTopBar({ onNavigate, user, onBack }) {
   return (
     <>
@@ -2525,6 +2596,7 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
   const homeScrollRef = useRef(null);
   const [homeRefreshKey, setHomeRefreshKey] = useState(0);
   const [homeRefreshing, setHomeRefreshing] = useState(false);
+  const [homeAiRecommendationSeed, setHomeAiRecommendationSeed] = useState(0);
   const preferredGender = productGenderForUser(user);
   const curated = useProducts({ sort: 'newest', limit: homeProductFeedPageSize, gender: preferredGender, refreshKey: homeRefreshKey }, token);
   const recommended = useRecommendedProducts(user, token, 16, homeRefreshKey);
@@ -2547,6 +2619,14 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
   const recommendedProducts = useMemo(
     () => fillProductRailProducts(recommended.products, catalogProducts),
     [recommended.products, catalogProducts]
+  );
+  const homeAiRecommendationProducts = useMemo(
+    () => uniqueProductsWithImages([...recommendedProducts, ...arrivalProducts, ...tryOnPickProducts, ...catalogProducts]),
+    [arrivalProducts, catalogProducts, recommendedProducts, tryOnPickProducts]
+  );
+  const homeAiRecommendationCards = useMemo(
+    () => buildHomeAiRecommendationCards(homeAiRecommendationProducts, homeAiRecommendationSeed, preferredGender),
+    [homeAiRecommendationProducts, homeAiRecommendationSeed, preferredGender]
   );
   const homeOffers = useMemo(
     () => buildHomeOfferCards({ catalogProducts, arrivalProducts, tryOnPickProducts, feedGender: preferredGender }),
@@ -2635,8 +2715,15 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
       : { sort: 'newest' };
   const catalogTourTarget = useTourTarget('home-catalog', registerTourTarget, { request: tourFocusRequest, scrollRef: homeScrollRef, scrollOffset: 92 });
   const handleHomeRefresh = useCallback(() => {
+    const nextSeed = Date.now();
     setHomeRefreshing(true);
-    setHomeRefreshKey(Date.now());
+    setHomeRefreshKey(nextSeed);
+    setHomeAiRecommendationSeed(nextSeed);
+  }, []);
+  const refreshHomeAiRecommendations = useCallback(() => {
+    const nextSeed = Date.now();
+    setHomeAiRecommendationSeed(nextSeed);
+    setHomeRefreshKey(nextSeed);
   }, []);
 
   useEffect(() => {
@@ -2666,52 +2753,86 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
         {...screenScrollProps}
       >
         <View style={styles.homeTryOnHero}>
-          <HomeHeroShowcase />
-          <View pointerEvents="none" style={styles.homeHeroLeftBase} />
-          <View pointerEvents="none" style={styles.homeHeroLeftSlantFill} />
-          <View pointerEvents="none" style={styles.homeHeroDivider} />
-          <TouchableOpacity style={styles.homeHeroRoundAction} activeOpacity={0.88} onPress={() => onNavigate('shop')}>
-            <Ionicons name="arrow-forward" size={26} color="#111111" />
+          <View style={styles.homeMissionIntro}>
+            <HomeMissionStoryShowcase />
+          </View>
+          <View style={styles.homeMissionGrid} pointerEvents="none">
+            {homeMissionTiles.map((item) => (
+              <View key={item.label} style={[styles.homeMissionTile, item.tileStyle]}>
+                <Image source={images[item.image]} style={[styles.homeMissionTileImage, item.imageStyle]} resizeMode="contain" />
+                <View pointerEvents="none" style={styles.homeMissionTileScrim} />
+                <Text style={styles.homeMissionTileLabel}>{item.label}</Text>
+              </View>
+            ))}
+          </View>
+          <TouchableOpacity style={styles.homeMissionGenerateButton} activeOpacity={0.88} onPress={() => onNavigate('stylebot')}>
+            <Text style={styles.homeMissionGenerateText}>Generate My Looks</Text>
+            <Ionicons name="arrow-forward" size={20} color="#ffffff" />
           </TouchableOpacity>
-          <View style={styles.homeHeroLeftPane}>
-            <Text style={styles.homeHeroKicker}>VIRTUAL TRY-ON</Text>
-            <Text style={styles.homeHeroEditorialTitle}>See it. Try it.{'\n'}Love it.</Text>
-            <Text style={styles.homeHeroEditorialText}>Try fashion on yourself before you shop.</Text>
-            <TouchableOpacity style={styles.homePrimaryTryOnButton} activeOpacity={0.88} onPress={() => onNavigate('tryon')}>
-              <Ionicons name="camera-outline" size={19} color="#ffffff" />
-              <Text style={styles.homePrimaryTryOnText}>Try On</Text>
+        </View>
+
+        <View style={styles.homeAiRecommendationsHead}>
+          <Text style={styles.homeCommerceTitle}>AI Recommendations</Text>
+          <TouchableOpacity style={styles.homeAiGenerateLink} activeOpacity={0.82} onPress={refreshHomeAiRecommendations}>
+            <Ionicons name="refresh-outline" size={19} color="#9b5658" />
+            <Text style={styles.homeAiGenerateText}>{curated.loading || recommended.loading ? 'Refreshing' : 'Generate Look'}</Text>
+          </TouchableOpacity>
+        </View>
+        <ScrollView {...horizontalScrollProps} contentContainerStyle={styles.homeAiRecommendationTrack}>
+          {homeAiRecommendationCards.map((card) => (
+            <TouchableOpacity key={card.id} style={styles.homeAiRecommendationCard} activeOpacity={0.88} onPress={() => onNavigate('shop')}>
+              <View style={styles.homeAiRecommendationImages}>
+                {card.products.map((product) => (
+                  <ResilientImage
+                    key={`${card.id}-${product.id}`}
+                    source={product.imageUrl ? { uri: imageUrl(product.imageUrl) } : null}
+                    fallbackSource={images['category-generated/dresses.png']}
+                    style={styles.homeAiRecommendationImage}
+                    resizeMode="cover"
+                    fallbackIcon="shirt-outline"
+                    alt={product.title || product.name}
+                  />
+                ))}
+              </View>
+              <View style={styles.homeAiRecommendationFooter}>
+                <Text style={styles.homeAiRecommendationTitle} numberOfLines={1}>{card.title}</Text>
+                <Ionicons name="chevron-forward" size={27} color="#111111" />
+              </View>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.homeSecondaryWardrobeButton} activeOpacity={0.88} onPress={() => onNavigate('closet')}>
-              <Ionicons name="shirt-outline" size={19} color="#111111" />
-              <Text style={styles.homeSecondaryWardrobeText}>Open Wardrobe</Text>
+          ))}
+        </ScrollView>
+
+        <View style={styles.homeTryOnStudioCard}>
+          <View style={styles.homeTryOnStudioCopy}>
+            <Text style={styles.homeTryOnStudioTitle}>Try-On Studio</Text>
+            <Text style={styles.homeTryOnStudioSubtitle}>See how it looks on you,{'\n'}before you wear it.</Text>
+          </View>
+          <View style={styles.homeTryOnStudioBody}>
+            <View style={styles.homeTryOnCompareFrame}>
+              <View style={styles.homeTryOnComparePane}>
+                <Image source={images['lookmefy_model_02.png']} style={styles.homeTryOnCompareImageBefore} resizeMode="contain" />
+                <View style={styles.homeTryOnCompareBadge}>
+                  <Text style={styles.homeTryOnCompareBadgeText}>Before</Text>
+                </View>
+              </View>
+              <View style={styles.homeTryOnCompareDivider} />
+              <View style={styles.homeTryOnComparePane}>
+                <Image source={images['lookmefy_model_01.png']} style={styles.homeTryOnCompareImageAfter} resizeMode="contain" />
+                <View style={[styles.homeTryOnCompareBadge, styles.homeTryOnCompareBadgeRight]}>
+                  <Text style={styles.homeTryOnCompareBadgeText}>After</Text>
+                </View>
+              </View>
+              <View style={styles.homeTryOnCompareHandle}>
+                <Ionicons name="chevron-back" size={13} color="#111111" />
+                <Ionicons name="chevron-forward" size={13} color="#111111" />
+              </View>
+            </View>
+            <TouchableOpacity style={styles.homeTryOnStudioButton} activeOpacity={0.88} onPress={() => onNavigate('tryon')}>
+              <Text style={styles.homeTryOnStudioButtonText}>Try Now</Text>
+              <Ionicons name="arrow-forward" size={15} color="#ffffff" />
             </TouchableOpacity>
           </View>
         </View>
-
-        <TouchableOpacity style={styles.homeStylistPromptCard} activeOpacity={0.88} onPress={() => onNavigate('stylebot')}>
-          <View style={styles.homeStylistPromptCopy}>
-            <View style={styles.homeStylistPromptTitleRow}>
-              <Ionicons name="sparkles" size={17} color="#171412" />
-              <Text style={styles.homeStylistPromptTitle} numberOfLines={1}>Not sure what to wear?</Text>
-            </View>
-            <Text style={styles.homeStylistPromptText} numberOfLines={2}>Let AI create stylish looks from your wardrobe.</Text>
-            <View style={styles.homeStylistPromptButton}>
-              <Text style={styles.homeStylistPromptButtonText}>Ask AI Stylist</Text>
-              <Ionicons name="arrow-forward" size={15} color="#ffffff" />
-            </View>
-          </View>
-          <View style={styles.homeStylistPromptVisual} pointerEvents="none">
-            <View style={[styles.homeStylistPromptLookTile, styles.homeStylistPromptLookTileBack]}>
-              <Image source={images['category-generated/tops.png']} style={styles.homeStylistPromptLookImage} resizeMode="contain" />
-            </View>
-            <View style={[styles.homeStylistPromptLookTile, styles.homeStylistPromptLookTileFront]}>
-              <Image source={images['category-generated/bottomwear.png']} style={styles.homeStylistPromptLookImage} resizeMode="contain" />
-            </View>
-            <View style={[styles.homeStylistPromptLookTile, styles.homeStylistPromptLookTileAccent]}>
-              <Image source={images['category-generated/accessories.png']} style={styles.homeStylistPromptLookImage} resizeMode="contain" />
-            </View>
-          </View>
-        </TouchableOpacity>
 
         <View ref={catalogTourTarget.ref} onLayout={catalogTourTarget.onLayout} />
 
@@ -2960,16 +3081,9 @@ function SearchScreen({ initial = {}, user, token, onNavigate, onBack, onAddToWi
     setSubmittedQuery('');
     inputRef.current?.focus?.();
   };
-  const closeSearch = () => {
-    if (!onBack?.()) onNavigate('home');
-  };
-
   return (
     <View style={styles.searchScreen}>
       <View style={styles.searchTopBar}>
-        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Go back" style={styles.searchBackButton} onPress={closeSearch}>
-          <Ionicons name="chevron-back" size={27} color="#302b34" />
-        </TouchableOpacity>
         <View style={styles.searchCompactInputWrap}>
           <Ionicons name="search-outline" size={23} color="#9e99ad" />
           <TextInput
@@ -5339,14 +5453,16 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, onBack, init
                 <View style={[styles.wardrobeCategoryRail, styles.wardrobeCategoryRailRight]}>
                   {wardrobeRightCategoryTabs.map(renderWardrobeCategoryButton)}
                 </View>
+                <View style={styles.wardrobeTryButtonDock}>
+                  <TouchableOpacity
+                    style={[styles.wardrobeTryButton, (!tryThisLookIds.length || busy === 'generate') && styles.disabledButton]}
+                    disabled={!tryThisLookIds.length || busy === 'generate'}
+                    onPress={() => generateOutfit(tryThisLookIds, { title: 'My wardrobe look', itemSlots: tryThisItemSlots })}
+                  >
+                    <Text style={styles.wardrobeTryText}>{busy === 'generate' ? 'Generating...' : 'Try On'}</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-              <TouchableOpacity
-                style={[styles.wardrobeTryButton, (!tryThisLookIds.length || busy === 'generate') && styles.disabledButton]}
-                disabled={!tryThisLookIds.length || busy === 'generate'}
-                onPress={() => generateOutfit(tryThisLookIds, { title: 'My wardrobe look', itemSlots: tryThisItemSlots })}
-              >
-                <Text style={styles.wardrobeTryText}>{busy === 'generate' ? 'Generating...' : 'Try On'}</Text>
-              </TouchableOpacity>
             </View>
 
             <View style={styles.wardrobeRecommendationsHead}>
@@ -5832,13 +5948,53 @@ function StyleBotScreen({
   const [chatTryOnLoading, setChatTryOnLoading] = useState({});
   const [lightbox, setLightbox] = useState(null);
   const scrollRef = useRef(null);
+  const composerBottom = useRef(new Animated.Value(Platform.OS === 'ios' ? 10 : 14)).current;
   const composerTourTarget = useTourTarget('ai-studio-composer', registerTourTarget, { request: tourFocusRequest, scrollOffset: 84 });
+  const swipeBackResponder = useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (_, gesture) => (
+      gesture.moveX < 42
+      && gesture.dx > 18
+      && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.35
+    ),
+    onPanResponderRelease: (_, gesture) => {
+      if (gesture.dx > 72 && Math.abs(gesture.dy) < 84) {
+        if (onBack) onBack();
+        else onNavigate('home');
+      }
+    }
+  }), [onBack, onNavigate]);
   const messages = aiStudioMessages?.length ? aiStudioMessages : initialAiStudioMessages(user);
   const setMessages = setAiStudioMessages;
   const chatTryOns = aiStudioTryOns || {};
   const setChatTryOns = setAiStudioTryOns;
   const chatTryOnErrors = aiStudioTryOnErrors || {};
   const setChatTryOnErrors = setAiStudioTryOnErrors;
+
+  useEffect(() => {
+    const baseBottom = Platform.OS === 'ios' ? 10 : 14;
+    const keyboardGap = 8;
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, (event) => {
+      const keyboardHeight = Math.max(0, event?.endCoordinates?.height || 0);
+      Animated.timing(composerBottom, {
+        toValue: keyboardHeight + keyboardGap,
+        duration: event?.duration || 220,
+        useNativeDriver: false
+      }).start();
+    });
+    const hideSub = Keyboard.addListener(hideEvent, (event) => {
+      Animated.timing(composerBottom, {
+        toValue: baseBottom,
+        duration: event?.duration || 180,
+        useNativeDriver: false
+      }).start();
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [composerBottom]);
 
   const submit = async (preset) => {
     const prompt = String(preset || query || '').trim();
@@ -5940,15 +6096,33 @@ function StyleBotScreen({
   const hasUserMessages = messages.some((message) => message.role === 'user');
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.aiStudioScreen}>
+    <View style={styles.aiStudioScreen} {...swipeBackResponder.panHandlers}>
       <ProductTopBar onNavigate={onNavigate} user={user} onBack={onBack} />
       <ScrollView ref={scrollRef} contentContainerStyle={styles.aiStudioContent} {...screenScrollProps}>
+        {!hasUserMessages ? (
+          <View style={styles.aiStudioHero}>
+            <View style={styles.aiStudioHeroIcon}>
+              <Ionicons name="sparkles" size={22} color="#9b5658" />
+            </View>
+            <View style={styles.aiStudioHeroCopy}>
+              <Text style={styles.aiStudioHeroLabel}>AI STYLIST</Text>
+              <Text style={styles.aiStudioHeroTitle}>Search the look</Text>
+            </View>
+          </View>
+        ) : null}
+
         <View style={styles.aiChatThread}>
-          {messages.map((message) => {
+          {messages.map((message, index) => {
             const userBubble = message.role === 'user';
+            const introBubble = !hasUserMessages && !userBubble && index === 0;
             return (
               <View key={message.id} style={styles.aiMessageBlock}>
-                <View style={[styles.aiMessageBubble, userBubble ? styles.aiMessageBubbleUser : styles.aiMessageBubbleAssistant, message.error && styles.aiMessageBubbleError]}>
+                <View style={[styles.aiMessageBubble, userBubble ? styles.aiMessageBubbleUser : styles.aiMessageBubbleAssistant, introBubble && styles.aiMessageBubbleIntro, message.error && styles.aiMessageBubbleError]}>
+                  {introBubble ? (
+                    <View style={styles.aiMessageSparkBadge}>
+                      <Ionicons name="sparkles-outline" size={15} color="#9b5658" />
+                    </View>
+                  ) : null}
                   {message.loading ? <ActivityIndicator size="small" color="#9b5658" /> : null}
                   <Text style={[styles.aiMessageText, userBubble && styles.aiMessageTextUser, message.error && styles.aiMessageTextError]}>{message.text}</Text>
                 </View>
@@ -6037,14 +6211,14 @@ function StyleBotScreen({
         ) : null}
       </ScrollView>
 
-      <View ref={composerTourTarget.ref} onLayout={composerTourTarget.onLayout} style={styles.aiComposer}>
+      <Animated.View ref={composerTourTarget.ref} onLayout={composerTourTarget.onLayout} style={[styles.aiComposer, { bottom: composerBottom }]}>
         <TextInput style={styles.aiComposerInput} value={query} onChangeText={setQuery} placeholder="Search shirts, shoes, jackets..." placeholderTextColor="#8d8682" returnKeyType="send" onSubmitEditing={() => submit()} />
         <TouchableOpacity style={[styles.aiSendButton, (!query.trim() || busy) && styles.disabledButton]} disabled={!query.trim() || busy} onPress={() => submit()}>
           <Ionicons name={busy ? 'hourglass-outline' : 'send'} size={22} color="#ffffff" />
         </TouchableOpacity>
-      </View>
+      </Animated.View>
       <ImageLightbox uri={lightbox} onClose={() => setLightbox(null)} />
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -9341,7 +9515,7 @@ export default function App() {
           {screen}
         </ScreenErrorBoundary>
       </View>
-      {authOnlyRoute || searchRoute || closetAddRoute || tokensRoute ? null : <View style={styles.bottomNavFrame}><BottomNav route={currentRoute} onNavigate={guardedNavigate} /></View>}
+      {authOnlyRoute || searchRoute || closetAddRoute || aiStudioRoute || tokensRoute ? null : <View style={styles.bottomNavFrame}><BottomNav route={currentRoute} onNavigate={guardedNavigate} /></View>}
       <AuthPromptModal
         visible={Boolean(authPrompt)}
         message={authPrompt?.message}
@@ -9446,60 +9620,45 @@ const styles = StyleSheet.create({
   },
   pageBackRow: {
     width: '100%',
-    paddingHorizontal: 12,
-    paddingTop: 5,
-    paddingBottom: 6,
+    paddingHorizontal: 14,
+    paddingTop: 7,
+    paddingBottom: 8,
     backgroundColor: '#fbf7f6',
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'flex-start',
     gap: 10
   },
-  pageBackButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#ece5e1',
-    backgroundColor: 'rgba(255, 255, 255, 0.96)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#1f1714',
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8
-  },
   categorySearchDock: {
     flex: 1,
     minWidth: 0
   },
   categorySearchBox: {
-    minHeight: 36,
-    borderRadius: 18,
+    minHeight: 42,
+    borderRadius: 21,
     borderWidth: 1,
-    borderColor: '#eadfda',
-    backgroundColor: '#fffdfb',
-    paddingLeft: 12,
-    paddingRight: 5,
+    borderColor: '#e6ddd9',
+    backgroundColor: '#ffffff',
+    paddingLeft: 13,
+    paddingRight: 4,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,
     shadowColor: '#1f1714',
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3
+    shadowOpacity: 0.07,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 4
   },
   categorySearchInput: {
     ...typography.body,
     flex: 1,
-    minHeight: 34,
+    minHeight: 38,
     paddingVertical: 0,
     color: '#1f1b1a',
-    fontSize: 13,
+    fontSize: 14,
     lineHeight: 17,
-    fontWeight: '600'
+    fontWeight: '500'
   },
   categorySearchIconButton: {
     width: 28,
@@ -9510,9 +9669,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#f7f0ed'
   },
   categorySearchSubmit: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#111111'
@@ -9575,7 +9734,7 @@ const styles = StyleSheet.create({
   },
   appHeader: {
     minHeight: Platform.OS === 'android' ? appTopInset + 58 : 60,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingTop: Platform.OS === 'android' ? appTopInset + 10 : 8,
     paddingBottom: 8,
     backgroundColor: '#fbf7f6',
@@ -9592,15 +9751,15 @@ const styles = StyleSheet.create({
     zIndex: 10
   },
   appHeaderAction: {
-    width: 40,
-    height: 42,
-    borderRadius: 21,
+    width: 34,
+    height: 38,
+    borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center'
   },
   appHeaderCreditAction: {
-    width: 96,
-    paddingHorizontal: 9,
+    width: 70,
+    paddingHorizontal: 8,
     flexDirection: 'row',
     backgroundColor: '#fff3df',
     borderWidth: 1,
@@ -9613,11 +9772,11 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     fontWeight: '800',
     letterSpacing: 0,
-    maxWidth: 72
+    maxWidth: 42
   },
   appHeaderSide: {
-    width: 190,
-    minHeight: 42,
+    width: 178,
+    minHeight: 38,
     flexDirection: 'row',
     alignItems: 'center'
   },
@@ -9645,19 +9804,19 @@ const styles = StyleSheet.create({
   brandLogo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
     maxWidth: '100%'
   },
   brandLogoCompact: {
-    gap: 8
+    gap: 6
   },
   brandLogoSymbol: {
     width: 42,
     height: 42
   },
   brandLogoSymbolCompact: {
-    width: 32,
-    height: 32
+    width: 27,
+    height: 27
   },
   brandLogoSymbolLight: {
     tintColor: '#ffffff'
@@ -9668,7 +9827,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#cfc7c2'
   },
   brandLogoDividerCompact: {
-    height: 25
+    height: 22
   },
   brandLogoDividerLight: {
     backgroundColor: 'rgba(255, 255, 255, 0.58)'
@@ -9682,16 +9841,16 @@ const styles = StyleSheet.create({
     letterSpacing: 0
   },
   brandLogoTextCompact: {
-    fontSize: 25,
-    lineHeight: 30
+    fontSize: 23,
+    lineHeight: 28
   },
   brandLogoTextLight: {
     color: '#ffffff'
   },
   appHeaderAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16
+    width: 30,
+    height: 30,
+    borderRadius: 15
   },
   appHeaderAvatarInitials: {
     fontSize: 12,
@@ -9757,7 +9916,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: Platform.OS === 'ios' ? 28 : 22,
+    bottom: Platform.OS === 'ios' ? 10 : 14,
     zIndex: 40,
     width: '100%',
     alignItems: 'center',
@@ -9843,7 +10002,7 @@ const styles = StyleSheet.create({
   },
   homeContent: {
     paddingTop: 0,
-    paddingBottom: bottomNavigationHeight + screenBottomInset + 56,
+    paddingBottom: bottomNavigationHeight - 10,
     backgroundColor: '#ffffff'
   },
   homeContentTablet: {
@@ -9883,15 +10042,142 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff'
   },
   homeTryOnHero: {
-    height: 258,
-    marginTop: 12,
-    marginHorizontal: 15,
-    borderRadius: 14,
+    minHeight: 540,
+    marginTop: 0,
+    marginHorizontal: 0,
+    paddingHorizontal: 22,
+    paddingTop: 14,
+    paddingBottom: 8,
+    borderRadius: 0,
     overflow: 'hidden',
-    backgroundColor: '#f3f0ec',
-    borderWidth: 1,
-    borderColor: '#eee9e4',
+    backgroundColor: '#fffdf9',
     position: 'relative'
+  },
+  homeMissionIntro: {
+    height: 178,
+    position: 'relative',
+    overflow: 'hidden',
+    backgroundColor: '#fffdf9'
+  },
+  homeMissionStoryFrame: {
+    ...StyleSheet.absoluteFillObject
+  },
+  homeMissionAmbient: {
+    position: 'absolute',
+    top: 6,
+    right: -20,
+    bottom: 0,
+    width: '52%',
+    backgroundColor: '#f5eee7',
+    opacity: 0.28
+  },
+  homeMissionModelLayer: {
+    position: 'absolute',
+    top: 0,
+    right: -10,
+    bottom: -4,
+    width: '61%',
+    overflow: 'visible',
+    zIndex: 1
+  },
+  homeMissionCopy: {
+    position: 'absolute',
+    left: 0,
+    top: 15,
+    width: '63%',
+    zIndex: 4
+  },
+  homeMissionTitle: {
+    fontFamily: fontFamilies.logo,
+    color: '#000000',
+    fontSize: 31,
+    lineHeight: 33,
+    fontWeight: '400',
+    letterSpacing: 0,
+    paddingLeft: 12,
+    paddingBottom: 4,
+    includeFontPadding: true
+  },
+  homeMissionSubtitle: {
+    ...typography.body,
+    marginTop: 4,
+    marginLeft: 12,
+    maxWidth: 190,
+    color: '#24211f',
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: '600'
+  },
+  homeMissionModel: {
+    position: 'absolute'
+  },
+  homeMissionGrid: {
+    marginTop: 4,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 11
+  },
+  homeMissionTile: {
+    width: '31.7%',
+    height: 120,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#e9e3de',
+    position: 'relative'
+  },
+  homeMissionTileImage: {
+    position: 'absolute',
+    top: -4,
+    left: 0,
+    width: '100%',
+    height: 142
+  },
+  homeMissionTileScrim: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 48,
+    backgroundColor: 'rgba(0, 0, 0, 0.18)'
+  },
+  homeMissionTileLabel: {
+    position: 'absolute',
+    left: 9,
+    right: 8,
+    bottom: 8,
+    fontFamily: fontFamilies.logo,
+    color: '#ffffff',
+    fontSize: 18,
+    lineHeight: 22,
+    fontWeight: '500',
+    letterSpacing: 0,
+    textShadowColor: 'rgba(0, 0, 0, 0.62)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 7
+  },
+  homeMissionGenerateButton: {
+    marginTop: 20,
+    height: 54,
+    borderRadius: 9,
+    backgroundColor: '#050505',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 11,
+    shadowColor: '#000000',
+    shadowOpacity: 0.24,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 9 },
+    elevation: 8
+  },
+  homeMissionGenerateText: {
+    fontFamily: fontFamilies.bodySemiBold,
+    color: '#ffffff',
+    fontSize: 16,
+    lineHeight: 21,
+    fontWeight: '700',
+    letterSpacing: 0
   },
   homeHeroLeftPane: {
     position: 'absolute',
@@ -9899,8 +10185,8 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: '47%',
-    paddingTop: 16,
-    paddingLeft: 13,
+    paddingTop: 15,
+    paddingLeft: 14,
     paddingRight: 9,
     paddingBottom: 12,
     zIndex: 6
@@ -9908,33 +10194,33 @@ const styles = StyleSheet.create({
   homeHeroKicker: {
     ...typography.label,
     color: '#6f737c',
-    fontSize: 10,
-    lineHeight: 13,
+    fontSize: 9,
+    lineHeight: 12,
     fontWeight: '500',
-    letterSpacing: 5
+    letterSpacing: 4
   },
   homeHeroEditorialTitle: {
     fontFamily: fontFamilies.logo,
-    marginTop: 11,
+    marginTop: 10,
     color: '#050505',
-    fontSize: 26,
-    lineHeight: 29,
+    fontSize: 24,
+    lineHeight: 27,
     fontWeight: '400',
     letterSpacing: 0
   },
   homeHeroEditorialText: {
     ...typography.body,
-    marginTop: 8,
+    marginTop: 9,
     maxWidth: 162,
     color: '#707782',
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 12,
+    lineHeight: 17,
     fontWeight: '500'
   },
   homePrimaryTryOnButton: {
-    marginTop: 12,
-    height: 36,
-    width: 146,
+    marginTop: 13,
+    height: 35,
+    width: 138,
     borderRadius: 7,
     backgroundColor: '#161719',
     flexDirection: 'row',
@@ -9957,8 +10243,8 @@ const styles = StyleSheet.create({
   },
   homeSecondaryWardrobeButton: {
     marginTop: 8,
-    height: 36,
-    width: 146,
+    height: 35,
+    width: 138,
     borderRadius: 7,
     borderWidth: 1,
     borderColor: '#2b2b2b',
@@ -10022,9 +10308,9 @@ const styles = StyleSheet.create({
   homeHeroGarmentPanel: {
     position: 'absolute',
     left: 50,
-    top: 162,
-    width: 74,
-    height: 80,
+    top: 156,
+    width: 70,
+    height: 76,
     borderRadius: 7,
     overflow: 'hidden',
     borderWidth: 1,
@@ -10048,11 +10334,11 @@ const styles = StyleSheet.create({
   homeHeroRoundAction: {
     position: 'absolute',
     left: '50.5%',
-    top: 108,
-    width: 46,
-    height: 46,
-    marginLeft: -23,
-    borderRadius: 23,
+    top: 105,
+    width: 44,
+    height: 44,
+    marginLeft: -22,
+    borderRadius: 22,
     backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
@@ -10064,9 +10350,9 @@ const styles = StyleSheet.create({
     elevation: 4
   },
   homeStylistPromptCard: {
-    marginTop: 22,
-    marginHorizontal: 17,
-    height: 130,
+    marginTop: 10,
+    marginHorizontal: 18,
+    height: 122,
     borderRadius: 8,
     overflow: 'hidden',
     backgroundColor: '#f4e2dc',
@@ -10075,12 +10361,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center'
   },
+  homeStylistPromptHead: {
+    marginTop: 28,
+    paddingHorizontal: 18
+  },
   homeStylistPromptCopy: {
     flex: 1,
     minWidth: 0,
-    paddingLeft: 20,
+    paddingLeft: 18,
     paddingRight: 10,
-    paddingVertical: 16,
+    paddingVertical: 15,
     justifyContent: 'flex-start'
   },
   homeStylistPromptTitleRow: {
@@ -10092,15 +10382,15 @@ const styles = StyleSheet.create({
   homeStylistPromptTitle: {
     fontFamily: fontFamilies.logo,
     color: '#171412',
-    fontSize: 16,
-    lineHeight: 21,
+    fontSize: 15,
+    lineHeight: 20,
     fontWeight: '400',
     letterSpacing: 0
   },
   homeStylistPromptText: {
     ...typography.smallBody,
     maxWidth: 168,
-    marginTop: 6,
+    marginTop: 0,
     color: '#342d2a',
     fontSize: 11,
     lineHeight: 15,
@@ -10108,9 +10398,9 @@ const styles = StyleSheet.create({
   },
   homeStylistPromptButton: {
     alignSelf: 'flex-start',
-    minHeight: 38,
-    marginTop: 11,
-    borderRadius: 19,
+    minHeight: 36,
+    marginTop: 10,
+    borderRadius: 18,
     backgroundColor: '#050505',
     paddingHorizontal: 17,
     flexDirection: 'row',
@@ -10127,9 +10417,9 @@ const styles = StyleSheet.create({
   },
   homeStylistPromptVisual: {
     position: 'relative',
-    width: 128,
-    height: 108,
-    marginRight: 13
+    width: 118,
+    height: 100,
+    marginRight: 12
   },
   homeStylistPromptLookTile: {
     position: 'absolute',
@@ -10147,28 +10437,244 @@ const styles = StyleSheet.create({
   homeStylistPromptLookTileBack: {
     left: 5,
     top: 30,
-    width: 58,
-    height: 62,
+    width: 54,
+    height: 58,
     transform: [{ rotate: '-7deg' }]
   },
   homeStylistPromptLookTileFront: {
     right: 6,
     top: 20,
-    width: 68,
-    height: 76,
+    width: 64,
+    height: 72,
     transform: [{ rotate: '5deg' }]
   },
   homeStylistPromptLookTileAccent: {
     left: 48,
     bottom: 8,
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     transform: [{ rotate: '-3deg' }]
   },
   homeStylistPromptLookImage: {
     width: '100%',
     height: '100%'
+  },
+  homeAiRecommendationsHead: {
+    marginTop: 14,
+    paddingHorizontal: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 14
+  },
+  homeAiGenerateLink: {
+    minHeight: 34,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5
+  },
+  homeAiGenerateText: {
+    ...typography.caption,
+    color: '#9b5658',
+    fontSize: 13,
+    lineHeight: 17,
+    fontWeight: '600'
+  },
+  homeAiRecommendationTrack: {
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    gap: 14,
+    paddingRight: 30
+  },
+  homeAiRecommendationCard: {
+    width: 250,
+    minHeight: 132,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: '#efe8e4',
+    backgroundColor: '#ffffff',
+    overflow: 'hidden',
+    shadowColor: '#2f211c',
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2
+  },
+  homeAiRecommendationImages: {
+    height: 78,
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    flexDirection: 'row',
+    gap: 13
+  },
+  homeAiRecommendationImage: {
+    flex: 1,
+    height: '100%',
+    borderRadius: 8,
+    backgroundColor: '#f2eeeb'
+  },
+  homeAiRecommendationFooter: {
+    minHeight: 50,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12
+  },
+  homeAiRecommendationTitle: {
+    ...typography.smallBody,
+    flex: 1,
+    color: '#504c4a',
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '500'
+  },
+  homeTryOnStudioCard: {
+    marginTop: 18,
+    marginHorizontal: 18,
+    minHeight: 226,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: '#e6ded8',
+    backgroundColor: '#fffdf9',
+    paddingHorizontal: 12,
+    paddingTop: 13,
+    paddingBottom: 12,
+    shadowColor: '#301f17',
+    shadowOpacity: 0.04,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 2
+  },
+  homeTryOnStudioCopy: {
+    paddingLeft: 3
+  },
+  homeTryOnStudioTitle: {
+    fontFamily: fontFamilies.logo,
+    color: '#0b0b0b',
+    fontSize: 24,
+    lineHeight: 27,
+    fontWeight: '400',
+    letterSpacing: 0
+  },
+  homeTryOnStudioSubtitle: {
+    ...typography.smallBody,
+    marginTop: 3,
+    color: '#504841',
+    fontSize: 13,
+    lineHeight: 16,
+    fontWeight: '500'
+  },
+  homeTryOnStudioBody: {
+    marginTop: 7,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10
+  },
+  homeTryOnCompareFrame: {
+    flex: 1,
+    height: 140,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#e6dfd8',
+    flexDirection: 'row',
+    position: 'relative'
+  },
+  homeTryOnComparePane: {
+    flex: 1,
+    overflow: 'hidden',
+    backgroundColor: '#ddd5cc',
+    position: 'relative'
+  },
+  homeTryOnCompareImageBefore: {
+    position: 'absolute',
+    left: -21,
+    right: -21,
+    top: -12,
+    bottom: -26,
+    width: '135%',
+    height: '125%'
+  },
+  homeTryOnCompareImageAfter: {
+    position: 'absolute',
+    left: -20,
+    right: -20,
+    top: -15,
+    bottom: -18,
+    width: '138%',
+    height: '125%'
+  },
+  homeTryOnCompareDivider: {
+    width: 1,
+    backgroundColor: '#ffffff'
+  },
+  homeTryOnCompareHandle: {
+    position: 'absolute',
+    left: '50%',
+    top: '50%',
+    width: 28,
+    height: 28,
+    marginLeft: -14,
+    marginTop: -14,
+    borderRadius: 14,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e8e0db',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#111111',
+    shadowOpacity: 0.12,
+    shadowRadius: 7,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3
+  },
+  homeTryOnCompareBadge: {
+    position: 'absolute',
+    left: 7,
+    bottom: 7,
+    minHeight: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.62)',
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  homeTryOnCompareBadgeRight: {
+    left: undefined,
+    right: 7
+  },
+  homeTryOnCompareBadgeText: {
+    ...typography.caption,
+    color: '#ffffff',
+    fontSize: 10,
+    lineHeight: 12,
+    fontWeight: '700'
+  },
+  homeTryOnStudioButton: {
+    width: 105,
+    minHeight: 44,
+    borderRadius: 10,
+    backgroundColor: '#050505',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingHorizontal: 9,
+    shadowColor: '#000000',
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4
+  },
+  homeTryOnStudioButtonText: {
+    fontFamily: fontFamilies.logo,
+    color: '#ffffff',
+    fontSize: 14,
+    lineHeight: 17,
+    fontWeight: '400',
+    letterSpacing: 0
   },
   homeSectionBlock: {
     marginTop: 26,
@@ -10469,7 +10975,7 @@ const styles = StyleSheet.create({
     rowGap: 30
   },
   homeProductCard: {
-    width: '47%'
+    width: '46.5%'
   },
   homeProductCardRail: {
     width: 156,
@@ -10477,7 +10983,7 @@ const styles = StyleSheet.create({
   },
   homeProductImageWrap: {
     aspectRatio: productImageAspectRatio,
-    borderRadius: 9,
+    borderRadius: 8,
     overflow: 'hidden',
     backgroundColor: '#eee7e2',
     position: 'relative'
@@ -10518,7 +11024,7 @@ const styles = StyleSheet.create({
   },
   homeProductEyebrow: {
     ...typography.caption,
-    marginTop: 9,
+    marginTop: 8,
     color: '#a39b96',
     fontSize: 9,
     fontWeight: '700',
@@ -10528,8 +11034,8 @@ const styles = StyleSheet.create({
     ...typography.productTitle,
     marginTop: 3,
     color: '#171717',
-    fontSize: 13,
-    lineHeight: 17,
+    fontSize: 12,
+    lineHeight: 16,
     fontWeight: '500',
     letterSpacing: 0
   },
@@ -10680,10 +11186,10 @@ const styles = StyleSheet.create({
     height: '100%'
   },
   homeCommerceSection: {
-    marginTop: 30
+    marginTop: 34
   },
   homeCommerceHead: {
-    paddingHorizontal: 18,
+    paddingHorizontal: 22,
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'flex-start'
@@ -10695,8 +11201,8 @@ const styles = StyleSheet.create({
   homeCommerceTitle: {
     ...typography.h2,
     color: '#1f1b19',
-    fontSize: 23,
-    lineHeight: 29,
+    fontSize: 22,
+    lineHeight: 28,
     fontWeight: '600',
     letterSpacing: 0
   },
@@ -10711,12 +11217,12 @@ const styles = StyleSheet.create({
     letterSpacing: 0
   },
   homeCommerceTrack: {
-    paddingTop: 18,
-    paddingHorizontal: 18,
+    paddingTop: 20,
+    paddingHorizontal: 22,
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    rowGap: 22
+    rowGap: 24
   },
   homeJournalBand: {
     marginTop: 34,
@@ -10857,7 +11363,7 @@ const styles = StyleSheet.create({
   },
   categoryScreen: {
     flex: 1,
-    backgroundColor: '#ffffff'
+    backgroundColor: '#fbf7f6'
   },
   categoryTopBar: {
     minHeight: Platform.OS === 'android' ? appTopInset + 64 : 66,
@@ -10893,7 +11399,7 @@ const styles = StyleSheet.create({
   categoryBrowser: {
     flex: 1,
     flexDirection: 'row',
-    backgroundColor: '#ffffff'
+    backgroundColor: '#fbf7f6'
   },
   categoryRail: {
     width: 78,
@@ -10901,12 +11407,13 @@ const styles = StyleSheet.create({
     flexBasis: 78,
     flexGrow: 0,
     flexShrink: 0,
-    backgroundColor: '#f6f6f9',
+    backgroundColor: '#f7efed',
     borderRightWidth: 1,
-    borderRightColor: '#e2e1e7'
+    borderRightColor: '#e3dad6'
   },
   categoryRailContent: {
-    paddingBottom: 18
+    paddingTop: 4,
+    paddingBottom: screenBottomInset + 88
   },
   categoryRailContentTablet: {
     paddingBottom: 28
@@ -10917,147 +11424,230 @@ const styles = StyleSheet.create({
     flexBasis: 96
   },
   categoryRailItem: {
-    minHeight: 82,
-    paddingVertical: 8,
-    paddingHorizontal: 5,
+    minHeight: 90,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
     alignItems: 'center',
     justifyContent: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e4ea',
+    borderBottomColor: '#e5dad6',
     position: 'relative'
   },
   categoryRailItemActive: {
-    backgroundColor: '#ffffff'
+    backgroundColor: '#ffffff',
+    shadowColor: '#5a3734',
+    shadowOpacity: 0.08,
+    shadowRadius: 9,
+    shadowOffset: { width: 3, height: 0 },
+    elevation: 2
   },
   categoryRailAccent: {
     position: 'absolute',
     left: 0,
     top: 0,
     bottom: 0,
-    width: 4,
+    width: 3,
     borderTopRightRadius: 5,
     borderBottomRightRadius: 5,
-    backgroundColor: '#9b5658'
+    backgroundColor: '#a84f59'
   },
   categoryRailImageFrame: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#ffffff'
+    backgroundColor: '#fffdfb',
+    borderWidth: 1,
+    borderColor: '#eee3df'
   },
   categoryRailImageFrameActive: {
-    backgroundColor: '#fff5f3'
+    backgroundColor: '#fff5f1',
+    borderColor: '#efcfc8'
   },
   categoryRailImage: {
     width: '100%',
     height: '100%',
     borderRadius: 22,
-    backgroundColor: '#f1eef4'
+    backgroundColor: '#f6f1ef'
   },
   categoryRailLabel: {
     marginTop: 6,
-    color: '#6b6570',
-    fontSize: 11,
-    lineHeight: 14,
-    fontWeight: '600',
+    color: '#6f696f',
+    fontSize: 9.5,
+    lineHeight: 12,
+    fontWeight: '700',
     textAlign: 'center',
     letterSpacing: 0
   },
   categoryRailLabelActive: {
-    color: '#9b5658',
-    fontWeight: '700'
+    color: '#a84f59',
+    fontWeight: '800'
   },
   categoryMain: {
     flex: 1,
-    backgroundColor: '#ffffff'
+    backgroundColor: '#fffefe'
   },
   categoryMainContent: {
-    paddingTop: 18,
-    paddingHorizontal: 16,
-    paddingBottom: 28
+    paddingTop: 14,
+    paddingHorizontal: 14,
+    paddingBottom: screenBottomInset + 104
   },
   categoryMainContentTablet: {
     paddingHorizontal: 24,
     paddingBottom: 36
   },
+  categoryFeatureBand: {
+    marginHorizontal: 0,
+    paddingHorizontal: 14,
+    paddingTop: 16,
+    paddingBottom: 17,
+    borderRadius: 10,
+    backgroundColor: '#fff7f3',
+    borderWidth: 1,
+    borderColor: '#f1e0db',
+    shadowColor: '#4d332e',
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2
+  },
   categoryKickerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginBottom: 7
+    gap: 10,
+    marginBottom: 8
   },
   categoryKicker: {
-    color: '#9d98a5',
-    fontSize: 13,
+    color: '#a18d91',
+    fontSize: 11,
     lineHeight: 16,
-    fontWeight: '700',
-    letterSpacing: 0
+    fontWeight: '800',
+    letterSpacing: 1.1
   },
   categoryKickerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#cac8cf'
+    backgroundColor: '#e3d9d5'
   },
   categoryHeadline: {
-    color: '#302c35',
-    fontSize: 21,
-    lineHeight: 27,
-    fontWeight: '700',
+    color: '#272225',
+    fontSize: 22,
+    lineHeight: 28,
+    fontWeight: '800',
+    letterSpacing: 0
+  },
+  categoryFeaturedGrid: {
+    marginTop: 18,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10
+  },
+  categoryFeaturedTile: {
+    flex: 1,
+    minHeight: 112,
+    alignItems: 'center',
+    justifyContent: 'flex-start'
+  },
+  categoryFeaturedImageFrame: {
+    width: 78,
+    height: 78,
+    borderRadius: 39,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fffdfb',
+    borderWidth: 1,
+    borderColor: '#ecd9d2',
+    shadowColor: '#573830',
+    shadowOpacity: 0.12,
+    shadowRadius: 11,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3
+  },
+  categoryFeaturedImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 39,
+    backgroundColor: '#f8eeeb'
+  },
+  categoryFeaturedLabel: {
+    width: '100%',
+    marginTop: 10,
+    color: '#4d464d',
+    fontSize: 13,
+    lineHeight: 16,
+    fontWeight: '800',
+    textAlign: 'center',
     letterSpacing: 0
   },
   categoryTileGrid: {
-    marginTop: 16,
+    marginTop: 20,
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'flex-start',
-    columnGap: 8,
-    rowGap: 20
+    justifyContent: 'space-between',
+    rowGap: 24
   },
   categoryTileGridTablet: {
     rowGap: 26
   },
   categoryTile: {
-    width: '31.5%',
+    width: '30.8%',
     minHeight: 126,
-    alignItems: 'center'
+    alignItems: 'center',
+    paddingTop: 3
   },
   categoryContentImageFrame: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+    width: 74,
+    height: 74,
+    borderRadius: 37,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#fbf8fb',
+    backgroundColor: '#fbf3ef',
     borderWidth: 1,
-    borderColor: '#eeeef2'
+    borderColor: '#eee3df',
+    shadowColor: '#4d3a35',
+    shadowOpacity: 0.09,
+    shadowRadius: 9,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2
   },
   categoryContentImage: {
     width: '100%',
     height: '100%',
     borderRadius: 35,
-    backgroundColor: '#f4f1f5'
+    backgroundColor: '#f7f1ef'
   },
   categoryTileLabel: {
     width: '100%',
-    marginTop: 8,
-    color: '#68636f',
-    fontSize: 14,
-    lineHeight: 17,
-    fontWeight: '600',
+    marginTop: 9,
+    color: '#5a545d',
+    fontSize: 13,
+    lineHeight: 16,
+    fontWeight: '700',
     textAlign: 'center',
     letterSpacing: 0
   },
   categorySectionTitle: {
     ...typography.h2,
-    marginTop: 21,
-    color: '#302c35',
-    fontSize: 22,
-    lineHeight: 28,
-    fontWeight: '700'
+    color: '#272225',
+    fontSize: 21,
+    lineHeight: 27,
+    fontWeight: '800'
+  },
+  categorySectionHeader: {
+    marginTop: 30,
+    paddingHorizontal: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12
+  },
+  categorySectionRule: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#eadfdb'
   },
   shopTopBar: {
     height: 52,
@@ -11622,6 +12212,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 20
+  },
+  wardrobeTryButtonDock: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 18,
+    zIndex: 5,
+    alignItems: 'center'
   },
   wardrobeTryText: {
     ...typography.caption,
@@ -12618,7 +13216,7 @@ const styles = StyleSheet.create({
     minHeight: Platform.OS === 'android' ? appTopInset + 58 : 64,
     paddingTop: Platform.OS === 'android' ? appTopInset + 8 : 8,
     paddingBottom: 8,
-    paddingLeft: 8,
+    paddingLeft: 12,
     paddingRight: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#e3e1e7',
@@ -12626,13 +13224,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8
-  },
-  searchBackButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: 'center',
-    justifyContent: 'center'
   },
   searchCompactInputWrap: {
     flex: 1,
@@ -13652,13 +14243,60 @@ const styles = StyleSheet.create({
   },
   aiStudioScreen: {
     flex: 1,
-    backgroundColor: '#fbf7f6'
+    backgroundColor: '#faf5f3'
   },
   aiStudioContent: {
-    paddingTop: 18,
-    paddingBottom: bottomNavigationHeight + screenBottomInset + 104,
+    paddingTop: 14,
+    paddingBottom: screenBottomInset + 104,
     paddingHorizontal: 16,
-    backgroundColor: '#fbf7f6'
+    backgroundColor: '#faf5f3'
+  },
+  aiStudioHero: {
+    minHeight: 76,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#eadbd6',
+    backgroundColor: '#fffdfb',
+    paddingHorizontal: 15,
+    paddingVertical: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 13,
+    shadowColor: '#3d2924',
+    shadowOpacity: 0.07,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4
+  },
+  aiStudioHeroIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#f8efed',
+    borderWidth: 1,
+    borderColor: '#eadbd6',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  aiStudioHeroCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  aiStudioHeroLabel: {
+    ...typography.label,
+    color: '#a56a65',
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: '800',
+    letterSpacing: 1.4
+  },
+  aiStudioHeroTitle: {
+    ...typography.h2,
+    marginTop: 4,
+    color: '#211c1a',
+    fontSize: 22,
+    lineHeight: 27,
+    fontWeight: '800'
   },
   aiHeroPanel: {
     minHeight: 92,
@@ -13755,34 +14393,44 @@ const styles = StyleSheet.create({
     fontWeight: '500'
   },
   aiStarterPanel: {
-    marginTop: 18
+    marginTop: 16
   },
   aiStarterTitle: {
     ...typography.label,
-    color: '#8d8682',
+    color: '#9b5658',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.8,
     textTransform: 'uppercase'
   },
   aiStarterGrid: {
     marginTop: 10,
-    gap: 10
+    gap: 9
   },
   aiStarterCard: {
-    minHeight: 76,
-    borderRadius: 10,
+    minHeight: 62,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#ebe3df',
+    borderColor: '#eaded9',
     backgroundColor: '#fffdfb',
-    paddingHorizontal: 14,
-    paddingVertical: 13,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12
+    gap: 13,
+    shadowColor: '#3d2924',
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2
   },
   aiStarterIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#f8efed',
+    borderWidth: 1,
+    borderColor: '#f0ded9',
     alignItems: 'center',
     justifyContent: 'center'
   },
@@ -13793,37 +14441,51 @@ const styles = StyleSheet.create({
   aiStarterCardTitle: {
     ...typography.productTitle,
     color: '#211c1a',
-    fontWeight: '700'
+    fontSize: 14,
+    lineHeight: 17,
+    fontWeight: '800'
   },
   aiStarterCardText: {
     ...typography.caption,
     marginTop: 3,
     color: '#706762',
-    fontWeight: '500'
+    fontSize: 11,
+    lineHeight: 13,
+    fontWeight: '600'
   },
   aiChatThread: {
-    paddingTop: 18,
-    gap: 14
+    paddingTop: 12,
+    gap: 10
   },
   aiMessageBlock: {
     gap: 10
   },
   aiMessageBubble: {
-    maxWidth: '88%',
-    minHeight: 42,
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
+    maxWidth: '91%',
+    minHeight: 38,
+    borderRadius: 14,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8
+    alignItems: 'flex-start',
+    gap: 9
   },
   aiMessageBubbleAssistant: {
     alignSelf: 'flex-start',
-    borderBottomLeftRadius: 5,
+    borderBottomLeftRadius: 8,
     borderWidth: 1,
-    borderColor: '#e7dfda',
+    borderColor: '#eaded9',
     backgroundColor: '#fffdfb'
+  },
+  aiMessageBubbleIntro: {
+    maxWidth: '100%',
+    width: '100%',
+    borderRadius: 13,
+    borderBottomLeftRadius: 13,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+    backgroundColor: '#fff8f4',
+    borderColor: '#ead8d1'
   },
   aiMessageBubbleUser: {
     alignSelf: 'flex-end',
@@ -13838,9 +14500,19 @@ const styles = StyleSheet.create({
     ...typography.body,
     flexShrink: 1,
     color: '#2d2927',
-    fontSize: 15,
-    lineHeight: 21,
+    fontSize: 13,
+    lineHeight: 18,
     fontWeight: '500'
+  },
+  aiMessageSparkBadge: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#efded7',
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   aiMessageTextUser: {
     color: '#ffffff',
@@ -14136,39 +14808,47 @@ const styles = StyleSheet.create({
   },
   aiComposer: {
     position: 'absolute',
-    left: 14,
-    right: 14,
-    bottom: Platform.OS === 'ios' ? bottomNavigationHeight + 34 : bottomNavigationHeight + 28,
+    left: 18,
+    right: 18,
+    zIndex: 45,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     borderRadius: 18,
     borderWidth: 1,
     borderColor: '#e8ddd8',
-    backgroundColor: '#fffdfb',
-    padding: 8,
+    backgroundColor: 'rgba(255, 253, 251, 0.98)',
+    padding: 6,
     shadowColor: '#1a1412',
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 6
+    shadowOpacity: 0.13,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 9
   },
   aiComposerInput: {
     ...typography.body,
     flex: 1,
     minHeight: 42,
     borderRadius: 13,
-    backgroundColor: '#f8f4f2',
-    paddingHorizontal: 14,
-    color: '#171412'
+    backgroundColor: '#f7f1ef',
+    paddingHorizontal: 15,
+    color: '#171412',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '500'
   },
   aiSendButton: {
     width: 42,
     height: 42,
     borderRadius: 13,
-    backgroundColor: '#9b5658',
+    backgroundColor: '#1a1716',
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    shadowColor: '#1a1412',
+    shadowOpacity: 0.16,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3
   },
   detailMedia: {
     margin: 16,
