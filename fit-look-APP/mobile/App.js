@@ -16,6 +16,7 @@ import {
   KeyboardAvoidingView,
   Linking,
   Modal,
+  NativeModules,
   Platform,
   Pressable,
   RefreshControl,
@@ -6153,6 +6154,7 @@ function TopUpCreditCard({ plan, selected, onPress, style }) {
 
 function loadExpoIapModule() {
   if (Platform.OS !== 'ios') return null;
+  if (!NativeModules?.ExpoIap) return null;
   try {
     return require('expo-iap');
   } catch {
