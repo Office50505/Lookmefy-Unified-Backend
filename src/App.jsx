@@ -7880,6 +7880,9 @@ function StyleBotProduct({ product, tryOn, loading, error, onFullscreen, onTryOn
     : displayBrand(product);
   const canOpenDetail = Boolean(product.id) && !product.searchLink;
   const localDetailHref = canOpenDetail ? `/product/${encodeURIComponent(product.id)}` : '';
+  const shopHref = product.shopUrl || product.productUrl || product.affiliateLink || product.url || product.searchLink || '';
+  const externalShop = Boolean(shopHref) && !canOpenDetail;
+  const detailHref = onlineProduct ? shopHref : localDetailHref;
 
   useEffect(() => {
     setTryOnImageFailed(false);
@@ -7910,7 +7913,7 @@ function StyleBotProduct({ product, tryOn, loading, error, onFullscreen, onTryOn
     <article className="concierge-product-card">
       {hasProductImage ? (
         canOpenDetail ? (
-        <a className="concierge-product-image" href={localDetailHref} aria-label={`Open ${product.name}`} onClick={openProductDetail}>
+        <a className="concierge-product-image" href={detailHref} aria-label={`Open ${product.name}`} onClick={openProductDetail}>
           <OptimizedImage src={displayedImage} alt={product.name} fallbackSrc="" onError={() => hasUsableTryOn ? setTryOnImageFailed(true) : setProductImageFailed(true)} />
         </a>
         ) : (
@@ -7922,19 +7925,14 @@ function StyleBotProduct({ product, tryOn, loading, error, onFullscreen, onTryOn
       {localProduct ? <WishlistHeartButton product={product} className="card-wishlist-heart" /> : null}
       {product.sourceLabel ? <span className="concierge-source-badge">{product.sourceLabel}</span> : null}
       <p>{visibleBrand}</p>
-      <h2>
-        {canOpenDetail ? (
-          <a href={localDetailHref} onClick={openProductDetail}>{product.name}</a>
-        ) : (
-          <button className="concierge-product-title-button" type="button" onClick={openProductPreview} disabled={!displayedImage}>{product.name}</button>
-        )}
-      </h2>
+      <h2><a href={detailHref} onClick={detailHref ? openProductDetail : (event) => { event.preventDefault(); openProductPreview(); }}>{product.name}</a></h2>
       <strong>{hasVerifiedPrice ? formatMoney(product.price, product.currency) : 'Price unavailable'}</strong>
       {loading && <span className="concierge-product-state">Preparing preview</span>}
       {hasUsableTryOn && <button className="concierge-preview-action" type="button" onClick={() => onFullscreen({ src: tryOn.imageUrl, alt: `AI try-on for ${product.name}`, title: product.name })}>View preview</button>}
       {tryOn?.imageUrl && !hasUsableTryOn && <span className="concierge-product-state">Preview unavailable</span>}
       {error && <span className="concierge-product-error">{error}</span>}
       {canTryOn ? <button className="concierge-preview-action" type="button" disabled={loading} onClick={onTryOn}>{tryOn?.imageUrl ? 'Generate Again' : 'Generate Try-On'}</button> : null}
+      {!canTryOn && shopHref ? <a className="concierge-preview-action" href={shopHref} target="_blank" rel="noreferrer">{product.searchLink ? 'Search Amazon' : externalShop ? 'View on Amazon' : 'View product'}</a> : null}
       {!product.searchLink && product.tryOnAvailable !== false && product.aiTryOnAvailable !== false && !hasProductImage ? <span className="concierge-product-state">Try-on needs a product image</span> : null}
     </article>
   );

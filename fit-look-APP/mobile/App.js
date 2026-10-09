@@ -508,6 +508,11 @@ function aiFeatureErrorMessage(error, fallback = 'AI request could not be comple
   return message;
 }
 
+function isAuthExpiredError(error) {
+  const message = String(error?.message || error?.detail || '').trim();
+  return Number(error?.status) === 401 || /session expired|session has ended|invalid or expired session|please log in again|sign in again/i.test(message);
+}
+
 function userAvatarUrl(user) {
   const avatarUrl = user?.avatarPhotoUrl || user?.profilePhotoUrl || user?.photoUrl || user?.imageUrl || '';
   const bodyUrl = user?.bodyPhotoUrl || '';
@@ -592,6 +597,12 @@ function productGenderForUser(user) {
   return '';
 }
 
+function productApiGenderForUser(user) {
+  if (user?.genderPreference === 'male') return 'male';
+  if (user?.genderPreference === 'female') return 'female';
+  return '';
+}
+
 function defaultCategorySectionForUser(user) {
   if (user?.genderPreference === 'male') return 'men';
   if (user?.genderPreference === 'female') return 'western';
@@ -662,6 +673,16 @@ function tryOnImageUrl(tryOn) {
 
 function tryOnVideoUrl(tryOn) {
   return mediaUrlWithVersion(tryOn?.videoUrl, tryOnMediaVersion(tryOn, 'video'));
+}
+
+function isLocalMockTryOn(tryOn) {
+  return String(tryOn?.provider || '').toLowerCase() === 'local'
+    || String(tryOn?.model || '').toLowerCase() === 'local-mock-tryon';
+}
+
+function tryOnDisplayLabel(tryOn, videoUri = '') {
+  if (isLocalMockTryOn(tryOn)) return videoUri ? 'Mock Video' : 'Mock Preview';
+  return videoUri ? 'Video Try-On' : 'AI Try-On';
 }
 
 function wait(ms) {
@@ -1417,8 +1438,11 @@ function userCreditBalance(user) {
 function headerCreditLabel(user) {
   const rawCredits = userCreditBalance(user);
   if (rawCredits >= 1000000) return `${Math.floor(rawCredits / 100000) / 10}M`;
-  if (rawCredits >= 10000) return `${Math.floor(rawCredits / 100) / 10}k`;
-  if (rawCredits >= 1000) return `${Math.floor(rawCredits / 100) / 10}k`;
+  if (rawCredits >= 1000) {
+    const compact = rawCredits / 1000;
+    const formatted = compact >= 10 ? Math.floor(compact).toString() : compact.toFixed(1).replace(/\.0$/, '');
+    return `${formatted}k`;
+  }
   return rawCredits.toLocaleString('en-IN');
 }
 
@@ -1457,7 +1481,7 @@ function AppHeader({ onNavigate, title = 'Lookmefy', leftIcon = 'menu-outline', 
         ) : null}
         {!showAvatar ? (
           <TouchableOpacity accessibilityRole="button" accessibilityLabel={creditAccessibilityLabel} style={[styles.appHeaderAction, styles.appHeaderCreditAction]} onPress={() => onNavigate('tokens')}>
-            <Ionicons name="sparkles-outline" size={15} color="#171412" />
+            <Ionicons name="sparkles-outline" size={11} color="#171412" />
             <Text style={styles.appHeaderCreditText} numberOfLines={1}>{creditLabel}</Text>
           </TouchableOpacity>
         ) : null}
@@ -1757,7 +1781,9 @@ const ProductCard = memo(function ProductCard({ product, tryOn, loading, videoLo
   const discount = hasDiscount ? `${Math.round(((product.compareAtPrice - product.price) / product.compareAtPrice) * 100)}% off` : '';
   const videoUri = imageUrl(tryOn?.videoUrl);
   const hasTryOnImage = Boolean(tryOn?.imageUrl);
+  const tryOnLabel = tryOnDisplayLabel(tryOn, videoUri);
   const useHomeImageFrame = variant === 'homeFrame';
+  const useStableGridBody = variant === 'homeFrame' || variant === 'grid';
   const responsiveCardStyle = variant === 'carousel' ? null : layout.productGridItemStyle;
   return (
     <Pressable
@@ -1773,11 +1799,11 @@ const ProductCard = memo(function ProductCard({ product, tryOn, loading, videoLo
           <ProductImage product={product} tryOn={tryOn} style={styles.productImage} alt={product?.title || product?.name} />
         )}
         {locked ? <View style={styles.lockOverlay}><Ionicons name="lock-closed" size={22} color="#fff" /></View> : null}
-        {hasTryOnImage ? <Text style={styles.badge}>{videoUri ? 'Video Try-On' : 'AI Try-On'}</Text> : product?.isNew ? <Text style={styles.badge}>New</Text> : product?.badge ? <Text style={styles.badge}>{product.badge}</Text> : null}
+        {hasTryOnImage ? <Text style={styles.badge}>{tryOnLabel}</Text> : product?.isNew ? <Text style={styles.badge}>New</Text> : product?.badge ? <Text style={styles.badge}>{product.badge}</Text> : null}
         {onAddToWishlist && !locked ? <WishlistDoneButton saved={isWishlisted} compact={variant === 'carousel'} onPress={() => onAddToWishlist(product)} /> : null}
         {loading || videoLoading ? <TryOnLoading text={videoLoading ? 'Video' : 'Generating'} /> : null}
       </View>
-      <View style={styles.productBody}>
+      <View style={[styles.productBody, useStableGridBody && styles.productGridCardBody]}>
         <Text style={styles.productTitle} numberOfLines={2}>{product?.title || product?.name || 'Untitled product'}</Text>
         <Text style={styles.productBrand} numberOfLines={1}>{product?.displayLabel || titleCase(product?.category || 'Catalog')}</Text>
         <View style={styles.ratingRow}>
@@ -1800,10 +1826,10 @@ const ProductCard = memo(function ProductCard({ product, tryOn, loading, videoLo
             icon="sparkles-outline"
             disabled={loading}
             onPress={onTryOn}
-            style={styles.cardButton}
+            style={[styles.cardButton, useStableGridBody && styles.productGridCardButton]}
           />
         ) : null}
-        {hasTryOnImage && onTryOnVideo ? (
+        {onTryOnVideo ? (
           <AppButton
             label={videoLoading ? 'Video...' : videoUri ? 'New Video' : 'Video Try-On'}
             icon="videocam-outline"
@@ -2059,6 +2085,8 @@ const categoryPageContent = {
 };
 const homeProductFeedPageSize = 48;
 const shopProductGridLimit = 50;
+const shopProductInitialVisibleCount = 10;
+const shopProductVisibleStep = 10;
 const searchQuickSuggestions = ['short kurti', 'saree', 'kurti', 'tshirt', 'earring', 'top for women', 'slipper', 'watch', 'top', 'kurti set', 'shoes', 'eyewear'];
 
 function categorySearchText(value = '') {
@@ -2093,10 +2121,15 @@ const categorySearchReferences = (() => {
   return references;
 })();
 
-function PageBackRow({ children }) {
-  if (!children) return null;
+function PageBackRow({ onBack, children }) {
+  if (!onBack && !children) return null;
   return (
     <View style={styles.pageBackRow}>
+      {onBack ? (
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Go back" activeOpacity={0.86} style={styles.pageBackButton} onPress={onBack}>
+          <Ionicons name="chevron-back" size={21} color="#111111" />
+        </TouchableOpacity>
+      ) : null}
       {children}
     </View>
   );
@@ -2105,7 +2138,7 @@ function PageBackRow({ children }) {
 function ShopTopBar({ onNavigate, user, onBack }) {
   return (
     <>
-      <AppHeader onNavigate={onNavigate} user={user} compact />
+      <AppHeader onNavigate={onNavigate} user={user} compact showSearch={false} />
       <PageBackRow onBack={onBack} />
     </>
   );
@@ -2140,8 +2173,9 @@ function CategoryBubble({ item, size = 'large', active = false }) {
   );
 }
 
-function CategoryLandingScreen({ selectedCategory, onSelectCategory, onNavigate, onBack, user }) {
+function CategoryLandingScreen({ selectedCategory, onSelectCategory, onNavigate, onBack, user, initialScrollY = 0, onScrollPositionChange }) {
   const layout = useResponsiveLayout();
+  const categoryMainScrollRef = useRef(null);
   const [categoryQuery, setCategoryQuery] = useState('');
   const content = categoryPageContent[selectedCategory] || categoryPageContent.popular;
   const normalizedCategoryQuery = categorySearchText(categoryQuery).toLowerCase();
@@ -2179,6 +2213,14 @@ function CategoryLandingScreen({ selectedCategory, onSelectCategory, onNavigate,
     if (query) onNavigate('shop', { q: query });
   };
   const openTile = (item) => onNavigate('shop', item.params || { sort: 'newest' });
+
+  useEffect(() => {
+    if (!initialScrollY) return undefined;
+    const restoreTimer = setTimeout(() => {
+      categoryMainScrollRef.current?.scrollTo?.({ y: initialScrollY, animated: false });
+    }, 80);
+    return () => clearTimeout(restoreTimer);
+  }, [initialScrollY]);
 
   return (
     <View style={styles.categoryScreen}>
@@ -2246,7 +2288,14 @@ function CategoryLandingScreen({ selectedCategory, onSelectCategory, onNavigate,
           })}
         </ScrollView>
 
-        <ScrollView style={styles.categoryMain} contentContainerStyle={[styles.categoryMainContent, layout.isTablet && styles.categoryMainContentTablet]} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          ref={categoryMainScrollRef}
+          style={styles.categoryMain}
+          contentContainerStyle={[styles.categoryMainContent, layout.isTablet && styles.categoryMainContentTablet]}
+          showsVerticalScrollIndicator={false}
+          scrollEventThrottle={16}
+          onScroll={(event) => onScrollPositionChange?.(event.nativeEvent.contentOffset.y)}
+        >
           <View style={styles.categoryFeatureBand}>
             <View style={styles.categoryKickerRow}>
               <Text style={styles.categoryKicker}>{content.kicker}</Text>
@@ -2281,13 +2330,17 @@ function CategoryLandingScreen({ selectedCategory, onSelectCategory, onNavigate,
   );
 }
 
-function CurationProductCard({ product, onPress, onTryOn, onAddToWishlist, isWishlisted, rail = false }) {
+function CurationProductCard({ product, onPress, onTryOn, onVideoTryOn, onAddToWishlist, isWishlisted, rail = false }) {
   const layout = useResponsiveLayout();
   const price = Number(product.price);
   const discount = productDiscountPercent(product);
   const handleTryOnPress = (event) => {
     event?.stopPropagation?.();
     onTryOn?.();
+  };
+  const handleVideoTryOnPress = (event) => {
+    event?.stopPropagation?.();
+    onVideoTryOn?.();
   };
   const handleWishlistPress = (event) => {
     event?.stopPropagation?.();
@@ -2306,12 +2359,18 @@ function CurationProductCard({ product, onPress, onTryOn, onAddToWishlist, isWis
         <Text style={styles.homeProductPrice}>{Number.isFinite(price) ? formatMoney(price, product.currency) : 'Price unavailable'}</Text>
         {discount && Number.isFinite(Number(product.compareAtPrice)) ? <Text style={styles.homeProductComparePrice}>{formatMoney(product.compareAtPrice, product.currency)}</Text> : null}
       </View>
-      {onTryOn || (onAddToWishlist && rail) ? (
+      {onTryOn || onVideoTryOn || (onAddToWishlist && rail) ? (
         <View style={styles.homeProductActionRow}>
           {onTryOn ? (
             <TouchableOpacity style={styles.homeProductTryOnButton} activeOpacity={0.86} onPress={handleTryOnPress}>
               <Ionicons name="shirt-outline" size={15} color="#ffffff" />
               <Text style={styles.homeProductTryOnText}>Try On</Text>
+            </TouchableOpacity>
+          ) : null}
+          {onVideoTryOn ? (
+            <TouchableOpacity style={styles.homeProductVideoButton} activeOpacity={0.86} onPress={handleVideoTryOnPress}>
+              <Ionicons name="videocam-outline" size={14} color="#111827" />
+              <Text style={styles.homeProductVideoText}>Video Try-On</Text>
             </TouchableOpacity>
           ) : null}
           {onAddToWishlist && rail ? (
@@ -2379,6 +2438,7 @@ function HomeProductRail({ title, subtitle, products = [], loading, error, onNav
               product={product}
               onPress={() => onNavigate('product', { id: product.id })}
               onTryOn={() => onNavigate('product', { id: product.id })}
+              onVideoTryOn={() => onNavigate('product', { id: product.id })}
               onAddToWishlist={onAddToWishlist}
               isWishlisted={wishlistIds?.has(product.id)}
             />
@@ -2568,10 +2628,10 @@ function HomeBeforeAfterSlider() {
   );
 }
 
-function ProductTopBar({ onNavigate, user, onBack }) {
+function ProductTopBar({ onNavigate, user, onBack, showSearch = true }) {
   return (
     <>
-      <AppHeader onNavigate={onNavigate} user={user} compact />
+      <AppHeader onNavigate={onNavigate} user={user} compact showSearch={showSearch} />
       <PageBackRow onBack={onBack} />
     </>
   );
@@ -2685,20 +2745,18 @@ function AiStudioOutfitCard({ outfit }) {
   );
 }
 
-function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, registerTourTarget, tourFocusRequest }) {
+function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, registerTourTarget, tourFocusRequest, initialScrollY = 0, onScrollPositionChange }) {
   const layout = useResponsiveLayout();
   const homeScrollRef = useRef(null);
   const [homeRefreshKey, setHomeRefreshKey] = useState(0);
   const [homeRefreshing, setHomeRefreshing] = useState(false);
   const [homeAiRecommendationSeed, setHomeAiRecommendationSeed] = useState(0);
+  const [journalVisibleCount, setJournalVisibleCount] = useState(6);
   const preferredGender = productGenderForUser(user);
-  const curated = useProducts({ sort: 'newest', limit: homeProductFeedPageSize, gender: preferredGender, refreshKey: homeRefreshKey }, token);
+  const preferredApiGender = productApiGenderForUser(user);
+  const curated = useProducts({ sort: 'newest', limit: homeProductFeedPageSize, gender: preferredApiGender, refreshKey: homeRefreshKey }, token);
   const recommended = useRecommendedProducts(user, token, 16, homeRefreshKey);
-  const shopLookQuery = preferredGender === 'women'
-    ? { category: 'dresses', gender: 'women', sort: 'newest', limit: 8 }
-    : preferredGender === 'men'
-      ? { gender: 'men', sort: 'newest', limit: 8 }
-      : { sort: 'newest', limit: 8 };
+  const shopLookQuery = { sort: 'newest', limit: 48 };
   const shopLooks = useProducts({ ...shopLookQuery, refreshKey: homeRefreshKey }, token);
   const catalogProducts = useMemo(() => uniqueProductsWithImages(curated.products), [curated.products]);
   const arrivalProducts = useMemo(() => {
@@ -2772,7 +2830,7 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
         products: fillProductRailProducts(byRating, catalogProducts),
         loading: curated.loading,
         error: curated.error,
-        viewParams: preferredGender ? { gender: preferredGender, sort: 'newest' } : { sort: 'newest' }
+        viewParams: preferredApiGender ? { gender: preferredApiGender, sort: 'newest' } : { sort: 'newest' }
       },
       {
         id: 'best-sellers',
@@ -2781,16 +2839,13 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
         products: fillProductRailProducts(bestSellers, catalogProducts),
         loading: curated.loading,
         error: curated.error,
-        viewParams: preferredGender ? { gender: preferredGender } : {}
+        viewParams: preferredApiGender ? { gender: preferredApiGender } : {}
       }
     ].filter((section) => section.loading || uniqueProductsWithImages(section.products).length >= 4);
   }, [catalogProducts, curated.error, curated.loading, preferredGender, recommended.error, recommended.loading, recommendedProducts]);
-  const lookCategories = preferredGender === 'men'
-    ? new Set(['shirts', 't-shirts', 'pants', 'jeans', 'jackets', 'suits', 'shoes'])
-    : preferredGender === 'women'
-      ? new Set(['dresses', 'tops', 'ethnic wear', 'ethnic', 'shoes', 'accessories', 'jeans', 't-shirts'])
-      : null;
-  const shopLookProducts = shopLooks.products.filter((product) => (!lookCategories || lookCategories.has(product.category)) && (product.imageUrl || product.imageUrls?.length));
+  const shopLookProducts = shopLooks.products.filter((product) => product.imageUrl || product.imageUrls?.length);
+  const visibleShopLookProducts = shopLookProducts.slice(0, journalVisibleCount);
+  const canShowMoreLooks = journalVisibleCount < shopLookProducts.length;
   const lookLabels = preferredGender === 'men'
     ? ['Office Sharp', 'Weekend Fit', 'Denim Day', 'Sneaker Edit', 'Layered Look', 'Evening Ready']
     : ['Dinner Ready', 'Soft Floral', 'Denim Day', 'Party Edit', 'Vacation', 'Weekend'];
@@ -2802,11 +2857,6 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
     : preferredGender === 'women'
       ? 'Real dress picks from the live catalog, selected for quick outfit discovery.'
       : 'Live catalog picks selected for quick outfit discovery.';
-  const journalViewParams = preferredGender === 'women'
-    ? { category: 'dresses', gender: 'women' }
-    : preferredGender === 'men'
-      ? { gender: 'men', sort: 'newest' }
-      : { sort: 'newest' };
   const catalogTourTarget = useTourTarget('home-catalog', registerTourTarget, { request: tourFocusRequest, scrollRef: homeScrollRef, scrollOffset: 92 });
   const handleHomeRefresh = useCallback(() => {
     const nextSeed = Date.now();
@@ -2828,9 +2878,21 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
     return () => clearTimeout(refreshTimer);
   }, [curated.loading, homeRefreshing, recommended.loading, shopLooks.loading]);
 
+  useEffect(() => {
+    setJournalVisibleCount(6);
+  }, [preferredGender]);
+
+  useEffect(() => {
+    if (!initialScrollY) return undefined;
+    const restoreTimer = setTimeout(() => {
+      homeScrollRef.current?.scrollTo?.({ y: initialScrollY, animated: false });
+    }, 80);
+    return () => clearTimeout(restoreTimer);
+  }, [initialScrollY]);
+
   return (
     <View style={styles.homeScreen}>
-      <AppHeader onNavigate={onNavigate} user={user} compact />
+      <AppHeader onNavigate={onNavigate} user={user} compact showSearch={false} />
       <ScrollView
         ref={homeScrollRef}
         style={styles.homeScroll}
@@ -2844,6 +2906,7 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
             progressBackgroundColor="#fffdfb"
           />
         )}
+        onScroll={(event) => onScrollPositionChange?.(event.nativeEvent.contentOffset.y)}
         {...screenScrollProps}
       >
         <View style={styles.homeTryOnHero}>
@@ -2920,7 +2983,7 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
         products={recommendedProducts}
         loading={(curated.loading || recommended.loading) && !recommendedProducts.length}
         error={recommendedProducts.length ? '' : recommended.error || curated.error}
-        viewParams={preferredGender ? { gender: preferredGender } : {}}
+        viewParams={preferredApiGender ? { gender: preferredApiGender } : {}}
         onNavigate={onNavigate}
         onAddToWishlist={onAddToWishlist}
         wishlistIds={wishlistIds}
@@ -2934,7 +2997,7 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
         products={arrivalProducts}
         loading={curated.loading}
         error={curated.error}
-        viewParams={preferredGender ? { gender: preferredGender, sort: 'newest' } : { sort: 'newest' }}
+        viewParams={preferredApiGender ? { gender: preferredApiGender, sort: 'newest' } : { sort: 'newest' }}
         onNavigate={onNavigate}
         onAddToWishlist={onAddToWishlist}
         wishlistIds={wishlistIds}
@@ -2961,10 +3024,6 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
             <Text style={styles.homeJournalKicker}>{journalKicker}</Text>
             <Text style={styles.homeJournalTitle}>{journalTitle}</Text>
           </View>
-          <TouchableOpacity style={styles.homeJournalLink} activeOpacity={0.82} onPress={() => onNavigate('shop', journalViewParams)}>
-            <Text style={styles.homeJournalLinkText}>View all</Text>
-            <Ionicons name="arrow-forward" size={14} color="#9b5658" />
-          </TouchableOpacity>
         </View>
         <Text style={[styles.homeJournalIntro, layout.isTablet && styles.homeJournalIntroTablet]}>{journalIntro}</Text>
         {shopLooks.loading ? (
@@ -2973,7 +3032,7 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
           <StatusPanel error={shopLooks.error} empty={!shopLookProducts.length} text={preferredGender === 'men' ? 'No men looks found yet.' : 'No looks found yet.'} />
         ) : (
           <View style={styles.homeJournalGrid}>
-            {shopLookProducts.slice(0, 6).map((product, index) => {
+            {visibleShopLookProducts.map((product, index) => {
               const price = Number(product.price);
               return (
                 <TouchableOpacity key={product.id} style={[styles.homeJournalProductCard, layout.productGridWidthStyle]} activeOpacity={0.86} onPress={() => onNavigate('product', { id: product.id })}>
@@ -2988,10 +3047,38 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
                     <Text style={styles.homeJournalProductLabel} numberOfLines={1}>{product.displayLabel || titleCase(product.category || 'Catalog')}</Text>
                     <Text style={styles.homeJournalProductTitle} numberOfLines={2}>{product.title || product.name}</Text>
                     <Text style={styles.homeJournalProductPrice}>{Number.isFinite(price) ? formatMoney(price, product.currency) : 'Price unavailable'}</Text>
+                    <TouchableOpacity
+                      style={styles.homeJournalTryOnButton}
+                      activeOpacity={0.86}
+                      onPress={(event) => {
+                        event?.stopPropagation?.();
+                        onNavigate('product', { id: product.id });
+                      }}
+                    >
+                      <Ionicons name="shirt-outline" size={14} color="#ffffff" />
+                      <Text style={styles.homeJournalTryOnText}>Try On</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.homeJournalVideoButton}
+                      activeOpacity={0.86}
+                      onPress={(event) => {
+                        event?.stopPropagation?.();
+                        onNavigate('product', { id: product.id });
+                      }}
+                    >
+                      <Ionicons name="videocam-outline" size={14} color="#111827" />
+                      <Text style={styles.homeJournalVideoText}>Video Try-On</Text>
+                    </TouchableOpacity>
                   </View>
                 </TouchableOpacity>
               );
             })}
+            {canShowMoreLooks ? (
+              <TouchableOpacity style={styles.homeJournalSeeMoreButton} activeOpacity={0.86} onPress={() => setJournalVisibleCount((current) => Math.min(current + 12, shopLookProducts.length))}>
+                <Text style={styles.homeJournalSeeMoreText}>See more</Text>
+                <Ionicons name="chevron-down" size={16} color="#ffffff" />
+              </TouchableOpacity>
+            ) : null}
           </View>
         )}
       </View>
@@ -3257,7 +3344,7 @@ function SearchScreen({ initial = {}, user, token, onNavigate, onBack, onAddToWi
   );
 }
 
-function ShopScreen({ initial = {}, tryOnMode, user, setUser, token, onNavigate, onBack, onRequireAuth, onAddToWishlist, wishlistIds }) {
+function ShopScreen({ initial = {}, tryOnMode, user, setUser, token, onNavigate, onBack, onRequireAuth, onAuthExpired, onAddToWishlist, wishlistIds, initialScrollY = 0, onScrollPositionChange }) {
   if (tryOnMode) {
     return <StyleBotScreen user={user} setUser={setUser} token={token} onNavigate={onNavigate} onRequireAuth={onRequireAuth} />;
   }
@@ -3281,6 +3368,8 @@ function ShopScreen({ initial = {}, tryOnMode, user, setUser, token, onNavigate,
   const [tryOnVideoLoading, setTryOnVideoLoading] = useState({});
   const [tryOnErrors, setTryOnErrors] = useState({});
   const [tryOnVideoErrors, setTryOnVideoErrors] = useState({});
+  const [visibleProductCount, setVisibleProductCount] = useState(shopProductInitialVisibleCount);
+  const shopScrollRef = useRef(null);
   const state = useProducts({ ...filters, limit: shopProductGridLimit }, token);
   const [tryOns, setTryOns] = useTryOns(user, state.products, token);
   const resultTitle = shopResultTitle(filters, false);
@@ -3289,6 +3378,10 @@ function ShopScreen({ initial = {}, tryOnMode, user, setUser, token, onNavigate,
     : filters.q
       ? `Search ${String(filters.q).toLowerCase()}, brands, colours`
       : 'Search products, brands, colours';
+  const hasSearchIntent = Boolean(filters.q || filters.category || filters.brand || filters.gender || filters.newArrival || filters.maxPrice || filters.discounted || filters.sale);
+  const visibleProducts = state.products.slice(0, visibleProductCount);
+  const canShowMoreProducts = visibleProductCount < state.products.length;
+  const showStorefront = !tryOnMode && !hasSearchIntent && !filters.sort;
 
   useEffect(() => {
     setDraft(initial.q || '');
@@ -3310,8 +3403,17 @@ function ShopScreen({ initial = {}, tryOnMode, user, setUser, token, onNavigate,
     setSelectedCategory(preferredCategorySection);
   }, [JSON.stringify(initial || {}), preferredCategorySection]);
 
-  const hasSearchIntent = Boolean(filters.q || filters.category || filters.brand || filters.gender || filters.newArrival || filters.maxPrice || filters.discounted || filters.sale);
-  const visibleProducts = state.products;
+  useEffect(() => {
+    setVisibleProductCount(shopProductInitialVisibleCount);
+  }, [JSON.stringify(initial || {}), filters.q, filters.category, filters.brand, filters.gender, filters.sort, filters.newArrival, filters.maxPrice, filters.discounted, filters.sale]);
+
+  useEffect(() => {
+    if (!initialScrollY || showStorefront) return undefined;
+    const restoreTimer = setTimeout(() => {
+      shopScrollRef.current?.scrollTo?.({ y: initialScrollY, animated: false });
+    }, 80);
+    return () => clearTimeout(restoreTimer);
+  }, [initialScrollY, showStorefront]);
 
   const runSearch = () => {
     setFilters((current) => ({ ...current, q: draft.trim() }));
@@ -3343,19 +3445,23 @@ function ShopScreen({ initial = {}, tryOnMode, user, setUser, token, onNavigate,
       if (nextTryOn) setTryOns((current) => ({ ...current, [product.id]: nextTryOn }));
       if (data.user) setUser(data.user);
     } catch (error) {
+      if (isAuthExpiredError(error)) {
+        await onAuthExpired?.();
+        setTryOnErrors((current) => ({ ...current, [product.id]: '' }));
+        return;
+      }
       setTryOnErrors((current) => ({ ...current, [product.id]: aiFeatureErrorMessage(error, 'Could not generate this AI try-on. Try again in a moment.') }));
     } finally {
       setTryOnLoading((current) => ({ ...current, [product.id]: false }));
     }
-  }, [user, tryOnLoading, tryOns, onRequireAuth]);
+  }, [user, tryOnLoading, tryOns, onRequireAuth, onAuthExpired]);
 
   const generateTryOnVideo = useCallback(async (product) => {
-    const existing = tryOns[product?.id];
     if (!user) {
       onRequireAuth?.('Log in with your mobile number to create a video try-on.');
       return;
     }
-    if (!product?.id || tryOnVideoLoading[product.id] || !existing?.imageUrl) return;
+    if (!product?.id || tryOnVideoLoading[product.id] || tryOnLoading[product.id]) return;
     const profileMessage = tryOnProfileBlockMessage(user);
     if (profileMessage) {
       setTryOnVideoErrors((current) => ({ ...current, [product.id]: profileMessage }));
@@ -3363,7 +3469,21 @@ function ShopScreen({ initial = {}, tryOnMode, user, setUser, token, onNavigate,
     }
     setTryOnVideoLoading((current) => ({ ...current, [product.id]: true }));
     setTryOnVideoErrors((current) => ({ ...current, [product.id]: '' }));
+    setTryOnErrors((current) => ({ ...current, [product.id]: '' }));
     try {
+      let existing = tryOns[product.id];
+      if (!existing?.imageUrl) {
+        const imageData = await api(`/tryons/${product.id}`, {
+          method: 'POST',
+          timeoutMs: aiTryOnRequestTimeoutMs,
+          jobTimeoutMs: aiTryOnJobTimeoutMs
+        });
+        existing = imageData.tryOn || null;
+        if (!existing?.imageUrl) existing = await fetchProductTryOn(product.id, { waitForImage: true });
+        if (existing) setTryOns((current) => ({ ...current, [product.id]: existing }));
+        if (imageData.user) setUser(imageData.user);
+      }
+      if (!existing?.imageUrl) throw new Error('Could not generate the image try-on needed for video.');
       const data = await api(`/tryons/${product.id}/video`, {
         method: 'POST',
         body: existing.videoUrl ? JSON.stringify({ force: true }) : undefined,
@@ -3373,13 +3493,16 @@ function ShopScreen({ initial = {}, tryOnMode, user, setUser, token, onNavigate,
       setTryOns((current) => ({ ...current, [product.id]: data.tryOn }));
       if (data.user) setUser(data.user);
     } catch (error) {
+      if (isAuthExpiredError(error)) {
+        await onAuthExpired?.();
+        setTryOnVideoErrors((current) => ({ ...current, [product.id]: '' }));
+        return;
+      }
       setTryOnVideoErrors((current) => ({ ...current, [product.id]: aiFeatureErrorMessage(error, 'Could not generate this video try-on. Try again in a moment.') }));
     } finally {
       setTryOnVideoLoading((current) => ({ ...current, [product.id]: false }));
     }
-  }, [user, tryOnVideoLoading, tryOns, onRequireAuth]);
-
-  const showStorefront = !tryOnMode && !hasSearchIntent && !filters.sort;
+  }, [user, tryOnLoading, tryOnVideoLoading, tryOns, onRequireAuth, onAuthExpired]);
 
   if (showStorefront) {
     return (
@@ -3389,6 +3512,8 @@ function ShopScreen({ initial = {}, tryOnMode, user, setUser, token, onNavigate,
         onNavigate={onNavigate}
         onBack={onBack}
         user={user}
+        initialScrollY={initialScrollY}
+        onScrollPositionChange={onScrollPositionChange}
       />
     );
   }
@@ -3396,7 +3521,12 @@ function ShopScreen({ initial = {}, tryOnMode, user, setUser, token, onNavigate,
   return (
     <View style={styles.shopScreen}>
       <ShopTopBar onNavigate={onNavigate} user={user} onBack={onBack} />
-      <ScrollView contentContainerStyle={styles.scrollContent} {...screenScrollProps}>
+      <ScrollView
+        ref={shopScrollRef}
+        contentContainerStyle={styles.scrollContent}
+        onScroll={(event) => onScrollPositionChange?.(event.nativeEvent.contentOffset.y)}
+        {...screenScrollProps}
+      >
       <View style={styles.searchPanel}>
         <View style={styles.searchRow}>
           <Ionicons name="search-outline" size={19} color="#66748a" />
@@ -3451,19 +3581,28 @@ function ShopScreen({ initial = {}, tryOnMode, user, setUser, token, onNavigate,
                 onAddToWishlist={onAddToWishlist}
                 isWishlisted={wishlistIds?.has(product.id)}
                 onTryOn={() => generateTryOn(product)}
-                onTryOnVideo={tryOns[product.id]?.imageUrl ? () => generateTryOnVideo(product) : undefined}
+                onTryOnVideo={() => generateTryOnVideo(product)}
               />
             ))}
+            {canShowMoreProducts ? (
+              <TouchableOpacity
+                style={styles.productGridSeeMoreButton}
+                activeOpacity={0.86}
+                onPress={() => setVisibleProductCount((current) => Math.min(current + shopProductVisibleStep, state.products.length))}
+              >
+                <Text style={styles.productGridSeeMoreText}>See more</Text>
+                <Ionicons name="chevron-down" size={16} color="#ffffff" />
+              </TouchableOpacity>
+            ) : null}
           </View>
         </>
       )}
-      {Object.values(tryOns).some((item) => item?.imageUrl || item?.videoUrl) ? <AiPreviewNote /> : null}
       </ScrollView>
     </View>
   );
 }
 
-function ProductScreen({ id, user, setUser, token, onNavigate, onBack, onRequireAuth, onAddToWishlist, wishlistIds }) {
+function ProductScreen({ id, user, setUser, token, onNavigate, onBack, onRequireAuth, onAuthExpired, onAddToWishlist, wishlistIds }) {
   const { width } = useWindowDimensions();
   const layout = useResponsiveLayout();
   const [state, setState] = useState({ product: null, loading: true, error: '' });
@@ -3540,6 +3679,11 @@ function ProductScreen({ id, user, setUser, token, onNavigate, onBack, onRequire
       if (regenerate && data.reused) setTryOnError('Existing try-on was reused. Restart the backend with the latest code, then try again.');
       if (data.user) setUser(data.user);
     } catch (error) {
+      if (isAuthExpiredError(error)) {
+        await onAuthExpired?.();
+        setTryOnError('');
+        return;
+      }
       setTryOnError(aiFeatureErrorMessage(error, 'Could not generate this AI try-on. Try again in a moment.'));
     } finally {
       setTryOnLoading(false);
@@ -3551,7 +3695,7 @@ function ProductScreen({ id, user, setUser, token, onNavigate, onBack, onRequire
       onRequireAuth?.('Log in with your mobile number to create a video try-on.');
       return;
     }
-    if (tryOnVideoLoading || !tryOn?.imageUrl || !state.product?.id) return;
+    if (tryOnLoading || tryOnVideoLoading || !state.product?.id) return;
     const profileMessage = tryOnProfileBlockMessage(user);
     if (profileMessage) {
       setTryOnVideoError(profileMessage);
@@ -3559,8 +3703,22 @@ function ProductScreen({ id, user, setUser, token, onNavigate, onBack, onRequire
     }
     setTryOnVideoLoading(true);
     setTryOnVideoError('');
+    setTryOnError('');
     try {
-      const regenerate = Boolean(tryOn?.videoUrl);
+      let currentTryOn = tryOn;
+      if (!currentTryOn?.imageUrl) {
+        const imageData = await api(`/tryons/${state.product.id}`, {
+          method: 'POST',
+          timeoutMs: aiTryOnRequestTimeoutMs,
+          jobTimeoutMs: aiTryOnJobTimeoutMs
+        });
+        currentTryOn = imageData.tryOn || null;
+        if (!currentTryOn?.imageUrl) currentTryOn = await fetchProductTryOn(state.product.id, { waitForImage: true });
+        if (currentTryOn) setTryOn(currentTryOn);
+        if (imageData.user) setUser(imageData.user);
+      }
+      if (!currentTryOn?.imageUrl) throw new Error('Could not generate the image try-on needed for video.');
+      const regenerate = Boolean(currentTryOn?.videoUrl);
       const data = await api(`/tryons/${state.product.id}/video`, {
         method: 'POST',
         body: regenerate ? JSON.stringify({ force: true }) : undefined,
@@ -3571,6 +3729,11 @@ function ProductScreen({ id, user, setUser, token, onNavigate, onBack, onRequire
       if (regenerate && data.reused) setTryOnVideoError('Existing video was reused. Restart the backend with the latest code, then try again.');
       if (data.user) setUser(data.user);
     } catch (error) {
+      if (isAuthExpiredError(error)) {
+        await onAuthExpired?.();
+        setTryOnVideoError('');
+        return;
+      }
       setTryOnVideoError(aiFeatureErrorMessage(error, 'Could not generate this video try-on. Try again in a moment.'));
     } finally {
       setTryOnVideoLoading(false);
@@ -3594,8 +3757,8 @@ function ProductScreen({ id, user, setUser, token, onNavigate, onBack, onRequire
   const tryOnUri = tryOnImageUrl(tryOn);
   const tryOnVideoUri = tryOnVideoUrl(tryOn);
   const mediaItems = [
-    tryOnVideoUri ? { key: 'video', label: 'Video Try-On', type: 'video', uri: tryOnVideoUri } : null,
-    tryOnUri ? { key: 'tryon', label: 'AI Try-On', source: { uri: tryOnUri }, uri: tryOnUri } : null,
+    tryOnVideoUri ? { key: 'video', label: tryOnDisplayLabel(tryOn, tryOnVideoUri), type: 'video', uri: tryOnVideoUri } : null,
+    tryOnUri ? { key: 'tryon', label: tryOnDisplayLabel(tryOn), source: { uri: tryOnUri }, uri: tryOnUri } : null,
     { key: 'original', label: 'Original Product', source: originalUri ? { uri: originalUri } : null, uri: originalUri, product }
   ].filter(Boolean);
   const detailTags = [
@@ -3618,7 +3781,7 @@ function ProductScreen({ id, user, setUser, token, onNavigate, onBack, onRequire
 
   return (
     <View style={styles.productDetailScreen}>
-      <ProductTopBar onNavigate={onNavigate} user={user} onBack={onBack} />
+      <ProductTopBar onNavigate={onNavigate} user={user} onBack={onBack} showSearch={false} />
       <ScrollView contentContainerStyle={styles.productDetailContent} {...screenScrollProps}>
       <View style={[styles.productHeroMedia, { height: mediaHeight, width: mediaWidth }]}>
         <ScrollView ref={mediaScrollRef} {...horizontalScrollProps} pagingEnabled contentContainerStyle={styles.productMediaTrack}>
@@ -3692,7 +3855,7 @@ function ProductScreen({ id, user, setUser, token, onNavigate, onBack, onRequire
           <ProductActionButton
             label={tryOnVideoLoading ? 'Video...' : tryOn?.videoUrl ? 'New Video' : 'Video'}
             icon="play-circle-outline"
-            disabled={tryOnLoading || tryOnVideoLoading || !tryOn?.imageUrl}
+            disabled={tryOnLoading || tryOnVideoLoading}
             onPress={generateVideo}
           />
         </View>
@@ -4601,7 +4764,7 @@ function mergeWardrobeSuggestions(primary = [], secondary = []) {
 function WardrobeTopBar({ user, onNavigate, onBack }) {
   return (
     <>
-      <AppHeader onNavigate={onNavigate} user={user} compact />
+      <AppHeader onNavigate={onNavigate} user={user} compact showSearch={false} />
       <PageBackRow onBack={onBack} />
     </>
   );
@@ -9155,6 +9318,7 @@ export default function App() {
   const [aiStudioMessages, setAiStudioMessages] = useState([]);
   const [aiStudioTryOns, setAiStudioTryOns] = useState({});
   const [aiStudioTryOnErrors, setAiStudioTryOnErrors] = useState({});
+  const scrollPositionsRef = useRef({});
   const wishlistIds = useMemo(() => {
     const ids = new Set();
     wishlistProducts.forEach((product) => {
@@ -9167,6 +9331,10 @@ export default function App() {
 
   const currentRoute = normalizeRoute(routeStack[routeStack.length - 1]?.name, routeStack[routeStack.length - 1]?.params);
   const routeParamsKey = JSON.stringify(currentRoute.params || {});
+  const currentRouteKey = `${currentRoute.name}:${routeParamsKey}`;
+  const rememberCurrentScrollY = useCallback((y) => {
+    scrollPositionsRef.current[currentRouteKey] = Math.max(0, Number(y) || 0);
+  }, [currentRouteKey]);
   const registerTourTarget = useCallback((key, rect) => {
     if (!key || !rect) return;
     const nextRect = {
@@ -9215,6 +9383,22 @@ export default function App() {
   const requestAuth = useCallback((message = 'Log in with your mobile number to continue.') => {
     setAuthPrompt({ message });
   }, []);
+  const requireFreshLogin = useCallback(async (message = 'Your session expired. Please log in again.') => {
+    await clearToken();
+    setToken(null);
+    setUser(null);
+    setWishlistProducts([]);
+    setWishlistReady(false);
+    setCollections([]);
+    setCollectionsReady(false);
+    setOnboardingVisible(false);
+    setAiStudioOwnerKey('');
+    setAiStudioConversationId('');
+    setAiStudioMessages([]);
+    setAiStudioTryOns({});
+    setAiStudioTryOnErrors({});
+    requestAuth(message);
+  }, [requestAuth]);
   const guardedNavigate = useCallback((name, params = {}) => {
     const protectedMessages = {
       closet: 'Log in with your mobile number to use your wardrobe.',
@@ -9364,7 +9548,13 @@ export default function App() {
         if (data?.user) setUser(data.user);
         setRouteStack((current) => (current.length === 1 && current[0]?.name === 'auth' ? [normalizeRoute('home')] : current));
       })
-      .catch(() => {})
+      .catch(async (error) => {
+        if (!alive || !isAuthExpiredError(error)) return;
+        await clearToken();
+        if (!alive) return;
+        setToken(null);
+        setUser(null);
+      })
       .finally(() => alive && setReady(true));
     return () => {
       alive = false;
@@ -9483,11 +9673,11 @@ export default function App() {
     const routeParams = currentRoute.params || {};
     switch (currentRoute.name) {
       case 'auth':
-        return user ? <HomeScreen onNavigate={guardedNavigate} user={user} token={token} onAddToWishlist={addToWishlist} wishlistIds={wishlistIds} registerTourTarget={registerTourTarget} tourFocusRequest={tourFocusRequest} /> : <AuthEntryScreen onNavigate={navigate} />;
+        return user ? <HomeScreen onNavigate={guardedNavigate} user={user} token={token} onAddToWishlist={addToWishlist} wishlistIds={wishlistIds} registerTourTarget={registerTourTarget} tourFocusRequest={tourFocusRequest} initialScrollY={scrollPositionsRef.current[currentRouteKey] || 0} onScrollPositionChange={rememberCurrentScrollY} /> : <AuthEntryScreen onNavigate={navigate} />;
       case 'home':
-        return <HomeScreen onNavigate={guardedNavigate} user={user} token={token} onAddToWishlist={addToWishlist} wishlistIds={wishlistIds} registerTourTarget={registerTourTarget} tourFocusRequest={tourFocusRequest} />;
+        return <HomeScreen onNavigate={guardedNavigate} user={user} token={token} onAddToWishlist={addToWishlist} wishlistIds={wishlistIds} registerTourTarget={registerTourTarget} tourFocusRequest={tourFocusRequest} initialScrollY={scrollPositionsRef.current[currentRouteKey] || 0} onScrollPositionChange={rememberCurrentScrollY} />;
       case 'shop':
-        return <ShopScreen initial={routeParams} user={user} setUser={setUser} token={token} onNavigate={guardedNavigate} onBack={routeStack.length > 1 ? goBack : null} onRequireAuth={requestAuth} onAddToWishlist={addToWishlist} wishlistIds={wishlistIds} />;
+        return <ShopScreen initial={routeParams} user={user} setUser={setUser} token={token} onNavigate={guardedNavigate} onBack={routeStack.length > 1 ? goBack : null} onRequireAuth={requestAuth} onAuthExpired={requireFreshLogin} onAddToWishlist={addToWishlist} wishlistIds={wishlistIds} initialScrollY={scrollPositionsRef.current[currentRouteKey] || 0} onScrollPositionChange={rememberCurrentScrollY} />;
       case 'search':
         return <SearchScreen initial={routeParams} user={user} token={token} onNavigate={guardedNavigate} onBack={goBack} onAddToWishlist={addToWishlist} wishlistIds={wishlistIds} />;
       case 'tryon':
@@ -9511,7 +9701,7 @@ export default function App() {
       case 'orders':
         return user ? <OrdersScreen onNavigate={guardedNavigate} onBack={routeStack.length > 1 ? goBack : null} token={token} user={user} /> : <AuthScreen mode="login" setUser={setUser} setToken={setToken} onNavigate={navigate} />;
       case 'product':
-        return routeParams.id ? <ProductScreen id={routeParams.id} user={user} setUser={setUser} token={token} onNavigate={guardedNavigate} onBack={routeStack.length > 1 ? goBack : null} onRequireAuth={requestAuth} onAddToWishlist={addToWishlist} wishlistIds={wishlistIds} /> : <ShopScreen initial={{}} user={user} setUser={setUser} token={token} onNavigate={guardedNavigate} onBack={routeStack.length > 1 ? goBack : null} onRequireAuth={requestAuth} onAddToWishlist={addToWishlist} wishlistIds={wishlistIds} />;
+        return routeParams.id ? <ProductScreen id={routeParams.id} user={user} setUser={setUser} token={token} onNavigate={guardedNavigate} onBack={routeStack.length > 1 ? goBack : null} onRequireAuth={requestAuth} onAuthExpired={requireFreshLogin} onAddToWishlist={addToWishlist} wishlistIds={wishlistIds} /> : <ShopScreen initial={{}} user={user} setUser={setUser} token={token} onNavigate={guardedNavigate} onBack={routeStack.length > 1 ? goBack : null} onRequireAuth={requestAuth} onAuthExpired={requireFreshLogin} onAddToWishlist={addToWishlist} wishlistIds={wishlistIds} initialScrollY={scrollPositionsRef.current[currentRouteKey] || 0} onScrollPositionChange={rememberCurrentScrollY} />;
       case 'signup':
         return <AuthScreen mode="signup" setUser={setUser} setToken={setToken} onNavigate={navigate} />;
       case 'login':
@@ -9523,7 +9713,7 @@ export default function App() {
       default:
         return <InfoScreen page="missing" user={user} onNavigate={navigate} />;
     }
-  }, [currentRoute.name, routeParamsKey, user, token, navigate, guardedNavigate, requestAuth, addToWishlist, createCollection, collections, wishlistIds, wishlistProducts, registerTourTarget, tourFocusRequest, aiStudioConversationId, aiStudioMessages, aiStudioTryOns, aiStudioTryOnErrors, refreshUser, routeStack.length, goBack]);
+  }, [currentRoute.name, routeParamsKey, currentRouteKey, user, token, navigate, guardedNavigate, requestAuth, requireFreshLogin, addToWishlist, createCollection, collections, wishlistIds, wishlistProducts, registerTourTarget, tourFocusRequest, aiStudioConversationId, aiStudioMessages, aiStudioTryOns, aiStudioTryOnErrors, refreshUser, routeStack.length, goBack, rememberCurrentScrollY]);
 
   if (!ready || (!fontsLoaded && !fontLoadError)) {
     return (
@@ -9543,6 +9733,7 @@ export default function App() {
   const homeRoute = currentRoute.name === 'home';
   const shopRoute = currentRoute.name === 'shop';
   const searchRoute = currentRoute.name === 'search';
+  const tryOnRoute = currentRoute.name === 'tryon' || currentRoute.name === 'custom';
   const closetRoute = currentRoute.name === 'closet';
   const closetAddRoute = closetRoute && currentRoute.params?.view === 'add';
   const productRoute = currentRoute.name === 'product';
@@ -9559,7 +9750,7 @@ export default function App() {
     <ResponsiveLayoutContext.Provider value={responsiveLayout}>
     <SafeAreaView style={[styles.safe, welcomeRoute && styles.authEntrySafe, signupRoute && styles.signupSafe, loginRoute && styles.loginSafe, homeRoute && styles.homeSafe, shopRoute && styles.shopSafe, searchRoute && styles.shopSafe, closetRoute && styles.wardrobeSafe, productRoute && styles.productSafe, aiStudioRoute && styles.aiStudioSafe, tokensRoute && styles.creditsSafe, profileRoute && styles.profileSafe, accountChildRoute && styles.profileSafe]}>
       <StatusBar style={welcomeRoute ? 'light' : 'dark'} />
-      {authOnlyRoute || homeRoute || shopRoute || searchRoute || closetRoute || productRoute || aiStudioRoute || tokensRoute || profileRoute || accountChildRoute ? null : <AppHeader onNavigate={guardedNavigate} user={user} compact />}
+      {authOnlyRoute || homeRoute || shopRoute || searchRoute || closetRoute || productRoute || aiStudioRoute || tokensRoute || profileRoute || accountChildRoute ? null : <AppHeader onNavigate={guardedNavigate} user={user} compact showSearch={!tryOnRoute} />}
       <View style={[styles.content, responsiveLayout.contentFrameStyle]}>
         <ScreenErrorBoundary routeName={currentRoute.name} onHome={() => navigate('home')}>
           {screen}
@@ -9670,14 +9861,29 @@ const styles = StyleSheet.create({
   },
   pageBackRow: {
     width: '100%',
-    paddingHorizontal: 0,
-    paddingTop: 0,
-    paddingBottom: 0,
+    paddingHorizontal: 12,
+    paddingTop: 5,
+    paddingBottom: 6,
     backgroundColor: '#fbf7f6',
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'flex-start',
     gap: 10
+  },
+  pageBackButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#ece5e1',
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#1f1714',
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8
   },
   categorySearchDock: {
     flex: 1,
@@ -9780,7 +9986,7 @@ const styles = StyleSheet.create({
     fontWeight: '700'
   },
   scrollContent: {
-    paddingBottom: Platform.OS === 'android' ? 118 : 132,
+    paddingBottom: bottomNavigationHeight + screenBottomInset + 112,
     paddingHorizontal: 16
   },
   appHeader: {
@@ -9809,21 +10015,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center'
   },
   appHeaderCreditAction: {
-    width: 70,
-    paddingHorizontal: 8,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    paddingHorizontal: 0,
     flexDirection: 'row',
     backgroundColor: '#fff3df',
     borderWidth: 1,
     borderColor: '#ead8bf'
   },
   appHeaderCreditText: {
-    marginLeft: 4,
+    marginLeft: 1,
     color: '#171412',
-    fontSize: 12,
-    lineHeight: 14,
+    fontSize: 11,
+    lineHeight: 13,
     fontWeight: '800',
     letterSpacing: 0,
-    maxWidth: 42
+    maxWidth: 27
   },
   appHeaderSide: {
     width: 178,
@@ -9974,7 +10182,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     paddingHorizontal: 18,
     paddingTop: 8,
-    paddingBottom: 0,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 22,
     shadowColor: '#1f1714',
     shadowOpacity: 0.12,
     shadowRadius: 18,
@@ -10053,7 +10261,7 @@ const styles = StyleSheet.create({
   },
   homeContent: {
     paddingTop: 0,
-    paddingBottom: bottomNavigationHeight - 10,
+    paddingBottom: bottomNavigationHeight + screenBottomInset + 36,
     backgroundColor: '#ffffff'
   },
   homeContentTablet: {
@@ -11155,13 +11363,11 @@ const styles = StyleSheet.create({
   },
   homeProductActionRow: {
     marginTop: 8,
-    minHeight: 32,
-    flexDirection: 'row',
-    alignItems: 'center',
+    minHeight: 70,
     gap: 7
   },
   homeProductTryOnButton: {
-    flex: 1,
+    width: '100%',
     height: 32,
     borderRadius: 7,
     backgroundColor: '#050505',
@@ -11170,11 +11376,31 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6
   },
+  homeProductVideoButton: {
+    width: '100%',
+    height: 32,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: '#d8d1cc',
+    backgroundColor: '#fffdfb',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5
+  },
   homeProductTryOnText: {
     ...typography.caption,
     color: '#ffffff',
     fontSize: 12,
     lineHeight: 15,
+    fontWeight: '800',
+    letterSpacing: 0
+  },
+  homeProductVideoText: {
+    ...typography.caption,
+    color: '#111827',
+    fontSize: 11,
+    lineHeight: 14,
     fontWeight: '800',
     letterSpacing: 0
   },
@@ -11319,7 +11545,7 @@ const styles = StyleSheet.create({
     marginTop: 34,
     paddingTop: 26,
     paddingHorizontal: 16,
-    paddingBottom: 48,
+    paddingBottom: 0,
     backgroundColor: '#f6efeb'
   },
   homeJournalHead: {
@@ -11417,7 +11643,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0
   },
   homeJournalProductBody: {
-    minHeight: 88,
+    minHeight: 166,
     paddingHorizontal: 10,
     paddingTop: 9,
     paddingBottom: 11
@@ -11443,6 +11669,63 @@ const styles = StyleSheet.create({
     color: '#211c1a',
     fontSize: 11,
     fontWeight: '700'
+  },
+  homeJournalTryOnButton: {
+    minHeight: 30,
+    marginTop: 9,
+    borderRadius: 7,
+    backgroundColor: '#111111',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6
+  },
+  homeJournalTryOnText: {
+    ...typography.caption,
+    color: '#ffffff',
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '800',
+    letterSpacing: 0
+  },
+  homeJournalVideoButton: {
+    minHeight: 30,
+    marginTop: 7,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: '#d8d1cc',
+    backgroundColor: '#fffdfb',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6
+  },
+  homeJournalVideoText: {
+    ...typography.caption,
+    color: '#111827',
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '800',
+    letterSpacing: 0
+  },
+  homeJournalSeeMoreButton: {
+    width: '100%',
+    minHeight: 46,
+    marginTop: 12,
+    borderRadius: 23,
+    backgroundColor: '#111111',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7
+  },
+  homeJournalSeeMoreText: {
+    ...typography.caption,
+    color: '#ffffff',
+    fontSize: 13,
+    lineHeight: 16,
+    fontWeight: '800',
+    letterSpacing: 0
   },
   shopScreen: {
     flex: 1,
@@ -12124,7 +12407,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fbf7f6'
   },
   wardrobeContent: {
-    paddingBottom: screenBottomInset + 72,
+    paddingBottom: bottomNavigationHeight + screenBottomInset + 104,
     backgroundColor: '#fbf7f6'
   },
   wardrobeTopBar: {
@@ -12274,7 +12557,8 @@ const styles = StyleSheet.create({
   },
   wardrobePreviewWrap: {
     marginHorizontal: 18,
-    gap: 16
+    gap: 16,
+    marginBottom: bottomNavigationHeight + 16
   },
   wardrobePreviewStage: {
     position: 'relative'
@@ -13041,10 +13325,31 @@ const styles = StyleSheet.create({
   },
   productGrid: {
     paddingHorizontal: 16,
+    paddingBottom: bottomNavigationHeight + screenBottomInset + 56,
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
     alignItems: 'stretch'
+  },
+  productGridSeeMoreButton: {
+    width: '100%',
+    minHeight: 48,
+    marginTop: 8,
+    marginBottom: 8,
+    borderRadius: 24,
+    backgroundColor: '#111111',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7
+  },
+  productGridSeeMoreText: {
+    ...typography.caption,
+    color: '#ffffff',
+    fontSize: 13,
+    lineHeight: 16,
+    fontWeight: '800',
+    letterSpacing: 0
   },
   productCard: {
     flexGrow: 1,
@@ -13179,6 +13484,10 @@ const styles = StyleSheet.create({
     padding: 10,
     gap: 4
   },
+  productGridCardBody: {
+    minHeight: 158,
+    flexGrow: 1
+  },
   productTitle: {
     fontSize: 12,
     lineHeight: 16,
@@ -13242,6 +13551,9 @@ const styles = StyleSheet.create({
   cardButton: {
     minHeight: 34,
     marginTop: 4
+  },
+  productGridCardButton: {
+    marginTop: 'auto'
   },
   errorText: {
     color: '#b91c1c',
@@ -14899,9 +15211,10 @@ const styles = StyleSheet.create({
   },
   aiComposer: {
     position: 'absolute',
-    left: 18,
-    right: 18,
     zIndex: 45,
+    left: 14,
+    right: 14,
+    bottom: Platform.OS === 'ios' ? 16 : 14,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,

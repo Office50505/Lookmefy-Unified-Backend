@@ -41,3 +41,11 @@ test('job polling preserves old mobile aliases while keeping queue-specific resu
   assert.match(source, /statusPath:/);
   assert.match(source, /result:\s*job\.result/);
 });
+
+test('mobile API polling unwraps queued try-on worker responses', async () => {
+  const source = await fs.readFile('fit-look-APP/mobile/src/api.js', 'utf8');
+
+  assert.match(source, /status === 'succeeded'/);
+  assert.match(source, /'body' in result/);
+  assert.match(source, /return result[\s\S]*\? result\.body : result/);
+});

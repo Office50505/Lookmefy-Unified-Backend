@@ -265,7 +265,10 @@ async function pollJob(baseUrl, jobId, headers, timeoutMs, originalPath = '') {
       });
     }
     const status = data?.job?.status;
-    if (status === 'succeeded') return data.result;
+    if (status === 'succeeded') {
+      const result = data.result;
+      return result && typeof result === 'object' && 'body' in result ? result.body : result;
+    }
     if (status === 'failed') {
       const detail = data?.job?.error || 'Background task failed';
       throw new ApiError(friendlyHttpError({ status: 500, path: featurePath, detail }), {

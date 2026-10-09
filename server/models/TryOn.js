@@ -95,13 +95,14 @@ tryOnSchema.index({ user: 1, createdAt: -1 });
 function tryOnToClient(tryOn) {
   const id = tryOn._id.toString();
   const userId = tryOn.user?._id?.toString?.() || tryOn.user?.toString?.() || '';
+  const productId = tryOn.product?._id?.toString?.() || tryOn.product?.toString?.() || '';
   const pendingProviderVideo = !tryOn.video?.path && Boolean(tryOn.video?.providerOutputUrl);
   const pendingVideoUrl = pendingProviderVideo && userId
     ? `/api/tryons/${id}/video/media?mediaToken=${encodeURIComponent(signMediaToken({ userId, mediaId: id, kind: 'tryon-video' }))}`
     : null;
   return {
     id,
-    productId: tryOn.product.toString(),
+    productId,
     imageUrl: tryOn.image?.url || (tryOn.image?.path ? `/${tryOn.image.path}` : null),
     transparentImageUrl: tryOn.transparentImage?.url || (tryOn.transparentImage?.path ? `/${tryOn.transparentImage.path}` : (tryOn.imageProcessing?.transparentImageUrl || null)),
     imageProcessing: tryOn.imageProcessing || null,
@@ -123,7 +124,8 @@ function tryOnToClient(tryOn) {
     turbo: Boolean(tryOn.turbo),
     garmentCount: tryOn.garmentCount || 1,
     tokenCost: tryOn.tokenCost,
-    createdAt: tryOn.createdAt
+    createdAt: tryOn.createdAt,
+    updatedAt: tryOn.updatedAt || tryOn.createdAt
   };
 }
 

@@ -275,6 +275,25 @@ function usePrunaProvider() {
   return aiProvider() === 'pruna';
 }
 
+function hasConfiguredImageProviderKey() {
+  return Boolean(process.env.PRUNA_API_KEY || process.env.FAL_KEY || process.env.FITROOM_API_KEY);
+}
+
+function localMockTryOnEnabled() {
+  const value = String(process.env.LOCAL_MOCK_TRYON || '').trim().toLowerCase();
+  if (['0', 'false', 'no', 'off'].includes(value)) return false;
+  if (['1', 'true', 'yes', 'on'].includes(value)) return true;
+  return !productionRuntime() && !hasConfiguredImageProviderKey();
+}
+
+function escapeSvgText(value = '') {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 function videoProvider() {
   return String(process.env.TRYON_VIDEO_PROVIDER || 'pixverse').trim().toLowerCase();
 }
@@ -1854,6 +1873,15 @@ function customTryOnToClient(tryOn) {
   return new CustomTryOn(tryOn).toClient();
 }
 
+function productTryOnToClient(tryOn) {
+  const client = typeof tryOn?.toClient === 'function' ? tryOn.toClient() : tryOnToClient(tryOn);
+  return {
+    ...client,
+    imageUrl: generatedTryOnImageUrl(tryOn, 'product', client.imageUrl || ''),
+    transparentImageUrl: client.transparentImageUrl || ''
+  };
+}
+
 function isStaleSareeTryOnRecord(tryOn, product) {
   if (!tryOn) return false;
   const prompt = String(tryOn?.prompt || '');
@@ -1987,10 +2015,67 @@ async function isolateGeneratedImage(user, image, timer) {
   return isolation;
 }
 
+async function productImageFilePart(product, timer) {
+  if (product.image?.path || product.image?.url || product.image?.remoteUrl) {
+    if (product.image?.path || product.image?.url) return filePartFromUpload(product.image, 'product', timer);
+    return filePartFromRemoteUrl(product.image.remoteUrl, 'product', timer);
+  }
+  throw new Error('Product image is missing');
+}
+
+async function createLocalMockTryOn({ user, product, timer }) {
+  const personPart = await filePartFromUpload(user.bodyPhoto, 'person', timer);
+  const productPart = await productImageFilePart(product, timer);
+  const title = escapeSvgText(product.name || 'Lookmefy product');
+  const category = escapeSvgText(product.category || 'Catalog');
+  const badge = Buffer.from(`
+    <svg width="1024" height="1365" viewBox="0 0 1024 1365" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="0" width="1024" height="1365" fill="rgba(247,241,237,0.18)"/>
+      <rect x="36" y="36" width="952" height="1293" rx="38" fill="none" stroke="rgba(23,20,18,0.14)" stroke-width="2"/>
+      <rect x="56" y="56" width="314" height="48" rx="24" fill="rgba(255,255,255,0.92)"/>
+      <text x="82" y="88" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#171412">Local body preview</text>
+      <rect x="56" y="1204" width="912" height="104" rx="28" fill="rgba(255,255,255,0.94)"/>
+      <text x="88" y="1248" font-family="Arial, sans-serif" font-size="26" font-weight="700" fill="#171412">${title}</text>
+      <text x="88" y="1284" font-family="Arial, sans-serif" font-size="20" fill="#6f6863">${category} reference shown with your saved body</text>
+    </svg>
+  `);
+  const productInset = await sharp(productPart.bytes)
+    .rotate()
+    .resize(310, 390, { fit: 'contain', background: '#fffaf7' })
+    .extend({ top: 14, bottom: 14, left: 14, right: 14, background: '#fffaf7' })
+    .jpeg({ quality: 88 })
+    .toBuffer();
+  const bytes = await sharp(personPart.bytes)
+    .rotate()
+    .resize(1024, 1365, { fit: 'cover', position: 'top', background: '#f7f1ed' })
+    .modulate({ brightness: 0.98, saturation: 0.95 })
+    .composite([
+      { input: productInset, top: 760, left: 650 },
+      { input: badge, top: 0, left: 0 }
+    ])
+    .jpeg({ quality: 88 })
+    .toBuffer();
+  timer?.mark('local mock try-on rendered', { kb: Math.round(bytes.length / 1024) });
+  return {
+    bytes,
+    mimetype: 'image/jpeg',
+    provider: 'local',
+    model: 'local-mock-tryon',
+    quality: 'local-dev',
+    prompt: 'Local development mock try-on preview',
+    promptKey: 'local_mock',
+    providerCostUsd: 0
+  };
+}
+
 async function generateProductTryOnImage({ user, product, tryOnModel, timer }) {
   const selectedModel = tryOnModel || tryOnModelForProduct(product);
   const productPromptKey = promptKeyForProduct(product, 'full_outfit');
   timer?.mark('image generator selected', { tryOnModel: selectedModel, promptKey: productPromptKey });
+  if (localMockTryOnEnabled()) {
+    timer?.mark('local mock try-on selected');
+    return createLocalMockTryOn({ user, product, timer });
+  }
   const withFallback = async (primary, fallback) => {
     try {
       return await primary();
@@ -2387,7 +2472,7 @@ async function runProductTryOnJob({ userId, productId, requestedModel = '', forc
     if (existing && !forceGenerate && !staleSareeTryOn) {
       timer.end({ reused: true });
       await recordGenerationMetric({ user: user._id, product: product._id, type: 'product_image', status: 'reused', provider: existing.provider, model: existing.model, durationMs: Date.now() - analyticsStartedAt });
-      return { status: 200, body: { tryOn: existing.toClient(), user: user.toClient(), reused: true } };
+      return { status: 200, body: { tryOn: productTryOnToClient(existing), user: user.toClient(), reused: true } };
     }
 
     ensureTryOnProfileReady(user);
@@ -2408,7 +2493,7 @@ async function runProductTryOnJob({ userId, productId, requestedModel = '', forc
     timer.end({ reused: false, tokensRemaining: user.tokens });
     await recordGenerationMetric({ user: user._id, product: product._id, type: 'product_image', status: 'succeeded', provider: tryOn.provider, model: tryOn.model, providerCostUsd: tryOn.providerCostUsd, tokensCharged: chargedTokenCost(user), durationMs: Date.now() - analyticsStartedAt });
 
-    return { status: 201, body: { tryOn: tryOn.toClient(), user: user.toClient(), reused: false } };
+    return { status: 201, body: { tryOn: productTryOnToClient(tryOn), user: user.toClient(), reused: false } };
   } catch (error) {
     if (error.code === 11000) {
       const existing = await TryOn.findOne({ user: user?._id, product: productId });
@@ -2420,7 +2505,7 @@ async function runProductTryOnJob({ userId, productId, requestedModel = '', forc
         }
         timer.end({ reused: true, duplicate: true });
         await recordGenerationMetric({ user: user._id, product: productId, type: 'product_image', status: 'reused', provider: existing.provider, model: existing.model, tokensCharged: duplicateRefund, tokensRefunded: duplicateRefund, durationMs: Date.now() - analyticsStartedAt });
-        return { status: 200, body: { tryOn: existing.toClient(), user: user.toClient(), reused: true } };
+        return { status: 200, body: { tryOn: productTryOnToClient(existing), user: user.toClient(), reused: true } };
       }
     }
     const tokensRefunded = reserved ? chargedTokenCost(user) : 0;
@@ -2447,7 +2532,7 @@ router.get('/', requireUser, tryOnReadLimiter, async (req, res) => {
     : [];
   const productsById = new Map(products.map((product) => [documentId(product), product]));
   const visibleTryOns = tryOns.filter((tryOn) => !isStaleSareeTryOnRecord(tryOn, productsById.get(documentId(tryOn.product))));
-  res.json({ tryOns: visibleTryOns.map(tryOnToClient) });
+  res.json({ tryOns: visibleTryOns.map(productTryOnToClient) });
 });
 
 router.get('/history', requireUser, tryOnReadLimiter, async (req, res) => {

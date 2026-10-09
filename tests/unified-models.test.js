@@ -4,6 +4,7 @@ import mongoose from 'mongoose';
 import AppleTransaction from '../server/models/AppleTransaction.js';
 import CreditEvent from '../server/models/CreditEvent.js';
 import TokenOrder from '../server/models/TokenOrder.js';
+import TryOn, { tryOnToClient } from '../server/models/TryOn.js';
 import User from '../server/models/User.js';
 
 function objectId() {
@@ -134,6 +135,26 @@ test('credit event model records idempotent credit ledger entries', () => {
     direction: 'credit'
   });
   assert.match(invalid.validateSync().errors.tokens.message, /whole number/i);
+});
+
+test('try-on client payload preserves product id when product is populated', () => {
+  const productId = objectId();
+  const tryOn = new TryOn({
+    _id: objectId(),
+    user: objectId(),
+    product: productId,
+    image: {
+      path: 'uploads/users/user-1/tryons/result.jpg',
+      mimetype: 'image/jpeg',
+      size: 1234
+    }
+  });
+  const plain = tryOn.toObject();
+  plain.product = { _id: productId, name: 'Everyday Oxford Shirt' };
+
+  const client = tryOnToClient(plain);
+  assert.equal(client.productId, productId.toString());
+  assert.equal(client.imageUrl, '/uploads/users/user-1/tryons/result.jpg');
 });
 
 test('apple transaction model captures purchase and subscription state', () => {

@@ -696,6 +696,7 @@ async function localTestLoginUser(phone, password) {
   if (!testPhone || phone !== testPhone || String(password || '') !== testPassword) return null;
 
   const now = new Date();
+  const startingTokens = Math.max(0, Number(process.env.LOCAL_TEST_LOGIN_TOKENS ?? process.env.SIGNUP_FREE_TOKENS ?? 0) || 0);
   const email = `test_${testPhone}@fitlook.local`;
   const username = `test_${testPhone}`;
   const testProfilePhotoUrl = String(process.env.LOCAL_TEST_PROFILE_PHOTO_URL || 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=900&q=80').trim();
@@ -723,7 +724,7 @@ async function localTestLoginUser(phone, password) {
       passwordSetAt: now,
       accountStatus: 'active',
       onboardingSeenAt: now,
-      tokens: 50,
+      tokens: startingTokens,
       devMode: true,
       avatarPhoto: testPhoto,
       bodyPhoto: testPhoto
@@ -741,7 +742,6 @@ async function localTestLoginUser(phone, password) {
   user.passwordSetAt = now;
   user.accountStatus = 'active';
   user.onboardingSeenAt = user.onboardingSeenAt || now;
-  user.tokens = Math.max(Number(user.tokens) || 0, 50);
   user.devMode = true;
   if (testPhoto && !user.bodyPhoto?.path && !user.bodyPhoto?.url) user.bodyPhoto = testPhoto;
   if (testPhoto && !user.avatarPhoto?.path && !user.avatarPhoto?.url) user.avatarPhoto = testPhoto;

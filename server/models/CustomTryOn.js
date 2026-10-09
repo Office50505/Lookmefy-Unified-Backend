@@ -90,7 +90,8 @@ customTryOnSchema.methods.toClient = function toClient() {
     turbo: Boolean(this.turbo),
     garmentCount: this.garmentCount || 1,
     tokenCost: this.tokenCost,
-    createdAt: this.createdAt
+    createdAt: this.createdAt,
+    updatedAt: this.updatedAt || this.createdAt
   };
 };
 

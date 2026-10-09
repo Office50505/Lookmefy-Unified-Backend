@@ -90,6 +90,7 @@ export const categories = [
   ['Bottoms', 'category-generated/bottomwear.png', 'bottoms'],
   ['Shirts', 'category-generated/men-shirts.png', 'shirts'],
   ['T-Shirts', 'category-generated/tshirts.png', 't-shirts'],
+  ['Dresses', 'category-generated/dresses.png', 'dresses'],
   ['Pants', 'category-generated/bottomwear.png', 'pants'],
   ['Jeans', 'category-generated/jeans.png', 'jeans'],
   ['Jackets', 'category-generated/jackets.png', 'jackets'],
