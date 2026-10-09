@@ -12373,7 +12373,8 @@ const styles = StyleSheet.create({
     marginTop: 20,
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
+    columnGap: 12,
     rowGap: 24
   },
   categoryTileGridTablet: {
