@@ -13895,7 +13895,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden'
   },
   productBody: {
-    padding: 10,
+    paddingHorizontal: 10,
+    paddingTop: 14,
+    paddingBottom: 10,
     gap: 4
   },
   productGridCardBody: {
@@ -13964,7 +13966,7 @@ const styles = StyleSheet.create({
   },
   cardButton: {
     minHeight: 34,
-    marginTop: 4
+    marginTop: 10
   },
   productGridCardButton: {
     marginTop: 'auto'
