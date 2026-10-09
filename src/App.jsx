@@ -78,7 +78,7 @@ const INDIA_STATES = [
 ];
 
 function normalizeApiBaseUrl(value = '') {
-  return String(value || '').trim().replace(/\/$/, '');
+  return String(value || '').trim().replace(/\/+$/, '').replace(/\/api$/i, '');
 }
 
 function isProductionBlockedApiHost(hostname = '') {

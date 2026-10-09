@@ -119,13 +119,91 @@ const homeHeroSlides = [
   { key: 'natural-light', title: 'LIGHT LAYERING', cta: 'EXPLORE', image: 'homeSliderNaturalLight', route: 'shop' },
   { key: 'archway', title: 'NEW SEASON EDIT', cta: 'VIEW ALL', image: 'homeSliderArchway', route: 'shop' }
 ];
+const missionProductPresets = {
+  college: {
+    id: 'college',
+    title: 'College Fits',
+    subtitle: 'Easy denim, tees, sneakers and light layers for campus days.',
+    params: { sort: 'newest' },
+    boost: ['college', 'casual', 'denim', 'jeans', 'tshirt', 't-shirt', 'top', 'sneaker', 'shoe', 'backpack', 'bag', 'jacket', 'hoodie', 'shirt'],
+    chips: [
+      { label: 'Denim', params: { q: 'college denim jeans tshirt', sort: 'newest' } },
+      { label: 'T-Shirts', params: { q: 'college tshirt casual top', sort: 'newest' } },
+      { label: 'Sneakers', params: { q: 'college sneakers shoes', sort: 'newest' } }
+    ]
+  },
+  office: {
+    id: 'office',
+    title: 'Office Looks',
+    subtitle: 'Polished shirts, trousers, blazers and work-ready shoes.',
+    params: { sort: 'newest' },
+    boost: ['office', 'formal', 'shirt', 'trouser', 'pant', 'blazer', 'jacket', 'loafer', 'shoe', 'watch', 'bag', 'kurti'],
+    chips: [
+      { label: 'Shirts', params: { q: 'office formal shirt', sort: 'newest' } },
+      { label: 'Trousers', params: { q: 'office trousers pants formal', sort: 'newest' } },
+      { label: 'Blazers', params: { q: 'office blazer jacket formal', sort: 'newest' } }
+    ]
+  },
+  date: {
+    id: 'date',
+    title: 'Date Looks',
+    subtitle: 'Bodycon, party, maxi and evening dresses first, with accessories after.',
+    params: { q: 'date night bodycon dress party maxi evening dress', sort: 'newest' },
+    priorityGroups: ['dress'],
+    boost: ['bodycon', 'dress', 'maxi', 'midi', 'party', 'evening', 'date', 'night', 'gown', 'one piece', 'western dress'],
+    chips: [
+      { label: 'Bodycon', params: { q: 'bodycon dress date night party', sort: 'newest' } },
+      { label: 'Maxi', params: { q: 'maxi dress date night evening', sort: 'newest' } },
+      { label: 'Party', params: { q: 'party dress evening date night', sort: 'newest' } },
+      { label: 'Accessories', params: { q: 'date jewellery watch bag', sort: 'newest' } }
+    ]
+  },
+  wedding: {
+    id: 'wedding',
+    title: 'Wedding Ready',
+    subtitle: 'Sarees, kurtis, ethnic sets, jewellery and celebration pieces.',
+    params: { q: 'wedding ethnic saree kurti lehenga jewellery', sort: 'newest' },
+    priorityGroups: ['saree', 'kurti', 'jewellery', 'dress'],
+    boost: ['wedding', 'ethnic', 'saree', 'lehenga', 'kurti', 'jewellery', 'bangle', 'necklace', 'dress'],
+    chips: [
+      { label: 'Sarees', params: { q: 'wedding saree festive', sort: 'newest' } },
+      { label: 'Kurtis', params: { q: 'wedding kurti ethnic', sort: 'newest' } },
+      { label: 'Jewellery', params: { q: 'wedding jewellery bangle necklace', sort: 'newest' } }
+    ]
+  },
+  travel: {
+    id: 'travel',
+    title: 'Travel Looks',
+    subtitle: 'Comfort-first vacation fits, sneakers, jackets and easy layers.',
+    params: { sort: 'newest' },
+    boost: ['travel', 'vacation', 'casual', 'co ord', 'coord', 'sneaker', 'shoe', 'jacket', 'tshirt', 'dress', 'bag', 'shorts', 'shirt'],
+    chips: [
+      { label: 'Vacation', params: { q: 'travel vacation dress casual', sort: 'newest' } },
+      { label: 'Sneakers', params: { q: 'travel sneakers shoes', sort: 'newest' } },
+      { label: 'Layers', params: { q: 'travel jacket casual layer', sort: 'newest' } }
+    ]
+  },
+  festive: {
+    id: 'festive',
+    title: 'Festive Picks',
+    subtitle: 'Ethnicwear, sarees, kurtis and jewellery for festive styling.',
+    params: { q: 'festive ethnic saree kurti jewellery', sort: 'newest' },
+    priorityGroups: ['saree', 'kurti', 'jewellery', 'dress'],
+    boost: ['festive', 'festival', 'ethnic', 'saree', 'kurti', 'jewellery', 'bangle', 'dress', 'gold'],
+    chips: [
+      { label: 'Ethnic', params: { q: 'festive ethnic kurti saree', sort: 'newest' } },
+      { label: 'Sarees', params: { q: 'festive saree', sort: 'newest' } },
+      { label: 'Jewellery', params: { q: 'festive jewellery bangle gold', sort: 'newest' } }
+    ]
+  }
+};
 const homeMissionTiles = [
-  { label: 'College', image: 'lookmefy_model_07.png', tileStyle: { backgroundColor: '#ddd4ca' }, imageStyle: { top: -5, height: 142 } },
-  { label: 'Office', image: 'lookmefy_model_06.png', tileStyle: { backgroundColor: '#d8d2ca' }, imageStyle: { top: -6, height: 145 } },
-  { label: 'Date', image: 'lookmefy_model_02.png', tileStyle: { backgroundColor: '#d6cfc8' }, imageStyle: { top: -4, height: 142 } },
-  { label: 'Wedding', image: 'lookmefy_model_03.png', tileStyle: { backgroundColor: '#d8cec3' }, imageStyle: { top: -6, height: 146 } },
-  { label: 'Travel', image: 'lookmefy_model_01.png', tileStyle: { backgroundColor: '#ded7ce' }, imageStyle: { top: -8, height: 148 } },
-  { label: 'Festive', image: 'lookmefy_model_08.png', tileStyle: { backgroundColor: '#d2cbc3' }, imageStyle: { top: -4, height: 142 } }
+  { label: 'College', mission: 'college', image: 'lookmefy_model_07.png', tileStyle: { backgroundColor: '#ddd4ca' }, imageStyle: { top: -5, height: 142 } },
+  { label: 'Office', mission: 'office', image: 'lookmefy_model_06.png', tileStyle: { backgroundColor: '#d8d2ca' }, imageStyle: { top: -6, height: 145 } },
+  { label: 'Date', mission: 'date', image: 'lookmefy_model_02.png', tileStyle: { backgroundColor: '#d6cfc8' }, imageStyle: { top: -4, height: 142 } },
+  { label: 'Wedding', mission: 'wedding', image: 'lookmefy_model_03.png', tileStyle: { backgroundColor: '#d8cec3' }, imageStyle: { top: -6, height: 146 } },
+  { label: 'Travel', mission: 'travel', image: 'lookmefy_model_01.png', tileStyle: { backgroundColor: '#ded7ce' }, imageStyle: { top: -8, height: 148 } },
+  { label: 'Festive', mission: 'festive', image: 'lookmefy_model_08.png', tileStyle: { backgroundColor: '#d2cbc3' }, imageStyle: { top: -4, height: 142 } }
 ];
 const homeMissionCopy = {
   title: 'Choose your\noutfit mission',
@@ -417,6 +495,88 @@ function shopResultTitle(filters = {}, tryOnMode = false) {
   if (filters.q) return filters.q;
   if (filters.category) return titleCase(filters.category);
   return 'All Products';
+}
+
+function productSearchBlob(product = {}) {
+  return [
+    product.name,
+    product.brand,
+    product.category,
+    product.gender,
+    product.fit,
+    product.description,
+    ...(Array.isArray(product.tags) ? product.tags : [])
+  ].filter(Boolean).join(' ').toLowerCase();
+}
+
+function missionProductScore(product, missionPreset) {
+  if (!missionPreset) return 0;
+  const text = productSearchBlob(product);
+  const group = missionProductGroup(product);
+  let score = 0;
+  if (missionPreset.priorityGroups?.includes(group)) score += 16;
+  (missionPreset.boost || []).forEach((term, index) => {
+    if (text.includes(String(term).toLowerCase())) score += Math.max(1, 8 - Math.floor(index / 2));
+  });
+  if (product.imageUrl || product.imageUrls?.length) score += 2;
+  if (product.isNew || product.isNewArrival) score += 1;
+  if (Number(product.rating || 0) >= 4) score += 1;
+  return score;
+}
+
+function missionProductGroup(product = {}) {
+  const text = productSearchBlob(product);
+  const groups = [
+    ['saree', /\bsarees?\b/],
+    ['kurti', /\bkurt[ai]s?\b|\bethnic\b/],
+    ['jewellery', /\bjewell?ery\b|\bnecklace\b|\bbangles?\b|\bearrings?\b|\bbracelet\b/],
+    ['dress', /\bdresses?\b|\bgown\b|\blehenga\b/],
+    ['jeans', /\bjeans?\b|\bdenim\b/],
+    ['trousers', /\btrousers?\b|\bpants?\b|\bchinos?\b/],
+    ['tshirt', /\bt-?shirts?\b|\btees?\b/],
+    ['shirt', /\bshirts?\b/],
+    ['top', /\btops?\b|\bblouse\b/],
+    ['jacket', /\bjackets?\b|\bblazers?\b|\bhoodies?\b|\bshrugs?\b/],
+    ['shoes', /\bshoes?\b|\bsneakers?\b|\bheels?\b|\bloafers?\b|\bsandals?\b|\bfootwear\b/],
+    ['bag', /\bbags?\b|\bbackpacks?\b|\btotes?\b|\bclutches?\b/],
+    ['watch', /\bwatches?\b/]
+  ];
+  const found = groups.find(([, pattern]) => pattern.test(text));
+  return found?.[0] || String(product.category || 'other').toLowerCase() || 'other';
+}
+
+function orderProductsForMission(products = [], missionPreset = null) {
+  if (!missionPreset) return products;
+  const ranked = [...products].sort((a, b) => {
+    const scoreDiff = missionProductScore(b, missionPreset) - missionProductScore(a, missionPreset);
+    if (scoreDiff) return scoreDiff;
+    return Number(b.rating || 0) - Number(a.rating || 0);
+  });
+  const output = [];
+  const usedIds = new Set();
+  const groupCounts = {};
+  const maxPerRound = 2;
+  while (output.length < ranked.length) {
+    const before = output.length;
+    ranked.forEach((product) => {
+      const id = String(product.id || product._id || '');
+      if (!id || usedIds.has(id)) return;
+      const group = missionProductGroup(product);
+      if ((groupCounts[group] || 0) >= maxPerRound) return;
+      usedIds.add(id);
+      groupCounts[group] = (groupCounts[group] || 0) + 1;
+      output.push(product);
+    });
+    if (output.length === before) {
+      ranked.forEach((product) => {
+        const id = String(product.id || product._id || '');
+        if (!id || usedIds.has(id)) return;
+        usedIds.add(id);
+        output.push(product);
+      });
+    }
+  }
+  return output;
 }
 
 function friendlyFirstName(user) {
@@ -2913,13 +3073,20 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
           <View style={styles.homeMissionIntro}>
             <HomeMissionStoryShowcase />
           </View>
-          <View style={styles.homeMissionGrid} pointerEvents="none">
+          <View style={styles.homeMissionGrid}>
             {homeMissionTiles.map((item) => (
-              <View key={item.label} style={[styles.homeMissionTile, item.tileStyle]}>
+              <TouchableOpacity
+                key={item.label}
+                accessibilityRole="button"
+                accessibilityLabel={`Show ${item.label} products`}
+                activeOpacity={0.86}
+                style={[styles.homeMissionTile, item.tileStyle]}
+                onPress={() => onNavigate('shop', { ...missionProductPresets[item.mission].params, mission: item.mission })}
+              >
                 <Image source={images[item.image]} style={[styles.homeMissionTileImage, item.imageStyle]} resizeMode="contain" />
                 <View pointerEvents="none" style={styles.homeMissionTileScrim} />
                 <Text style={styles.homeMissionTileLabel}>{item.label}</Text>
-              </View>
+              </TouchableOpacity>
             ))}
           </View>
           <TouchableOpacity style={styles.homeMissionGenerateButton} activeOpacity={0.88} onPress={() => onNavigate('stylebot')}>
@@ -3370,17 +3537,19 @@ function ShopScreen({ initial = {}, tryOnMode, user, setUser, token, onNavigate,
   const [tryOnVideoErrors, setTryOnVideoErrors] = useState({});
   const [visibleProductCount, setVisibleProductCount] = useState(shopProductInitialVisibleCount);
   const shopScrollRef = useRef(null);
-  const state = useProducts({ ...filters, limit: shopProductGridLimit }, token);
+  const missionPreset = missionProductPresets[String(initial.mission || '').toLowerCase()] || null;
+  const state = useProducts({ ...filters, limit: missionPreset ? 96 : shopProductGridLimit }, token);
   const [tryOns, setTryOns] = useTryOns(user, state.products, token);
-  const resultTitle = shopResultTitle(filters, false);
+  const missionOrderedProducts = useMemo(() => orderProductsForMission(state.products, missionPreset), [missionPreset?.id, state.products]);
+  const resultTitle = missionPreset?.title || shopResultTitle(filters, false);
   const searchPlaceholder = filters.category
     ? `Search in ${titleCase(filters.category)}`
     : filters.q
       ? `Search ${String(filters.q).toLowerCase()}, brands, colours`
       : 'Search products, brands, colours';
   const hasSearchIntent = Boolean(filters.q || filters.category || filters.brand || filters.gender || filters.newArrival || filters.maxPrice || filters.discounted || filters.sale);
-  const visibleProducts = state.products.slice(0, visibleProductCount);
-  const canShowMoreProducts = visibleProductCount < state.products.length;
+  const visibleProducts = missionOrderedProducts.slice(0, visibleProductCount);
+  const canShowMoreProducts = visibleProductCount < missionOrderedProducts.length;
   const showStorefront = !tryOnMode && !hasSearchIntent && !filters.sort;
 
   useEffect(() => {
@@ -3418,6 +3587,20 @@ function ShopScreen({ initial = {}, tryOnMode, user, setUser, token, onNavigate,
   const runSearch = () => {
     setFilters((current) => ({ ...current, q: draft.trim() }));
   };
+  const selectMissionChip = useCallback((params = {}) => {
+    setDraft(params.q || '');
+    setFilters((current) => ({
+      ...current,
+      q: params.q || '',
+      category: params.category || '',
+      brand: params.brand || '',
+      sort: params.sort || current.sort || 'newest',
+      newArrival: params.newArrival || '',
+      maxPrice: params.maxPrice || '',
+      discounted: params.discounted || '',
+      sale: params.sale || ''
+    }));
+  }, []);
 
   const generateTryOn = useCallback(async (product) => {
     if (!user) {
@@ -3562,10 +3745,31 @@ function ShopScreen({ initial = {}, tryOnMode, user, setUser, token, onNavigate,
           <Text style={styles.muted}>{state.loading ? 'Searching...' : `${state.total} products`}</Text>
         </View>
       </View>
+      {missionPreset ? (
+        <View style={styles.missionSuggestionPanel}>
+          <Text style={styles.missionSuggestionKicker}>Suggested For {missionPreset.title}</Text>
+          <Text style={styles.missionSuggestionText}>{missionPreset.subtitle}</Text>
+          <View style={styles.missionSuggestionChips}>
+            {missionPreset.chips.map((chip) => {
+              const active = String(filters.q || '') === String(chip.params.q || '');
+              return (
+                <TouchableOpacity
+                  key={chip.label}
+                  activeOpacity={0.82}
+                  style={[styles.missionSuggestionChip, active && styles.missionSuggestionChipActive]}
+                  onPress={() => selectMissionChip(chip.params)}
+                >
+                  <Text style={[styles.missionSuggestionChipText, active && styles.missionSuggestionChipTextActive]}>{chip.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      ) : null}
 
       {state.loading ? <ProductGridSkeleton /> : (
         <>
-          <StatusPanel error={state.error} empty={!state.products.length} text="Try a different search or browse another category." />
+          <StatusPanel error={state.error} empty={!missionOrderedProducts.length} text="Try a different search or browse another category." />
           <View style={styles.productGrid}>
             {visibleProducts.map((product) => (
               <ProductCard
@@ -3588,7 +3792,7 @@ function ShopScreen({ initial = {}, tryOnMode, user, setUser, token, onNavigate,
               <TouchableOpacity
                 style={styles.productGridSeeMoreButton}
                 activeOpacity={0.86}
-                onPress={() => setVisibleProductCount((current) => Math.min(current + shopProductVisibleStep, state.products.length))}
+                onPress={() => setVisibleProductCount((current) => Math.min(current + shopProductVisibleStep, missionOrderedProducts.length))}
               >
                 <Text style={styles.productGridSeeMoreText}>See more</Text>
                 <Ionicons name="chevron-down" size={16} color="#ffffff" />
@@ -13993,6 +14197,57 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between'
+  },
+  missionSuggestionPanel: {
+    marginHorizontal: 16,
+    marginBottom: 14,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#eaded9',
+    backgroundColor: '#fffaf7',
+    gap: 8
+  },
+  missionSuggestionKicker: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '800',
+    color: '#9b5658',
+    textTransform: 'uppercase',
+    letterSpacing: 0
+  },
+  missionSuggestionText: {
+    ...typography.smallBody,
+    color: '#4b403b',
+    lineHeight: 18
+  },
+  missionSuggestionChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8
+  },
+  missionSuggestionChip: {
+    minHeight: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e2d8d2',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  missionSuggestionChipActive: {
+    borderColor: '#d7b8b5',
+    backgroundColor: '#f6ece9'
+  },
+  missionSuggestionChipText: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '800',
+    color: '#4b403b'
+  },
+  missionSuggestionChipTextActive: {
+    color: '#8c4d50'
   },
   screenTitle: {
     ...typography.display,

@@ -20,7 +20,6 @@ function bounded(promise, timeoutMs, label) {
     promise,
     new Promise((_, reject) => {
       timeout = setTimeout(() => reject(new Error(`${label} readiness check timed out`)), timeoutMs);
-      timeout.unref?.();
     })
   ]).finally(() => clearTimeout(timeout));
 }
