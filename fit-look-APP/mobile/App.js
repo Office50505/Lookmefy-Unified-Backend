@@ -6311,6 +6311,7 @@ function CustomTryOnScreen({ user, setUser, setToken, token, onNavigate, onBack,
 
   return (
     <ScrollView style={styles.customTryOnScreen} contentContainerStyle={styles.customTryOnContent} {...screenScrollProps}>
+      <PageBackRow onBack={onBack} />
       <View style={styles.customHeroPanel}>
         <View style={styles.customHeroMetaRow}>
           <Text style={styles.kicker}>Custom Try-On</Text>
