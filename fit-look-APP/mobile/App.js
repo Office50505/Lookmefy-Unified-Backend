@@ -10379,7 +10379,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: Platform.OS === 'ios' ? 10 : 14,
+    bottom: Platform.OS === 'ios' ? -15 : -11,
     zIndex: 40,
     width: '100%',
     alignItems: 'center',
