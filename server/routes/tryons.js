@@ -379,6 +379,7 @@ function prunaVideoTrySync() {
 
 function tryOnModelForProduct(product = {}) {
   if (promptKeyForProduct(product, 'full_outfit') === 'saree') return prunaTryOnModel();
+  if (requiresPrunaSensitiveTryOn(product)) return prunaTryOnModel();
   if (shouldUseFalImageEditForProduct(product)) return falSareeVirtualTryOnModel();
   if (requiresPreciseTryOnEdit(product)) return imageModel();
   if (usePrunaProvider()) {
@@ -386,6 +387,10 @@ function tryOnModelForProduct(product = {}) {
     return model === 'p-image-try-on' ? prunaTryOnModel() : model;
   }
   return 'fitroom/tryon-v2';
+}
+
+function requiresPrunaSensitiveTryOn(product = {}) {
+  return inferTryOnModel(product) === 'wan-v2.6-image-to-image';
 }
 
 function shouldUseFalImageEditForProduct(product = {}) {
@@ -2097,6 +2102,11 @@ async function generateProductTryOnImage({ user, product, tryOnModel, timer }) {
       () => callFalImageEdit({ user, product, quality: 'medium', timer })
     );
   }
+  const falModel = normalizeTryOnModel(selectedModel);
+  if (selectedModel === prunaTryOnModel() || falModel === 'wan-v2.6-image-to-image') {
+    timer?.mark('pruna sensitive try-on selected', { promptKey: productPromptKey, requestedModel: selectedModel === prunaTryOnModel() ? selectedModel : falModel });
+    return callPrunaTryOn({ user, product, promptKey: productPromptKey, fallbackPromptKey: 'full_outfit', timer });
+  }
   if (requiresPreciseTryOnEdit(product, productPromptKey)) {
     timer?.mark('precise garment image edit selected', { promptKey: productPromptKey });
     return callFalImageEdit({ user, product, quality: 'medium', timer });
@@ -2114,10 +2124,6 @@ async function generateProductTryOnImage({ user, product, tryOnModel, timer }) {
       () => callFitRoomTryOn({ user, product, clothType, timer }),
       () => callFalImageEdit({ user, product, quality: 'medium', timer })
     );
-  }
-  const falModel = normalizeTryOnModel(selectedModel);
-  if (falModel === 'wan-v2.6-image-to-image') {
-    return callFalWanImageToImage({ user, product, timer });
   }
   if (falModel === 'gpt-image-2') {
     return callFalImageEdit({ user, product, timer });
@@ -2223,6 +2229,10 @@ async function generateExternalTryOnImage({ user, product, timer }) {
   const productPromptKey = promptKeyForProduct(product, 'full_outfit');
   if (productPromptKey === 'saree') {
     timer?.mark('external pruna saree try-on selected', { promptKey: productPromptKey });
+    return callPrunaTryOn({ user, product, promptKey: productPromptKey, fallbackPromptKey: 'full_outfit', timer });
+  }
+  if (requiresPrunaSensitiveTryOn(product)) {
+    timer?.mark('external pruna sensitive try-on selected', { promptKey: productPromptKey });
     return callPrunaTryOn({ user, product, promptKey: productPromptKey, fallbackPromptKey: 'full_outfit', timer });
   }
   if (requiresPreciseTryOnEdit(product)) {

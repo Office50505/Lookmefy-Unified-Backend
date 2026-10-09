@@ -3882,6 +3882,7 @@ function ProductScreen({ id, user, setUser, token, onNavigate, onBack, onRequire
   const [tryOnError, setTryOnError] = useState('');
   const [tryOnVideoError, setTryOnVideoError] = useState('');
   const [lightbox, setLightbox] = useState(null);
+  const productScrollRef = useRef(null);
   const mediaScrollRef = useRef(null);
   const detailContentWidth = layout.contentWidth || width;
   const mediaWidth = Math.max(1, Math.round(detailContentWidth - 28));
@@ -3922,6 +3923,11 @@ function ProductScreen({ id, user, setUser, token, onNavigate, onBack, onRequire
     return () => clearTimeout(timer);
   }, [tryOn?.id, tryOn?.imageUrl, tryOn?.videoUrl, tryOn?.updatedAt, tryOn?.videoGeneratedAt, mediaWidth]);
 
+  const scrollToTryOnPreview = useCallback(() => {
+    productScrollRef.current?.scrollTo?.({ y: 0, animated: true });
+    mediaScrollRef.current?.scrollTo?.({ x: 0, animated: true });
+  }, []);
+
   const generate = async () => {
     if (!user) {
       onRequireAuth?.('Log in with your mobile number to generate AI try-ons.');
@@ -3933,6 +3939,7 @@ function ProductScreen({ id, user, setUser, token, onNavigate, onBack, onRequire
       setTryOnError(profileMessage);
       return;
     }
+    scrollToTryOnPreview();
     setTryOnLoading(true);
     setTryOnError('');
     try {
@@ -3971,6 +3978,7 @@ function ProductScreen({ id, user, setUser, token, onNavigate, onBack, onRequire
       setTryOnVideoError(profileMessage);
       return;
     }
+    scrollToTryOnPreview();
     setTryOnVideoLoading(true);
     setTryOnVideoError('');
     setTryOnError('');
@@ -4052,7 +4060,7 @@ function ProductScreen({ id, user, setUser, token, onNavigate, onBack, onRequire
   return (
     <View style={styles.productDetailScreen}>
       <ProductTopBar onNavigate={onNavigate} user={user} onBack={onBack} showSearch={false} />
-      <ScrollView contentContainerStyle={styles.productDetailContent} {...screenScrollProps}>
+      <ScrollView ref={productScrollRef} contentContainerStyle={styles.productDetailContent} {...screenScrollProps}>
       <View style={[styles.productHeroMedia, { height: mediaHeight, width: mediaWidth }]}>
         <ScrollView ref={mediaScrollRef} {...horizontalScrollProps} pagingEnabled contentContainerStyle={styles.productMediaTrack}>
           {mediaItems.map((item, index) => (
@@ -5031,12 +5039,9 @@ function mergeWardrobeSuggestions(primary = [], secondary = []) {
   }).slice(0, 6);
 }
 
-function WardrobeTopBar({ user, onNavigate, onBack }) {
+function WardrobeTopBar({ user, onNavigate }) {
   return (
-    <>
-      <AppHeader onNavigate={onNavigate} user={user} compact showSearch={false} />
-      <PageBackRow onBack={onBack} />
-    </>
+    <AppHeader onNavigate={onNavigate} user={user} compact showSearch={false} />
   );
 }
 
@@ -5937,9 +5942,9 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, onBack, init
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.wardrobeScreen}>
-      <ScrollView contentContainerStyle={styles.wardrobeContent} {...screenScrollProps}>
-        <WardrobeTopBar user={user} onNavigate={onNavigate} onBack={onBack} />
-
+      <WardrobeTopBar user={user} onNavigate={onNavigate} />
+      <ScrollView style={styles.flex} contentContainerStyle={styles.wardrobeContent} {...screenScrollProps}>
+        <PageBackRow onBack={onBack} />
         <View style={styles.wardrobeHeroHead}>
           <View>
             <Text style={styles.wardrobeTitle}>My Wardrobe</Text>
@@ -7612,8 +7617,9 @@ function TokensScreen({ user, setUser, onNavigate, onBack, onRequireAuth }) {
   }, [activeMonthly, cancelLoading, setUser]);
 
   return (
-    <ScrollView style={styles.creditsScreen} contentContainerStyle={styles.creditsContent} {...screenScrollProps}>
+    <View style={styles.creditsScreen}>
       <AppHeader onNavigate={onNavigate} user={user} compact />
+      <ScrollView style={styles.flex} contentContainerStyle={styles.creditsContent} {...screenScrollProps}>
       <PageBackRow onBack={onBack} />
 
       <View style={styles.creditsHero}>
@@ -7792,7 +7798,8 @@ function TokensScreen({ user, setUser, onNavigate, onBack, onRequireAuth }) {
           <Text style={styles.creditsFooterLink}>HELP CENTER</Text>
         </TouchableOpacity>
       </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -7903,8 +7910,9 @@ function WishlistScreen({ onNavigate, onBack, token, wishlistProducts = [], user
   };
   return (
     <>
-      <ScrollView style={styles.wishlistScreen} contentContainerStyle={styles.wishlistContent} {...screenScrollProps}>
+      <View style={styles.wishlistScreen}>
         <AppHeader onNavigate={onNavigate} user={user} compact />
+        <ScrollView style={styles.flex} contentContainerStyle={styles.wishlistContent} {...screenScrollProps}>
         <PageBackRow onBack={onBack} />
 
         <View style={styles.wishlistBody}>
@@ -8039,6 +8047,7 @@ function WishlistScreen({ onNavigate, onBack, token, wishlistProducts = [], user
         </ScrollView>
         </View>
       </ScrollView>
+      </View>
 
       <Modal visible={collectionSheetVisible} transparent animationType="slide" onRequestClose={() => setCollectionSheetVisible(false)}>
         <Pressable style={styles.collectionSheetBackdrop} onPress={() => setCollectionSheetVisible(false)}>
@@ -8117,8 +8126,9 @@ function CollectionsScreen({ onNavigate, onBack, user, collections = [], wishlis
   const selectedProducts = collectionProducts(selectedCollection, wishlistProducts);
 
   return (
-    <ScrollView style={styles.collectionsScreen} contentContainerStyle={styles.collectionsContent} {...screenScrollProps}>
+    <View style={styles.collectionsScreen}>
       <AppHeader onNavigate={onNavigate} user={user} compact />
+      <ScrollView style={styles.flex} contentContainerStyle={styles.collectionsContent} {...screenScrollProps}>
       <PageBackRow onBack={onBack} />
 
       <View style={styles.collectionsHero}>
@@ -8184,7 +8194,8 @@ function CollectionsScreen({ onNavigate, onBack, user, collections = [], wishlis
           </View>
         </View>
       ) : null}
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -8221,8 +8232,9 @@ function OrdersScreen({ onNavigate, onBack, token, user }) {
   const popularProducts = popular.products.slice(0, 4);
 
   return (
-    <ScrollView style={styles.ordersScreen} contentContainerStyle={styles.ordersContent} {...screenScrollProps}>
+    <View style={styles.ordersScreen}>
       <AppHeader onNavigate={onNavigate} user={user} compact />
+      <ScrollView style={styles.flex} contentContainerStyle={styles.ordersContent} {...screenScrollProps}>
       <PageBackRow onBack={onBack} />
       <View style={styles.ordersBody}>
         <Text style={styles.wishlistTitle}>My Orders</Text>
@@ -8265,7 +8277,8 @@ function OrdersScreen({ onNavigate, onBack, token, user }) {
           )}
         </View>
       </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -8796,8 +8809,9 @@ function ProfileScreen({ user, setUser, setToken, token, onNavigate, onBack, onL
   };
 
   return (
-    <ScrollView ref={profileScrollRef} style={styles.profileScreen} contentContainerStyle={styles.profileContent} {...screenScrollProps}>
+    <View style={styles.profileScreen}>
       <AppHeader onNavigate={onNavigate} user={user} compact />
+      <ScrollView ref={profileScrollRef} style={styles.flex} contentContainerStyle={styles.profileContent} {...screenScrollProps}>
       <PageBackRow onBack={onBack} />
 
       <View style={styles.profileHero}>
@@ -9277,7 +9291,8 @@ function ProfileScreen({ user, setUser, setToken, token, onNavigate, onBack, onL
         </KeyboardAvoidingView>
       </Modal>
       <ImageLightbox uri={lightbox} onClose={() => setLightbox(null)} />
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -9330,7 +9345,7 @@ function HowItWorksScreen({ user, onNavigate }) {
   );
 }
 
-function InfoScreen({ page, user, onNavigate }) {
+function InfoScreen({ page, user, onNavigate, onBack }) {
   const policy = policyPages[page];
   const meta = policy ? [policy.kicker, policy.title, policy.lead, policy.image] : infoPages[page];
   if (!meta) return <NotFoundScreen user={user} onNavigate={onNavigate} />;
@@ -9339,6 +9354,7 @@ function InfoScreen({ page, user, onNavigate }) {
     const emailSubject = policy.emailSubject || 'Lookmefy support request';
     return (
       <ScrollView contentContainerStyle={styles.scrollContent} {...screenScrollProps}>
+        <PageBackRow onBack={onBack} />
         <View style={styles.pageHero}>
           <Image source={images[policy.image] || images.hero} style={styles.pageImage} />
           <View style={styles.pageCopy}>
@@ -9378,6 +9394,7 @@ function InfoScreen({ page, user, onNavigate }) {
 
   return (
     <ScrollView contentContainerStyle={styles.scrollContent} {...screenScrollProps}>
+      <PageBackRow onBack={onBack} />
       <View style={styles.pageHero}>
         <Image source={images[meta[3]] || images.hero} style={styles.pageImage} />
         <View style={styles.pageCopy}>
@@ -10117,9 +10134,9 @@ export default function App() {
       case 'how':
         return <HowItWorksScreen user={user} onNavigate={navigate} />;
       case 'info':
-        return <InfoScreen page={routeParams.page} user={user} onNavigate={navigate} />;
+        return <InfoScreen page={routeParams.page} user={user} onNavigate={navigate} onBack={routeStack.length > 1 ? goBack : null} />;
       default:
-        return <InfoScreen page="missing" user={user} onNavigate={navigate} />;
+        return <InfoScreen page="missing" user={user} onNavigate={navigate} onBack={routeStack.length > 1 ? goBack : null} />;
     }
   }, [currentRoute.name, routeParamsKey, currentRouteKey, user, token, navigate, guardedNavigate, requestAuth, requireFreshLogin, addToWishlist, createCollection, collections, wishlistIds, wishlistProducts, registerTourTarget, tourFocusRequest, aiStudioConversationId, aiStudioMessages, aiStudioActiveChatId, aiStudioChatHistory, aiStudioTryOns, aiStudioTryOnErrors, refreshUser, routeStack.length, goBack, rememberCurrentScrollY]);
 
@@ -10669,7 +10686,7 @@ const styles = StyleSheet.create({
   },
   homeContent: {
     paddingTop: 0,
-    paddingBottom: bottomNavigationHeight + screenBottomInset + 128,
+    paddingBottom: bottomNavigationHeight - 28,
     backgroundColor: '#ffffff'
   },
   homeContentTablet: {
@@ -11962,7 +11979,7 @@ const styles = StyleSheet.create({
     marginTop: 34,
     paddingTop: 26,
     paddingHorizontal: 16,
-    paddingBottom: 0,
+    paddingBottom: 28,
     backgroundColor: '#f6efeb'
   },
   homeJournalHead: {
@@ -12128,7 +12145,7 @@ const styles = StyleSheet.create({
   homeJournalSeeMoreButton: {
     width: '100%',
     minHeight: 46,
-    marginTop: 12,
+    marginTop: 0,
     borderRadius: 23,
     backgroundColor: '#111111',
     flexDirection: 'row',
@@ -12381,7 +12398,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'flex-start',
-    columnGap: 12,
+    columnGap: 8,
     rowGap: 24
   },
   categoryTileGridTablet: {
