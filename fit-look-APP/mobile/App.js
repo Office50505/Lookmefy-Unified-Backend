@@ -5350,7 +5350,10 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, onBack, init
     label: selection.label,
     itemId: selection.item.id
   }));
-  const wardrobePreviewHeight = clamp(height * 0.62, 470, 620);
+  const compactWardrobePreview = height < 640;
+  const wardrobePreviewHeight = compactWardrobePreview
+    ? clamp(height * 0.39, 216, 232)
+    : clamp(height * 0.54, 340, 480);
   const recommendationSource = suggestions.slice(0, 3);
   const detectionSummaryFields = [
     ['Name', itemName],
@@ -5740,15 +5743,15 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, onBack, init
     return (
       <Pressable
         key={tab.key}
-        style={styles.wardrobeCategoryButton}
+        style={[styles.wardrobeCategoryButton, compactWardrobePreview && styles.wardrobeCategoryButtonCompact]}
         onPress={() => openWardrobeCategory(tab)}
       >
         {({ pressed }) => (
           <>
-            <View style={[styles.wardrobeCategoryIcon, pressed && styles.wardrobeCategoryIconActive]}>
+            <View style={[styles.wardrobeCategoryIcon, compactWardrobePreview && styles.wardrobeCategoryIconCompact, pressed && styles.wardrobeCategoryIconActive]}>
               {renderCategoryIcon()}
             </View>
-            <Text style={[styles.wardrobeCategoryLabel, pressed && styles.wardrobeCategoryLabelActive]} numberOfLines={1}>{tab.label}</Text>
+            <Text style={[styles.wardrobeCategoryLabel, compactWardrobePreview && styles.wardrobeCategoryLabelCompact, pressed && styles.wardrobeCategoryLabelActive]} numberOfLines={1}>{tab.label}</Text>
           </>
         )}
       </Pressable>
@@ -5951,22 +5954,22 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, onBack, init
         {closetView === 'stylist' ? (
           <>
             <View style={styles.wardrobePreviewWrap}>
-              <View style={styles.wardrobePreviewStage}>
+              <View style={[styles.wardrobePreviewStage, compactWardrobePreview && styles.wardrobePreviewStageCompact]}>
                 <Pressable style={[styles.wardrobePreviewCard, { height: wardrobePreviewHeight }]} onPress={() => mainPreview && setLightbox(imageUrl(mainPreview))}>
                   {wardrobePreviewSource ? (
                     <ResilientImage source={wardrobePreviewSource} style={styles.wardrobePreviewImage} resizeMode="contain" fallbackIcon="shirt-outline" />
                   ) : null}
                   {busy === 'generate' ? <View style={styles.previewGenerating}><ActivityIndicator color="#fff" /><Text style={styles.previewGeneratingText}>Generating look</Text></View> : null}
                 </Pressable>
-                <View style={[styles.wardrobeCategoryRail, styles.wardrobeCategoryRailLeft]}>
+                <View style={[styles.wardrobeCategoryRail, compactWardrobePreview && styles.wardrobeCategoryRailCompact, styles.wardrobeCategoryRailLeft]}>
                   {wardrobeLeftCategoryTabs.map(renderWardrobeCategoryButton)}
                 </View>
-                <View style={[styles.wardrobeCategoryRail, styles.wardrobeCategoryRailRight]}>
+                <View style={[styles.wardrobeCategoryRail, compactWardrobePreview && styles.wardrobeCategoryRailCompact, styles.wardrobeCategoryRailRight]}>
                   {wardrobeRightCategoryTabs.map(renderWardrobeCategoryButton)}
                 </View>
-                <View style={styles.wardrobeTryButtonDock}>
+                <View style={[styles.wardrobeTryButtonDock, compactWardrobePreview && styles.wardrobeTryButtonDockCompact]}>
                   <TouchableOpacity
-                    style={[styles.wardrobeTryButton, (!tryThisLookIds.length || busy === 'generate') && styles.disabledButton]}
+                    style={[styles.wardrobeTryButton, compactWardrobePreview && styles.wardrobeTryButtonCompact, (!tryThisLookIds.length || busy === 'generate') && styles.disabledButton]}
                     disabled={!tryThisLookIds.length || busy === 'generate'}
                     onPress={() => generateOutfit(tryThisLookIds, { title: 'My wardrobe look', itemSlots: tryThisItemSlots })}
                   >
@@ -6243,6 +6246,7 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, onBack, init
 
 function CustomTryOnScreen({ user, setUser, setToken, token, onNavigate, onBack, refreshUser }) {
   const layout = useResponsiveLayout();
+  const { height } = useWindowDimensions();
   const [garment, setGarment] = useState(null);
   const [result, setResult] = useState(null);
   const [message, setMessage] = useState('');
@@ -6263,7 +6267,8 @@ function CustomTryOnScreen({ user, setUser, setToken, token, onNavigate, onBack,
   const generatedUri = result?.imageUrl ? imageUrl(result.imageUrl) : '';
   const hasGenerated = Boolean(generatedUri);
   const latestCustomTryOn = latestCustom.data?.tryOn;
-  const customResultHeight = layout.isTablet ? Math.min(520, Math.max(390, Math.round(layout.contentWidth * 0.42))) : 368;
+  const compactCustomTryOn = height < 640 && !layout.isTablet;
+  const customResultHeight = layout.isTablet ? Math.min(520, Math.max(390, Math.round(layout.contentWidth * 0.42))) : compactCustomTryOn ? 300 : 368;
 
   useEffect(() => {
     if (garment || result || loading || !latestCustomTryOn?.imageUrl) return;
@@ -6310,9 +6315,9 @@ function CustomTryOnScreen({ user, setUser, setToken, token, onNavigate, onBack,
   };
 
   return (
-    <ScrollView style={styles.customTryOnScreen} contentContainerStyle={styles.customTryOnContent} {...screenScrollProps}>
+    <ScrollView style={styles.customTryOnScreen} contentContainerStyle={[styles.customTryOnContent, compactCustomTryOn && styles.customTryOnContentCompact]} {...screenScrollProps}>
       <PageBackRow onBack={onBack} />
-      <View style={styles.customHeroPanel}>
+      <View style={[styles.customHeroPanel, compactCustomTryOn && styles.customHeroPanelCompact]}>
         <View style={styles.customHeroMetaRow}>
           <Text style={styles.kicker}>Custom Try-On</Text>
           <View style={styles.customTokenPill}>
@@ -6320,12 +6325,12 @@ function CustomTryOnScreen({ user, setUser, setToken, token, onNavigate, onBack,
             <Text style={styles.customTokenText}>1 token</Text>
           </View>
         </View>
-        <Text style={styles.screenTitle}>Try on any clothing photo.</Text>
-        <Text style={styles.description}>Upload a garment image and Lookmefy will generate it on your saved profile photo with FitRoom.</Text>
+        <Text style={[styles.screenTitle, compactCustomTryOn && styles.customHeroTitleCompact]}>Try on any clothing photo.</Text>
+        <Text style={[styles.description, compactCustomTryOn && styles.customHeroDescriptionCompact]}>Upload a garment image and Lookmefy will generate it on your saved profile photo with FitRoom.</Text>
       </View>
 
-      <View style={[styles.customUploadRow, layout.isTablet && styles.customUploadRowTablet]}>
-        <Pressable style={[styles.customProfileCard, layout.isTablet && styles.customProfileCardTablet]} onPress={() => profilePreviewUri && setLightbox(profilePreviewUri)}>
+      <View style={[styles.customUploadRow, compactCustomTryOn && styles.customUploadRowCompact, layout.isTablet && styles.customUploadRowTablet]}>
+        <Pressable style={[styles.customProfileCard, compactCustomTryOn && styles.customProfileCardCompact, layout.isTablet && styles.customProfileCardTablet]} onPress={() => profilePreviewUri && setLightbox(profilePreviewUri)}>
           {profilePreviewUri ? (
             <ResilientImage source={{ uri: profilePreviewUri }} style={styles.customProfileImage} imageStyle={profilePreviewImageStyle} imageBaseStyle={profilePreviewBaseStyle} resizeMode={profilePreviewResizeMode} fallbackIcon="person-outline" />
           ) : (
@@ -6339,7 +6344,7 @@ function CustomTryOnScreen({ user, setUser, setToken, token, onNavigate, onBack,
             <Text style={styles.customProfileSub} numberOfLines={1}>{user.bodyPhotoStatus === 'generating' ? 'Preparing' : 'Saved'}</Text>
           </View>
         </Pressable>
-        <TouchableOpacity style={[styles.customGarmentDrop, layout.isTablet && styles.customGarmentDropTablet, garment?.uri && styles.customGarmentDropReady]} activeOpacity={0.86} onPress={chooseGarment}>
+        <TouchableOpacity style={[styles.customGarmentDrop, compactCustomTryOn && styles.customGarmentDropCompact, layout.isTablet && styles.customGarmentDropTablet, garment?.uri && styles.customGarmentDropReady]} activeOpacity={0.86} onPress={chooseGarment}>
           {garment?.uri ? (
             <>
               <Image source={{ uri: garment.uri }} style={styles.customGarmentImage} resizeMode="cover" />
@@ -10664,7 +10669,7 @@ const styles = StyleSheet.create({
   },
   homeContent: {
     paddingTop: 0,
-    paddingBottom: bottomNavigationHeight + screenBottomInset + 36,
+    paddingBottom: bottomNavigationHeight + screenBottomInset + 128,
     backgroundColor: '#ffffff'
   },
   homeContentTablet: {
@@ -12199,7 +12204,7 @@ const styles = StyleSheet.create({
   },
   categoryRailContent: {
     paddingTop: 4,
-    paddingBottom: bottomNavigationHeight
+    paddingBottom: bottomNavigationHeight + screenBottomInset + 96
   },
   categoryRailContentTablet: {
     paddingBottom: 28
@@ -12278,7 +12283,7 @@ const styles = StyleSheet.create({
   categoryMainContent: {
     paddingTop: 14,
     paddingHorizontal: 14,
-    paddingBottom: bottomNavigationHeight
+    paddingBottom: bottomNavigationHeight + screenBottomInset + 128
   },
   categoryMainContentTablet: {
     paddingHorizontal: 24,
@@ -12327,20 +12332,22 @@ const styles = StyleSheet.create({
   categoryFeaturedGrid: {
     marginTop: 16,
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 2
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start',
+    columnGap: 8,
+    rowGap: 14
   },
   categoryFeaturedTile: {
-    flex: 1,
-    minHeight: 92,
+    width: '44%',
+    minHeight: 86,
     minWidth: 0,
     alignItems: 'center',
     justifyContent: 'flex-start'
   },
   categoryFeaturedImageFrame: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
@@ -12356,15 +12363,15 @@ const styles = StyleSheet.create({
   categoryFeaturedImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 28,
+    borderRadius: 25,
     backgroundColor: '#f8eeeb'
   },
   categoryFeaturedLabel: {
     width: '100%',
-    marginTop: 8,
+    marginTop: 7,
     color: '#4d464d',
-    fontSize: 9,
-    lineHeight: 12,
+    fontSize: 8.5,
+    lineHeight: 11,
     fontWeight: '800',
     textAlign: 'center',
     letterSpacing: 0
@@ -12915,6 +12922,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 3
   },
+  wardrobeCategoryRailCompact: {
+    top: 10,
+    bottom: 10
+  },
   wardrobeCategoryRailLeft: {
     left: 10
   },
@@ -12924,6 +12935,9 @@ const styles = StyleSheet.create({
   wardrobeCategoryButton: {
     width: 88,
     alignItems: 'center'
+  },
+  wardrobeCategoryButtonCompact: {
+    width: 70
   },
   wardrobeCategoryIcon: {
     width: 58,
@@ -12939,6 +12953,11 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },
     elevation: 2
+  },
+  wardrobeCategoryIconCompact: {
+    width: 42,
+    height: 42,
+    borderRadius: 21
   },
   wardrobeCategoryIconActive: {
     borderWidth: 3,
@@ -12964,6 +12983,16 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     fontWeight: '700'
   },
+  wardrobeCategoryLabelCompact: {
+    marginTop: 3,
+    minHeight: 18,
+    maxWidth: 68,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 9,
+    fontSize: 9,
+    lineHeight: 12
+  },
   wardrobeCategoryLabelActive: {
     color: '#a84f59',
     fontFamily: fontFamilies.bodyBold,
@@ -12976,7 +13005,10 @@ const styles = StyleSheet.create({
   },
   wardrobePreviewStage: {
     position: 'relative',
-    marginBottom: 26
+    marginBottom: 0
+  },
+  wardrobePreviewStageCompact: {
+    marginBottom: 0
   },
   wardrobePreviewCard: {
     width: '100%',
@@ -13003,13 +13035,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 20
   },
+  wardrobeTryButtonCompact: {
+    minHeight: 36,
+    minWidth: 102,
+    borderRadius: 18,
+    paddingHorizontal: 16
+  },
   wardrobeTryButtonDock: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: -47,
+    marginTop: 14,
     zIndex: 5,
     alignItems: 'center'
+  },
+  wardrobeTryButtonDockCompact: {
+    marginTop: 10
   },
   wardrobeTryText: {
     ...typography.caption,
@@ -16983,7 +17021,10 @@ const styles = StyleSheet.create({
   customTryOnContent: {
     paddingHorizontal: 16,
     paddingTop: 14,
-    paddingBottom: bottomNavigationHeight + screenBottomInset + 72
+    paddingBottom: bottomNavigationHeight + screenBottomInset + 128
+  },
+  customTryOnContentCompact: {
+    paddingTop: 8
   },
   customHeroPanel: {
     padding: 18,
@@ -16997,6 +17038,18 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
     elevation: 2,
     gap: 10
+  },
+  customHeroPanelCompact: {
+    padding: 14,
+    gap: 7
+  },
+  customHeroTitleCompact: {
+    fontSize: 24,
+    lineHeight: 28
+  },
+  customHeroDescriptionCompact: {
+    fontSize: 14,
+    lineHeight: 20
   },
   customHeroMetaRow: {
     minHeight: 28,
@@ -17028,6 +17081,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12
   },
+  customUploadRowCompact: {
+    marginTop: 10,
+    gap: 10
+  },
   customUploadRowTablet: {
     gap: 16
   },
@@ -17039,6 +17096,10 @@ const styles = StyleSheet.create({
     borderColor: '#eaded9',
     backgroundColor: '#fffdfb',
     overflow: 'hidden'
+  },
+  customProfileCardCompact: {
+    width: 92,
+    height: 176
   },
   customProfileCardTablet: {
     width: 160,
@@ -17102,6 +17163,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center'
+  },
+  customGarmentDropCompact: {
+    height: 176
   },
   customGarmentDropTablet: {
     height: 260
