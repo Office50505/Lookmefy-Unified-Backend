@@ -2848,11 +2848,11 @@ function HomeBeforeAfterSlider() {
   );
 }
 
-function ProductTopBar({ onNavigate, user, onBack, showSearch = true }) {
+function ProductTopBar({ onNavigate, user, onBack, showSearch = true, children }) {
   return (
     <>
       <AppHeader onNavigate={onNavigate} user={user} compact showSearch={showSearch} />
-      <PageBackRow onBack={onBack} />
+      <PageBackRow onBack={onBack}>{children}</PageBackRow>
     </>
   );
 }
@@ -6642,12 +6642,11 @@ function StyleBotScreen({
 
   return (
     <View style={styles.aiStudioScreen} {...swipeBackResponder.panHandlers}>
-      <ProductTopBar onNavigate={onNavigate} user={user} onBack={onBack} />
-      <View style={styles.aiStudioMenuRow}>
+      <ProductTopBar onNavigate={onNavigate} user={user} onBack={onBack}>
         <TouchableOpacity style={styles.aiStudioMenuButton} activeOpacity={0.84} accessibilityLabel="Open chat history" onPress={() => setHistoryOpen(true)}>
           <Ionicons name="menu-outline" size={22} color="#252221" />
         </TouchableOpacity>
-      </View>
+      </ProductTopBar>
       <Modal visible={historyOpen} transparent animationType="fade" onRequestClose={() => setHistoryOpen(false)}>
         <View style={styles.aiHistoryModal}>
           <Pressable style={styles.aiHistoryBackdrop} onPress={() => setHistoryOpen(false)} />
@@ -10746,7 +10745,7 @@ const styles = StyleSheet.create({
   homeMissionCopy: {
     position: 'absolute',
     left: 0,
-    top: 15,
+    top: 8,
     width: '63%',
     zIndex: 4
   },
@@ -10754,16 +10753,17 @@ const styles = StyleSheet.create({
     fontFamily: fontFamilies.logo,
     color: '#000000',
     fontSize: 31,
-    lineHeight: 33,
+    lineHeight: 38,
     fontWeight: '400',
     letterSpacing: 0,
+    paddingTop: 6,
     paddingLeft: 12,
-    paddingBottom: 4,
+    paddingBottom: 2,
     includeFontPadding: true
   },
   homeMissionSubtitle: {
     ...typography.body,
-    marginTop: 4,
+    marginTop: 1,
     marginLeft: 12,
     maxWidth: 190,
     color: '#24211f',
@@ -12286,7 +12286,7 @@ const styles = StyleSheet.create({
   },
   categoryFeatureBand: {
     marginHorizontal: 0,
-    paddingHorizontal: 14,
+    paddingHorizontal: 10,
     paddingTop: 16,
     paddingBottom: 17,
     borderRadius: 10,
@@ -12325,21 +12325,22 @@ const styles = StyleSheet.create({
     letterSpacing: 0
   },
   categoryFeaturedGrid: {
-    marginTop: 18,
+    marginTop: 16,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 10
+    gap: 2
   },
   categoryFeaturedTile: {
     flex: 1,
-    minHeight: 112,
+    minHeight: 92,
+    minWidth: 0,
     alignItems: 'center',
     justifyContent: 'flex-start'
   },
   categoryFeaturedImageFrame: {
-    width: 78,
-    height: 78,
-    borderRadius: 39,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
@@ -12355,15 +12356,15 @@ const styles = StyleSheet.create({
   categoryFeaturedImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 39,
+    borderRadius: 28,
     backgroundColor: '#f8eeeb'
   },
   categoryFeaturedLabel: {
     width: '100%',
-    marginTop: 10,
+    marginTop: 8,
     color: '#4d464d',
-    fontSize: 13,
-    lineHeight: 16,
+    fontSize: 9,
+    lineHeight: 12,
     fontWeight: '800',
     textAlign: 'center',
     letterSpacing: 0
@@ -15117,19 +15118,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     backgroundColor: '#faf5f3'
   },
-  aiStudioMenuRow: {
-    minHeight: 46,
-    paddingHorizontal: 14,
-    paddingTop: 7,
-    paddingBottom: 5,
-    backgroundColor: '#faf5f3',
-    flexDirection: 'row',
-    alignItems: 'center'
-  },
   aiStudioMenuButton: {
-    width: 38,
-    height: 34,
-    borderRadius: 11,
+    marginLeft: 'auto',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: '#eaded9',
     backgroundColor: '#fffdfb',
