@@ -344,6 +344,22 @@ test('diversity reranking breaks up repeated brands and categories', () => {
   assert.equal(ranked.length, 4);
 });
 
+test('diversity reranking gives different departments a turn before repeating jeans', () => {
+  const scored = [
+    { product: product({ _id: 'jeans-1', name: 'Blue Denim Jeans', category: 'Jeans', brand: 'Denim Co' }), score: 12 },
+    { product: product({ _id: 'jeans-2', name: 'Black Wide Leg Jeans', category: 'Jeans', brand: 'Denim Co' }), score: 11.8 },
+    { product: product({ _id: 'jeans-3', name: 'Grey Baggy Jeans', category: 'Jeans', brand: 'Denim Co' }), score: 11.6 },
+    { product: product({ _id: 'shirt-1', name: 'Oxford Shirt', category: 'Shirts', brand: 'Acme' }), score: 7 },
+    { product: product({ _id: 'dress-1', name: 'Bodycon Dress', category: 'Dresses', brand: 'Acme' }), score: 6.8 },
+    { product: product({ _id: 'shoe-1', name: 'White Sneakers', category: 'Shoes', brand: 'Sole' }), score: 6.6 }
+  ];
+
+  const ranked = rerankDiverse(scored, 4);
+  assert.equal(new Set(ranked.map((item) => item.product.category)).size, 4);
+  assert.equal(ranked[0].product._id, 'jeans-1');
+  assert.deepEqual(new Set(ranked.map((item) => item.product._id)), new Set(['jeans-1', 'shirt-1', 'dress-1', 'shoe-1']));
+});
+
 test('catalog gender labels normalize consistently', () => {
   assert.equal(normalizeGender("Women's"), 'female');
   assert.equal(normalizeGender('Men'), 'male');

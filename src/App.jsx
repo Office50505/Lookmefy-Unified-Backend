@@ -2438,18 +2438,59 @@ function productMatchesAnyCategory(product, words = []) {
   return words.some((word) => text.includes(word));
 }
 
-function stableExploreProducts(products = []) {
+function stableProductSort(products = []) {
   return [...products]
     .sort((a, b) => String(a.id || a.name || '').localeCompare(String(b.id || b.name || '')))
     .sort((a, b) => ((String(a.id || '').charCodeAt(0) || 0) % 7) - ((String(b.id || '').charCodeAt(0) || 0) % 7));
 }
 
+function homeProductDepartment(product) {
+  const productText = [product?.category, product?.name, product?.tags?.join?.(' ') || product?.tags].filter(Boolean).join(' ');
+  const productKey = productText.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+  if (/(jean|denim)/.test(productKey)) return 'jeans';
+  if (/(pant|trouser|jogger|legging|chino|cargo|short|skirt|bottom)/.test(productKey)) return 'bottoms';
+  if (/(^|_)(watch|watches|bag|bags|wallet|wallets|belt|belts|cap|caps|hat|hats|scarf|scarves|sunglass|sunglasses|eyewear|jewel|jewellery|jewelry|accessory|accessories)($|_)/.test(productKey)) return 'accessories';
+  const visualKey = categoryVisualKey(productText);
+  if (['shoe', 'shoes', 'footwear', 'sneakers', 'sandals', 'heels'].includes(visualKey)) return 'shoes';
+  if (['bags', 'watches', 'watch', 'accessories', 'eyewear', 'sunglasses', 'glasses'].includes(visualKey)) return 'accessories';
+  if (['ethnic wear', 'ethnic'].includes(visualKey)) return 'ethnic wear';
+  if (['dresses', 'dress', 'skirts'].includes(visualKey)) return 'dresses';
+  if (['shirts', 'shirt', 't-shirts', 'tshirts', 'tees', 'tops'].includes(visualKey)) return 'tops';
+  if (['jackets', 'jacket', 'outerwear', 'sweatshirts', 'hoodies'].includes(visualKey)) return 'outerwear';
+  if (['jeans', 'denim'].includes(visualKey)) return 'jeans';
+  if (['pants', 'trousers', 'bottoms', 'shorts'].includes(visualKey)) return 'bottoms';
+  if (['innerwear', 'sleepwear', 'nightwear', 'loungewear'].includes(visualKey)) return 'intimates';
+  return visualKey || 'other';
+}
+
+function diversifyHomeProducts(products = []) {
+  const buckets = new Map();
+  for (const product of stableProductSort(uniqueProducts(products))) {
+    const key = homeProductDepartment(product);
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(product);
+  }
+  const orderedKeys = [...buckets.keys()].sort((a, b) => categoryDisplayRank(a) - categoryDisplayRank(b) || a.localeCompare(b));
+  const mixed = [];
+  while (orderedKeys.some((key) => buckets.get(key)?.length)) {
+    for (const key of orderedKeys) {
+      const next = buckets.get(key)?.shift();
+      if (next) mixed.push(next);
+    }
+  }
+  return mixed;
+}
+
+function stableExploreProducts(products = []) {
+  return diversifyHomeProducts(products);
+}
+
 function fillProductRailProducts(products = [], fallbackProducts = [], minimum = 8) {
-  const primary = uniqueProducts(products);
+  const primary = diversifyHomeProducts(products);
   if (primary.length >= minimum) return primary;
   const seen = new Set(primary.map((product) => product.id));
-  const fillers = stableExploreProducts(fallbackProducts).filter((product) => product?.id && product?.imageUrl && !seen.has(product.id));
-  return uniqueProducts([...primary, ...fillers]).slice(0, minimum);
+  const fillers = diversifyHomeProducts(fallbackProducts).filter((product) => product?.id && product?.imageUrl && !seen.has(product.id));
+  return diversifyHomeProducts([...primary, ...fillers]).slice(0, minimum);
 }
 
 function AtelierCommerceStrip({ id, title, subtitle, products, viewHref = '/categories', demoEcommerceMode = false }) {

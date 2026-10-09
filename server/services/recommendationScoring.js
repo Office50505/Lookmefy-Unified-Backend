@@ -295,6 +295,26 @@ function productId(value) {
   return typeof id === 'string' ? id : id.toString?.() || '';
 }
 
+function productDiversityGroup(product = {}) {
+  const text = [
+    product.category,
+    product.name,
+    product.description,
+    ...listValues(product.tags)
+  ].filter(Boolean).join(' ');
+  const key = normalizeKey(text);
+  if (/(sneaker|shoe|sandal|slipper|heel|boot|footwear)/.test(key)) return 'footwear';
+  if (/(saree|sari|lehenga|kurta|kurti|dupatta|salwar|ethnic|traditional|anarkali)/.test(key)) return 'ethnic';
+  if (/(dress|gown|bodycon|maxi|midi|mini|jumpsuit|romper|suit|co_ord|coord)/.test(key)) return 'full_body';
+  if (/(shirt|tshirt|t_shirt|tee|top|blouse|tunics?)/.test(key)) return 'tops';
+  if (/(jacket|blazer|coat|hoodie|sweatshirt|sweater|outerwear)/.test(key)) return 'outerwear';
+  if (/(jean|denim)/.test(key)) return 'jeans';
+  if (/(pant|trouser|jogger|legging|chino|cargo|short|skirt|bottom)/.test(key)) return 'bottoms';
+  if (/(^|_)(watch|watches|bag|bags|wallet|wallets|belt|belts|cap|caps|hat|hats|scarf|scarves|sunglass|sunglasses|eyewear|jewel|jewellery|jewelry|accessory|accessories)($|_)/.test(key)) return 'accessories';
+  if (/(innerwear|underwear|brief|boxer|lingerie|bra|swimwear|sleepwear|nightwear|pajama|loungewear)/.test(key)) return 'intimates';
+  return normalizeKey(product.category) || 'other';
+}
+
 function createRecentProfile() {
   return {
     categories: new Map(),
@@ -515,30 +535,49 @@ function rerankDiverse(scoredProducts, limit) {
   const remaining = [...scoredProducts].sort(compareScoredProducts);
   const selected = [];
   const categoryCounts = new Map();
+  const groupCounts = new Map();
   const brandCounts = new Map();
+  const availableGroupCount = new Set(remaining.map((item) => productDiversityGroup(item.product)).filter(Boolean)).size;
 
   while (remaining.length && selected.length < limit) {
-    let bestIndex = 0;
+    let bestIndex = -1;
     let bestAdjustedScore = Number.NEGATIVE_INFINITY;
+    const preferUnseenGroup = selected.length < Math.min(limit, availableGroupCount);
     for (let index = 0; index < remaining.length; index += 1) {
       const candidate = remaining[index];
+      const group = productDiversityGroup(candidate.product);
+      if (preferUnseenGroup && group && groupCounts.has(group)) continue;
       const category = normalizeKey(candidate.product.category);
       const brand = normalizeKey(candidate.product.brand);
       const adjustedScore = candidate.score
+        - ((groupCounts.get(group) || 0) * (DIVERSITY_CATEGORY_PENALTY * 1.25))
         - ((categoryCounts.get(category) || 0) * DIVERSITY_CATEGORY_PENALTY)
         - ((brandCounts.get(brand) || 0) * DIVERSITY_BRAND_PENALTY);
       if (adjustedScore > bestAdjustedScore
-        || (adjustedScore === bestAdjustedScore && compareScoredProducts(candidate, remaining[bestIndex]) < 0)) {
+        || (adjustedScore === bestAdjustedScore && (bestIndex === -1 || compareScoredProducts(candidate, remaining[bestIndex]) < 0))) {
         bestIndex = index;
         bestAdjustedScore = adjustedScore;
       }
+    }
+    if (bestIndex === -1) {
+      bestIndex = 0;
+      const candidate = remaining[bestIndex];
+      const group = productDiversityGroup(candidate.product);
+      const category = normalizeKey(candidate.product.category);
+      const brand = normalizeKey(candidate.product.brand);
+      bestAdjustedScore = candidate.score
+        - ((groupCounts.get(group) || 0) * (DIVERSITY_CATEGORY_PENALTY * 1.25))
+        - ((categoryCounts.get(category) || 0) * DIVERSITY_CATEGORY_PENALTY)
+        - ((brandCounts.get(brand) || 0) * DIVERSITY_BRAND_PENALTY);
     }
 
     const [chosen] = remaining.splice(bestIndex, 1);
     selected.push({ ...chosen, rankScore: bestAdjustedScore });
     const category = normalizeKey(chosen.product.category);
+    const group = productDiversityGroup(chosen.product);
     const brand = normalizeKey(chosen.product.brand);
     if (category) categoryCounts.set(category, (categoryCounts.get(category) || 0) + 1);
+    if (group) groupCounts.set(group, (groupCounts.get(group) || 0) + 1);
     if (brand) brandCounts.set(brand, (brandCounts.get(brand) || 0) + 1);
   }
 
@@ -579,6 +618,7 @@ export {
   normalizeGender,
   normalizeKey,
   priceBandForPrice,
+  productDiversityGroup,
   productStyleSignals,
   queryTerms,
   ratingQuality,

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { hasCoreClosetGarment, imageMimeTypeFromBytes, selectFitRoomClosetPlan } from '../server/routes/closet.js';
+import { closetGreyStudioCompositeEnabled, hasCoreClosetGarment, imageMimeTypeFromBytes, selectFitRoomClosetPlan } from '../server/routes/closet.js';
 
 function closetItem(overrides = {}) {
   const id = overrides.id || `${overrides.category || 'item'}-1`;
@@ -99,4 +99,14 @@ test('closet generation accepts wearable clothing, footwear, and accessory items
 test('imageMimeTypeFromBytes detects WebP even when provider headers are wrong', () => {
   const webpHeader = Buffer.from('52494646000000005745425056503820', 'hex');
   assert.equal(imageMimeTypeFromBytes(webpHeader), 'image/webp');
+});
+
+test('closet grey studio composite is opt-in to avoid cutout artifacts', () => {
+  const previous = process.env.CLOSET_GREY_STUDIO_COMPOSITE;
+  delete process.env.CLOSET_GREY_STUDIO_COMPOSITE;
+  assert.equal(closetGreyStudioCompositeEnabled(), false);
+  process.env.CLOSET_GREY_STUDIO_COMPOSITE = '1';
+  assert.equal(closetGreyStudioCompositeEnabled(), true);
+  if (previous === undefined) delete process.env.CLOSET_GREY_STUDIO_COMPOSITE;
+  else process.env.CLOSET_GREY_STUDIO_COMPOSITE = previous;
 });

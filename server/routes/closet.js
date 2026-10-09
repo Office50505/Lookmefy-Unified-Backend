@@ -316,6 +316,10 @@ function closetNoOpDiffThreshold() {
   return Number.isFinite(value) && value > 0 ? value : 3;
 }
 
+function closetGreyStudioCompositeEnabled() {
+  return ['1', 'true', 'yes', 'on'].includes(String(process.env.CLOSET_GREY_STUDIO_COMPOSITE || '').toLowerCase());
+}
+
 function closetWanPrompt(plan) {
   const hasComplexSelection = Boolean(plan?.requiresWan || plan?.clothType === 'wardrobe_multi');
   const target = hasComplexSelection
@@ -342,9 +346,12 @@ function closetWanPrompt(plan) {
     'Do not ignore image 2 and do not keep the original garment in the target area when it conflicts with the clothing reference.',
     'Preserve non-target clothing and body regions from image 1 unless they must be naturally covered or replaced by the uploaded garment.',
     'Fit the garment naturally with correct scale, folds, occlusion, shadows, and fabric texture.',
+    'Every transferred garment edge must be cleanly attached to the shopper. Remove hanger remnants, cutout borders, background pixels, floating straps, loose fabric scraps, color streaks, and detached fragments from the wardrobe reference.',
+    'Feet and footwear must be complete, grounded, paired, naturally attached to the legs, and free of torn edges, missing soles, floating pieces, white scraps, or broken cutout artifacts.',
     'Use a clean full-body studio catalog composition with soft even lighting and a simple neutral light gray or off-white background.',
     'Keep exactly one person in frame, full body visible head to toe, complete face and hair visible, both arms and hands visible, both legs and feet visible.',
-    'Do not add extra accessories, logos, text, people, duplicated limbs, body changes, beauty edits, or a comparison layout.'
+    'Do not add extra accessories, logos, text, people, duplicated limbs, body changes, beauty edits, or a comparison layout.',
+    'MANDATORY OUTPUT CHECK — invalid unless the final image has exactly one clean full-body shopper, complete face, complete hands, complete legs, complete feet or footwear, no detached clothing or shoe fragments, no stray straps, no edge halos, no alpha/cutout artifacts, and no broken footwear.'
   ].filter(Boolean).join(' ');
 }
 
@@ -355,6 +362,9 @@ function wanNegativePrompt() {
     'cropped face, cropped head, cropped body, cropped legs, cropped feet, cropped ankles, cropped knees',
     'half body, waist-up, bust shot, close-up crop, portrait crop',
     'copied product model, mannequin identity bleed',
+    'floating garment fragments, detached clothing pieces, stray straps, loose ribbons, hanger remnants, cutout artifacts, alpha fringe, edge halos',
+    'broken shoes, missing shoes, partial footwear, floating footwear, torn feet, white cutout scraps near feet, disconnected shoe pieces',
+    'paint streaks, mask artifacts, bad compositing, rough edges, warped hems',
     'text, watermark, logo hallucination, overexposed, low quality',
     'two images, split screen, side by side, diptych, collage, grid, multiple panels, duplicate image, before and after, two people, comparison layout'
   ].join(', ');
@@ -1391,16 +1401,31 @@ router.post('/outfits/generate', requireUser, async (req, res) => {
     const generated = await generateClosetTryOn({ user: req.user, plan: fitRoomPlan, garment, timer });
     const garmentFile = await saveUploadFile({ buffer: garment.bytes, mimetype: garment.mimetype, size: garment.bytes.length }, 'closet-combo', req.user, 'closet-outfits');
     const imageFile = await saveUploadFile({ buffer: generated.bytes, mimetype: generated.mimetype, size: generated.bytes.length }, 'closet-outfit', req.user, 'closet-outfits');
-    const isolation = await isolateSubjectAsset({ rootDir, user: req.user, storedImage: imageFile });
-    if (isolation.metadata.processingStatus === 'completed') timer.mark('subject isolation completed', { cached: isolation.cached, path: isolation.image?.path });
-    else timer.mark('subject isolation failed', { error: isolation.metadata.processingError });
-    let displayImageFile = imageFile;
-    if (isolation.metadata.processingStatus === 'completed' && isolation.image) {
-      try {
-        displayImageFile = await greyStudioOutfitFromTransparent(isolation.image, req.user, timer) || imageFile;
-      } catch (error) {
-        timer.mark('grey studio wardrobe composite failed', { error: readableError(error) });
+    let isolation = {
+      image: undefined,
+      metadata: {
+        processingStatus: 'skipped',
+        processingError: '',
+        qualityPassed: false,
+        skippedReason: 'closet grey studio composite disabled'
       }
+    };
+    let displayImageFile = imageFile;
+    if (closetGreyStudioCompositeEnabled()) {
+      isolation = await isolateSubjectAsset({ rootDir, user: req.user, storedImage: imageFile });
+      if (isolation.metadata.processingStatus === 'completed') timer.mark('subject isolation completed', { cached: isolation.cached, path: isolation.image?.path, qualityPassed: isolation.metadata.qualityPassed });
+      else timer.mark('subject isolation failed', { error: isolation.metadata.processingError });
+      if (isolation.metadata.processingStatus === 'completed' && isolation.metadata.qualityPassed && isolation.image) {
+        try {
+          displayImageFile = await greyStudioOutfitFromTransparent(isolation.image, req.user, timer) || imageFile;
+        } catch (error) {
+          timer.mark('grey studio wardrobe composite failed', { error: readableError(error) });
+        }
+      } else if (isolation.metadata.processingStatus === 'completed' && isolation.image) {
+        timer.mark('grey studio wardrobe composite skipped', { reason: 'subject isolation quality check failed', qualityScore: isolation.metadata.qualityScore });
+      }
+    } else {
+      timer.mark('grey studio wardrobe composite skipped', { reason: 'disabled to avoid cutout edge artifacts' });
     }
     const outfit = await ClosetOutfit.create({
       user: req.user._id,
@@ -1448,5 +1473,5 @@ router.patch('/outfits/:id', requireUser, async (req, res) => {
   res.json({ outfit: outfitToClient(outfit, items) });
 });
 
-export { closetMediaTokenKind, hasCoreClosetGarment, imageMimeTypeFromBytes, itemToClient, outfitToClient, selectFitRoomClosetPlan, reserveToken as reserveClosetToken, refundToken as refundClosetToken };
+export { closetGreyStudioCompositeEnabled, closetMediaTokenKind, hasCoreClosetGarment, imageMimeTypeFromBytes, itemToClient, outfitToClient, selectFitRoomClosetPlan, reserveToken as reserveClosetToken, refundToken as refundClosetToken };
 export default router;

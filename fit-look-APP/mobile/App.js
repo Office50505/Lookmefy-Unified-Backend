@@ -1177,6 +1177,55 @@ function fillProductRailProducts(products = [], fallbackProducts = [], minimum =
   return uniqueProductsWithImages([...primary, ...fillers]).slice(0, minimum);
 }
 
+function homeProductGroup(product = {}) {
+  const text = [
+    product.category,
+    product.subcategory,
+    product.name,
+    product.title,
+    Array.isArray(product.tags) ? product.tags.join(' ') : product.tags
+  ].filter(Boolean).join(' ').toLowerCase();
+  if (/shoe|sneaker|sandal|heel|footwear|boot|loafer/.test(text)) return 'footwear';
+  if (/watch/.test(text)) return 'watches';
+  if (/jewel|earring|necklace|ring|bracelet|accessor/.test(text)) return 'accessories';
+  if (/glass|eyewear|sunglass|goggle/.test(text)) return 'eyewear';
+  if (/saree|kurti|lehenga|ethnic|salwar|dupatta/.test(text)) return 'ethnic';
+  if (/dress|gown|bodycon|jumpsuit/.test(text)) return 'dresses';
+  if (/shirt|t-shirt|tee|top|blouse|crop/.test(text)) return 'tops';
+  if (/jean|denim|pant|trouser|bottom|skirt|short/.test(text)) return 'bottoms';
+  if (/jacket|blazer|coat|hoodie|sweater|sweatshirt/.test(text)) return 'layers';
+  if (/beauty|makeup|cream|serum|lipstick|skin|hair|perfume/.test(text)) return 'beauty';
+  return String(product.category || product.displayLabel || 'other').toLowerCase() || 'other';
+}
+
+function diversifyHomeProducts(products = [], fallbackProducts = [], minimum = 8) {
+  const pool = fillProductRailProducts(products, fallbackProducts, Math.max(minimum, 12));
+  const groups = new Map();
+  pool.forEach((product) => {
+    const group = homeProductGroup(product);
+    if (!groups.has(group)) groups.set(group, []);
+    groups.get(group).push(product);
+  });
+  const diversified = [];
+  const used = new Set();
+  const groupKeys = [...groups.keys()].sort((a, b) => groups.get(a).length - groups.get(b).length || a.localeCompare(b));
+  while (diversified.length < pool.length) {
+    let added = false;
+    groupKeys.forEach((group) => {
+      const next = groups.get(group)?.find((product) => !used.has(product.id));
+      if (!next) return;
+      used.add(next.id);
+      diversified.push(next);
+      added = true;
+    });
+    if (!added) break;
+  }
+  pool.forEach((product) => {
+    if (!used.has(product.id)) diversified.push(product);
+  });
+  return uniqueProductsWithImages(diversified);
+}
+
 function buildHomeAiRecommendationCards(products = [], seed = 0, feedGender = '') {
   const allProducts = uniqueProductsWithImages(products).filter((product) => {
     if (product.isAvailable === false) return false;
@@ -1737,7 +1786,10 @@ function BottomNav({ route = { name: 'home' }, onNavigate = () => {} }) {
             accessibilityRole="tab"
             accessibilityState={{ selected: active }}
             style={styles.navItem}
-            onPress={() => onNavigate(name)}
+            onPress={() => {
+              Keyboard.dismiss();
+              onNavigate(name);
+            }}
           >
             <View style={[styles.navIconWrap, active && styles.navIconWrapCenter]}>
               <Ionicons name={icon} size={active ? 22 : 20} color={active ? '#050505' : '#4d4a48'} />
@@ -2981,7 +3033,7 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
   const catalogProducts = useMemo(() => uniqueProductsWithImages(curated.products), [curated.products]);
   const arrivalProducts = useMemo(() => {
     const newArrivalProducts = catalogProducts.filter((product) => product.isNew);
-    return [...newArrivalProducts, ...catalogProducts.filter((product) => !product.isNew)].slice(0, 8);
+    return diversifyHomeProducts([...newArrivalProducts, ...catalogProducts.filter((product) => !product.isNew)], catalogProducts);
   }, [catalogProducts]);
   const tryOnPickProducts = useMemo(() => (
     catalogProducts
@@ -2989,7 +3041,7 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
       .slice(0, 8)
   ), [arrivalProducts, catalogProducts]);
   const recommendedProducts = useMemo(
-    () => fillProductRailProducts(recommended.products, catalogProducts),
+    () => diversifyHomeProducts(recommended.products, catalogProducts),
     [recommended.products, catalogProducts]
   );
   const homeAiRecommendationProducts = useMemo(
@@ -3020,7 +3072,7 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
         id: 'top-deals',
         title: 'Top Deals',
         subtitle: 'Live markdowns from the catalog',
-        products: fillProductRailProducts(byDiscount, catalogProducts),
+        products: diversifyHomeProducts(byDiscount, catalogProducts),
         loading: curated.loading,
         error: curated.error,
         viewParams: { discounted: 'true' }
@@ -3029,7 +3081,7 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
         id: 'under-499',
         title: 'Under ₹499',
         subtitle: 'Budget-friendly finds',
-        products: fillProductRailProducts(pricedProducts.filter((product) => Number(product.price || 0) < 499), catalogProducts),
+        products: diversifyHomeProducts(pricedProducts.filter((product) => Number(product.price || 0) < 499), catalogProducts),
         loading: curated.loading,
         error: curated.error,
         viewParams: { maxPrice: '499' }
@@ -3038,7 +3090,7 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
         id: 'under-999',
         title: 'Under ₹999',
         subtitle: 'More styles at easy prices',
-        products: fillProductRailProducts(pricedProducts.filter((product) => Number(product.price || 0) < 999), catalogProducts),
+        products: diversifyHomeProducts(pricedProducts.filter((product) => Number(product.price || 0) < 999), catalogProducts),
         loading: curated.loading,
         error: curated.error,
         viewParams: { maxPrice: '999' }
@@ -3047,7 +3099,7 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
         id: 'top-rated',
         title: 'Top Rated',
         subtitle: 'Highest rated catalog products',
-        products: fillProductRailProducts(byRating, catalogProducts),
+        products: diversifyHomeProducts(byRating, catalogProducts),
         loading: curated.loading,
         error: curated.error,
         viewParams: preferredApiGender ? { gender: preferredApiGender, sort: 'newest' } : { sort: 'newest' }
@@ -3056,7 +3108,7 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
         id: 'best-sellers',
         title: 'Best Sellers',
         subtitle: 'Ranked from available sales data',
-        products: fillProductRailProducts(bestSellers, catalogProducts),
+        products: diversifyHomeProducts(bestSellers, catalogProducts),
         loading: curated.loading,
         error: curated.error,
         viewParams: preferredApiGender ? { gender: preferredApiGender } : {}
@@ -9783,6 +9835,7 @@ export default function App() {
     });
   }, [currentRoute.name]);
   const navigate = useCallback((name, params = {}) => {
+    Keyboard.dismiss();
     const next = normalizeRoute(name, params);
     setRouteStack((current) => {
       const active = normalizeRoute(current[current.length - 1]?.name, current[current.length - 1]?.params);
@@ -10627,17 +10680,13 @@ const styles = StyleSheet.create({
     lineHeight: 16
   },
   bottomNavFrame: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: Platform.OS === 'ios' ? -15 : -11,
     zIndex: 40,
     width: '100%',
     alignItems: 'center',
     backgroundColor: 'transparent',
     paddingHorizontal: 18,
     paddingTop: 8,
-    paddingBottom: Platform.OS === 'ios' ? 28 : 22,
+    paddingBottom: Platform.OS === 'ios' ? 18 : 12,
     shadowColor: '#1f1714',
     shadowOpacity: 0.12,
     shadowRadius: 18,
@@ -10716,7 +10765,7 @@ const styles = StyleSheet.create({
   },
   homeContent: {
     paddingTop: 0,
-    paddingBottom: bottomNavigationHeight - 28,
+    paddingBottom: bottomNavigationHeight + screenBottomInset + 52,
     backgroundColor: '#ffffff'
   },
   homeContentTablet: {
@@ -12251,7 +12300,7 @@ const styles = StyleSheet.create({
   },
   categoryRailContent: {
     paddingTop: 4,
-    paddingBottom: bottomNavigationHeight + screenBottomInset + 96
+    paddingBottom: bottomNavigationHeight + screenBottomInset + 132
   },
   categoryRailContentTablet: {
     paddingBottom: 28
@@ -12330,7 +12379,7 @@ const styles = StyleSheet.create({
   categoryMainContent: {
     paddingTop: 14,
     paddingHorizontal: 14,
-    paddingBottom: bottomNavigationHeight + screenBottomInset + 128
+    paddingBottom: bottomNavigationHeight + screenBottomInset + 164
   },
   categoryMainContentTablet: {
     paddingHorizontal: 24,
@@ -17068,7 +17117,7 @@ const styles = StyleSheet.create({
   customTryOnContent: {
     paddingHorizontal: 16,
     paddingTop: 14,
-    paddingBottom: bottomNavigationHeight + screenBottomInset + 128
+    paddingBottom: bottomNavigationHeight + screenBottomInset + 164
   },
   customTryOnContentCompact: {
     paddingTop: 8
