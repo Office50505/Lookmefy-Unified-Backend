@@ -147,7 +147,7 @@ function isLowerClosetItem(item) {
 
 function isCoreClosetGarment(item) {
   if (isFullSetClosetItem(item)) return true;
-  return ['tops', 'bottoms', 'activewear', 'ethnic'].includes(item?.category);
+  return ['tops', 'bottoms', 'outerwear', 'shoes', 'accessories', 'activewear', 'ethnic'].includes(item?.category);
 }
 
 function hasCoreClosetGarment(items = []) {
@@ -1374,8 +1374,8 @@ router.post('/outfits/generate', requireUser, async (req, res) => {
     const itemsById = new Map(foundItems.map((item) => [item._id.toString(), item]));
     const items = itemIds.map((id) => itemsById.get(id)).filter(Boolean);
     if (!hasCoreClosetGarment(items)) {
-      await recordGenerationMetric({ user: req.user._id, type: 'closet_image', status: 'rejected', provider: 'fitroom', model: 'fitroom/tryon-v2', durationMs: Date.now() - analyticsStartedAt, error: 'Add a top, bottom, or full outfit before generating a complete look.' });
-      return res.status(400).json({ message: 'Add a top, bottom, or full outfit before generating a complete look.' });
+      await recordGenerationMetric({ user: req.user._id, type: 'closet_image', status: 'rejected', provider: 'fitroom', model: 'fitroom/tryon-v2', durationMs: Date.now() - analyticsStartedAt, error: 'Select a clothing, footwear, or accessory item before generating a look.' });
+      return res.status(400).json({ message: 'Select a clothing, footwear, or accessory item before generating a look.' });
     }
     const fitRoomPlan = selectFitRoomClosetPlan(items);
     const chargedUser = await reserveToken(req.user, timer);

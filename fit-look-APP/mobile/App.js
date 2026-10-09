@@ -5118,6 +5118,16 @@ function wardrobeTabMatchesItem(tab, item = {}) {
   return true;
 }
 
+function isSupportedWardrobeLookItem(item = {}) {
+  const category = String(item.category || '').toLowerCase();
+  if (['tops', 'bottoms', 'dresses', 'suits', 'outerwear', 'shoes', 'accessories', 'activewear', 'ethnic'].includes(category)) return true;
+  return /\b(dress|gown|jumpsuit|romper|saree|sari|lehenga|sherwani|kurta set|co-ord|coord|one[-\s]?piece|shirt|top|pants|jeans|shoe|sneaker|watch|glasses|bag|hat)\b/i.test(wardrobeTabItemText(item));
+}
+
+function hasSupportedWardrobeLookItem(items = []) {
+  return items.some(isSupportedWardrobeLookItem);
+}
+
 function selectedIdsFromComboSlots(slots = {}) {
   const ids = closetComboSlots.map((slot) => slots[slot.key]).filter(Boolean);
   return [...new Set(ids)];
@@ -5355,6 +5365,12 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, onBack, init
     label: selection.label,
     itemId: selection.item.id
   }));
+  const selectedWardrobeEntries = selectedIds.map((id) => items.find((item) => item.id === id)).filter(Boolean);
+  const selectedWardrobeHasSupportedItem = hasSupportedWardrobeLookItem(selectedWardrobeEntries);
+  const selectedWardrobeCanGenerate = selectedIds.length > 0 && selectedWardrobeHasSupportedItem;
+  const selectedWardrobeGenerateHint = selectedIds.length && !selectedWardrobeHasSupportedItem
+    ? 'Select a clothing, footwear, or accessory item before generating a look.'
+    : '';
   const compactWardrobePreview = height < 640;
   const wardrobePreviewHeight = compactWardrobePreview
     ? clamp(height * 0.39, 216, 232)
@@ -5599,6 +5615,11 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, onBack, init
       setMessage('Select at least one closet item first.');
       return;
     }
+    const entries = ids.map((id) => items.find((item) => item.id === id)).filter(Boolean);
+    if (!hasSupportedWardrobeLookItem(entries)) {
+      setMessage('Select a clothing, footwear, or accessory item before generating a look.');
+      return;
+    }
     const profileMessage = tryOnProfileBlockMessage(user);
     if (profileMessage) {
       setMessage(profileMessage);
@@ -5646,6 +5667,14 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, onBack, init
   const generateSelectedWardrobeLook = () => {
     const ids = selectedIds.filter((id) => items.some((item) => item.id === id));
     const entries = ids.map((id) => items.find((item) => item.id === id)).filter(Boolean);
+    if (!ids.length) {
+      setMessage('Select at least one closet item first.');
+      return;
+    }
+    if (!hasSupportedWardrobeLookItem(entries)) {
+      setMessage('Select a clothing, footwear, or accessory item before generating a look.');
+      return;
+    }
     setComboSlots({});
     setSelectedIds([]);
     setClosetView('stylist');
@@ -6216,8 +6245,9 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, onBack, init
         ) : null : null}
         {closetView === 'wardrobe' && items.length ? (
           <View style={styles.wardrobeGenerateFooter}>
+            {selectedWardrobeGenerateHint ? <Text style={styles.wardrobeGenerateHint}>{selectedWardrobeGenerateHint}</Text> : null}
             <TouchableOpacity
-              style={[styles.wardrobeGenerateLookButton, (!selectedIds.length || busy === 'generate') && styles.disabledButton]}
+              style={[styles.wardrobeGenerateLookButton, (!selectedIds.length || !selectedWardrobeCanGenerate || busy === 'generate') && styles.disabledButton]}
               activeOpacity={0.88}
               disabled={!selectedIds.length || busy === 'generate'}
               onPress={generateSelectedWardrobeLook}
@@ -20776,6 +20806,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingTop: 18,
     paddingBottom: 6
+  },
+  wardrobeGenerateHint: {
+    marginBottom: 10,
+    color: '#9b5658',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '800',
+    textAlign: 'center'
   },
   wardrobeGenerateLookButton: {
     minHeight: 54,

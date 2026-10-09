@@ -80,18 +80,20 @@ test('selectFitRoomClosetPlan tracks extra pieces while routing through Wan', ()
   assert.deepEqual(plan.ignoredItems.map((item) => item.name), ['Loafers']);
 });
 
-test('closet generation requires a top, bottom, or full outfit foundation', () => {
+test('closet generation accepts wearable clothing, footwear, and accessory items', () => {
   assert.equal(hasCoreClosetGarment([
     closetItem({ id: 'jacket-1', name: 'Cropped jacket', category: 'outerwear' })
-  ]), false);
+  ]), true);
   assert.equal(hasCoreClosetGarment([
     closetItem({ id: 'jacket-1', name: 'Cropped jacket', category: 'outerwear' }),
     closetItem({ id: 'bag-1', name: 'Black bag', category: 'accessories' })
-  ]), false);
-  assert.equal(hasCoreClosetGarment([
-    closetItem({ id: 'jacket-1', name: 'Cropped jacket', category: 'outerwear' }),
-    closetItem({ id: 'top-1', name: 'White tee', category: 'tops' })
   ]), true);
+  assert.equal(hasCoreClosetGarment([
+    closetItem({ id: 'shoe-1', name: 'White sneakers', category: 'shoes' })
+  ]), true);
+  assert.equal(hasCoreClosetGarment([
+    closetItem({ id: 'misc-1', name: 'Closet note', category: 'other' })
+  ]), false);
 });
 
 test('imageMimeTypeFromBytes detects WebP even when provider headers are wrong', () => {
