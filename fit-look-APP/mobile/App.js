@@ -14681,7 +14681,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fbf7f6'
   },
   productDetailContent: {
-    paddingBottom: screenBottomInset,
+    paddingBottom: bottomNavigationHeight + screenBottomInset + 72,
     backgroundColor: '#fbf7f6'
   },
   productTopBar: {
@@ -16979,7 +16979,7 @@ const styles = StyleSheet.create({
   customTryOnContent: {
     paddingHorizontal: 16,
     paddingTop: 14,
-    paddingBottom: bottomNavigationHeight + screenBottomInset + 112
+    paddingBottom: bottomNavigationHeight + screenBottomInset + 72
   },
   customHeroPanel: {
     padding: 18,
