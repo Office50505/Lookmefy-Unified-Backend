@@ -196,6 +196,28 @@ function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function categoryFilter(value = '') {
+  const category = String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  if (!category) return null;
+  if (category === 'beauty' || category === 'personal care' || category === 'beauty & personal care') {
+    return {
+      $in: [
+        /^beauty$/i,
+        /^personal care$/i,
+        /^beauty & personal care$/i,
+        /^beauty and personal care$/i,
+        /^cosmetics$/i,
+        /^makeup$/i,
+        /^skincare$/i,
+        /^skin care$/i,
+        /^hair care$/i,
+        /^fragrance$/i
+      ]
+    };
+  }
+  return new RegExp(`^${escapeRegExp(category)}$`, 'i');
+}
+
 function getElementTextById(html, ids) {
   for (const id of ids) {
     const safeId = escapeRegExp(id);
@@ -507,6 +529,7 @@ const categoryRules = [
   ['watches', /\b(watch(?:es)?|smart\s*watch(?:es)?|smartwatch(?:es)?|chronographs?)\b/i, 24],
   ['shoes', /\b(shoes?|sneakers?|boots?|loafers?|sandals?|slippers?|heels?|pumps?|flats?|footwear|trainers?)\b/i, 24],
   ['bags', /\b(wallets?|purses?|backpacks?|handbags?|totes?|sling\s*bags?|crossbody|duffels?|clutches?)\b/i, 24],
+  ['beauty', /\b(personal\s*care|skin\s*care|skincare|hair\s*care|make\s*up|makeup|cosmetics?|serums?|face\s*(?:wash|cream|mask|pack|serum)|cleansers?|moisturi[sz]ers?|sunscreens?|shampoos?|conditioners?|soaps?|body\s*wash|lotions?|deodorants?|perfumes?|fragrances?|lipsticks?|mascaras?|eyeliners?|kajal|nail\s*polish)\b/i, 24],
   ['accessories', accessoryIdentityPattern, 18],
   ['jeans', /\b(jeans?|denim\s*(?:jeans|pants|trousers)?)\b/i, 23],
   ['shorts', /\b(shorts?|bermudas?)\b/i, 23],
@@ -1349,7 +1372,7 @@ router.get('/', productReadLimiter, async (req, res) => {
 
     if (q) filter.$text = { $search: q };
     if (tag) filter.tags = new RegExp(`^${escapeRegExp(String(tag).trim())}$`, 'i');
-    if (category) filter.category = new RegExp(`^${String(category).trim()}$`, 'i');
+    if (category) filter.category = categoryFilter(category);
     if (brand) filter.brand = new RegExp(`^${String(brand).trim()}$`, 'i');
     if (gender) filter.gender = new RegExp(`^${String(gender).trim()}$`, 'i');
     if (featured === 'true') filter.isFeatured = true;

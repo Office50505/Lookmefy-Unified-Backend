@@ -2186,7 +2186,7 @@ const categoryPageContent = {
       { label: 'Jewellery', image: 'category-generated/jewellery.png', params: { category: 'accessories' } },
       { label: 'Men Fashion', image: 'category-generated/men-shirts.png', params: { gender: 'men' } },
       { label: 'Footwear', image: 'category-generated/sneakers.png', params: { category: 'shoes' } },
-      { label: 'Beauty &\nPersonal Care', image: 'category-generated/beauty.png', params: { q: 'beauty' } },
+      { label: 'Beauty &\nPersonal Care', image: 'category-generated/beauty.png', params: { category: 'beauty' } },
       { label: 'Watches', image: 'category-generated/watches.png', params: { category: 'watches' } },
       { label: 'Eyewear', image: 'category-generated/eyewear.png', params: { category: 'eyewear' } },
       { label: 'Bottomwear', image: 'category-generated/bottomwear.png', params: { category: 'bottoms' } },
@@ -2267,13 +2267,13 @@ const categoryPageContent = {
     kicker: 'BEAUTY',
     title: 'Beauty Picks',
     featured: [
-      { label: 'Personal Care', image: 'category-generated/beauty.png', params: { q: 'beauty' } },
+      { label: 'Personal Care', image: 'category-generated/beauty.png', params: { category: 'beauty' } },
       { label: 'Accessories', image: 'category-generated/accessories.png', params: { category: 'accessories' } },
-      { label: 'Premium Edit', image: 'category-generated/beauty.png', params: { sort: 'newest' } }
+      { label: 'Premium Edit', image: 'category-generated/beauty.png', params: { category: 'beauty', sort: 'newest' } }
     ],
     sectionTitle: 'All Beauty',
     items: [
-      { label: 'Beauty &\nPersonal Care', image: 'category-generated/beauty.png', params: { q: 'beauty' } },
+      { label: 'Beauty &\nPersonal Care', image: 'category-generated/beauty.png', params: { category: 'beauty' } },
       { label: 'Jewellery', image: 'category-generated/jewellery.png', params: { category: 'accessories' } },
       { label: 'Eyewear', image: 'category-generated/eyewear.png', params: { category: 'eyewear' } },
       { label: 'Watches', image: 'category-generated/watches.png', params: { category: 'watches' } }
