@@ -275,6 +275,8 @@ const aiStudioStarterPrompts = [
 ];
 const recentSearchLimit = 5;
 const recentSearchStoragePrefix = 'lookmefy_recent_searches';
+const aiStudioHistoryStoragePrefix = 'lookmefy_ai_studio_history';
+const aiStudioHistoryLimit = 24;
 const onboardingPendingStorageKey = 'lookmefy_onboarding_pending';
 const onboardingSeenStoragePrefix = 'lookmefy_onboarding_seen';
 const onboardingTourSteps = [
@@ -638,6 +640,63 @@ function recentSearchStorageKey(user) {
   return `${recentSearchStoragePrefix}:${owner}`;
 }
 
+function aiStudioHistoryStorageKey(user) {
+  const owner = user?.id || user?._id || user?.phone || user?.username || 'guest';
+  return `${aiStudioHistoryStoragePrefix}:${owner}`;
+}
+
+function aiStudioHasUserMessages(messages = []) {
+  return Array.isArray(messages) && messages.some((message) => message?.role === 'user');
+}
+
+function aiStudioChatTitle(messages = []) {
+  const userMessage = (Array.isArray(messages) ? messages : []).find((message) => message?.role === 'user' && String(message.text || '').trim());
+  const title = String(userMessage?.text || '').trim().replace(/\s+/g, ' ');
+  if (!title) return 'New styling chat';
+  return title.length > 44 ? `${title.slice(0, 41).trim()}...` : title;
+}
+
+function normalizeAiStudioChatRecord(record = {}) {
+  const messages = Array.isArray(record.messages) ? record.messages : [];
+  if (!aiStudioHasUserMessages(messages)) return null;
+  const updatedAt = record.updatedAt || record.createdAt || new Date().toISOString();
+  return {
+    id: String(record.id || record.conversationId || `chat-${Date.now()}-${Math.random().toString(36).slice(2)}`),
+    title: String(record.title || aiStudioChatTitle(messages)),
+    conversationId: String(record.conversationId || ''),
+    messages,
+    tryOns: record.tryOns && typeof record.tryOns === 'object' ? record.tryOns : {},
+    tryOnErrors: record.tryOnErrors && typeof record.tryOnErrors === 'object' ? record.tryOnErrors : {},
+    createdAt: record.createdAt || updatedAt,
+    updatedAt
+  };
+}
+
+function createAiStudioChatRecord({ id, conversationId, messages, tryOns, tryOnErrors }) {
+  return normalizeAiStudioChatRecord({
+    id: id || `chat-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    title: aiStudioChatTitle(messages),
+    conversationId,
+    messages,
+    tryOns,
+    tryOnErrors,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  });
+}
+
+function mergeAiStudioChatHistory(history = [], record) {
+  const normalizedRecord = normalizeAiStudioChatRecord(record);
+  const normalizedHistory = (Array.isArray(history) ? history : [])
+    .map(normalizeAiStudioChatRecord)
+    .filter(Boolean);
+  if (!normalizedRecord) return normalizedHistory.slice(0, aiStudioHistoryLimit);
+  return [
+    normalizedRecord,
+    ...normalizedHistory.filter((item) => item.id !== normalizedRecord.id)
+  ].slice(0, aiStudioHistoryLimit);
+}
+
 function onboardingSeenStorageKey(user) {
   const owner = user?.id || user?._id || user?.phone || user?.username || 'guest';
   return `${onboardingSeenStoragePrefix}:${owner}`;
@@ -761,12 +820,6 @@ function productApiGenderForUser(user) {
   if (user?.genderPreference === 'male') return 'male';
   if (user?.genderPreference === 'female') return 'female';
   return '';
-}
-
-function defaultCategorySectionForUser(user) {
-  if (user?.genderPreference === 'male') return 'men';
-  if (user?.genderPreference === 'female') return 'western';
-  return 'popular';
 }
 
 function normalizeRecentSearches(searches = [], limit = recentSearchLimit) {
@@ -2719,24 +2772,31 @@ function HomeBeforeAfterSlider() {
   }, [dividerX]);
 
   const panResponder = useMemo(() => PanResponder.create({
-    onStartShouldSetPanResponder: (event) => (
-      frameWidth > 0
-      && Math.abs(event.nativeEvent.locationX - dividerXRef.current) <= 30
-    ),
+    onStartShouldSetPanResponder: () => frameWidth > 0,
+    onStartShouldSetPanResponderCapture: () => frameWidth > 0,
     onMoveShouldSetPanResponder: (_, gesture) => (
       frameWidth > 0
-      && Math.abs(gesture.dx) > 6
-      && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.15
+      && Math.abs(gesture.dx) > 2
+      && Math.abs(gesture.dx) >= Math.abs(gesture.dy)
     ),
-    onPanResponderGrant: () => {
-      dragStartXRef.current = dividerXRef.current;
+    onMoveShouldSetPanResponderCapture: (_, gesture) => (
+      frameWidth > 0
+      && Math.abs(gesture.dx) > 2
+      && Math.abs(gesture.dx) >= Math.abs(gesture.dy)
+    ),
+    onPanResponderGrant: (event) => {
+      const startX = clamp(event.nativeEvent.locationX, 0, frameWidth);
+      dividerXRef.current = startX;
+      dragStartXRef.current = startX;
+      dividerX.setValue(startX);
     },
     onPanResponderMove: (_, gesture) => {
       const nextDividerX = clamp(dragStartXRef.current + gesture.dx, 0, frameWidth);
       dividerXRef.current = nextDividerX;
       dividerX.setValue(nextDividerX);
     },
-    onPanResponderTerminationRequest: () => true
+    onPanResponderTerminationRequest: () => false,
+    onShouldBlockNativeResponder: () => true
   }), [dividerX, frameWidth]);
 
   const afterImageStyle = frameWidth
@@ -2767,12 +2827,12 @@ function HomeBeforeAfterSlider() {
       onLayout={handleFrameLayout}
       {...panResponder.panHandlers}
     >
-      <Image source={images.lookmefyTryOnBefore} style={styles.homeTryOnSliderImage} resizeMode="cover" />
+      <Image pointerEvents="none" source={images.lookmefyTryOnBefore} style={styles.homeTryOnSliderImage} resizeMode="cover" />
       <Animated.View pointerEvents="none" style={[styles.homeTryOnSliderAfterClip, { left: dividerX }]}>
         <Animated.Image source={images.lookmefyTryOnAfter} style={afterImageStyle} resizeMode="cover" />
       </Animated.View>
       <Animated.View pointerEvents="none" style={[styles.homeTryOnSliderDivider, { left: dividerX }]} />
-      <Animated.View style={[styles.homeTryOnCompareHandle, { left: dividerX }]}>
+      <Animated.View pointerEvents="none" style={[styles.homeTryOnCompareHandle, { left: dividerX }]}>
         <Ionicons name="chevron-back" size={13} color="#111111" />
         <Ionicons name="chevron-forward" size={13} color="#111111" />
       </Animated.View>
@@ -3136,7 +3196,9 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
             <View style={styles.homeTryOnStudioCopy}>
               <TouchableOpacity style={styles.homeTryOnStudioButton} activeOpacity={0.88} onPress={() => onNavigate('tryon')}>
                 <Text style={styles.homeTryOnStudioButtonText}>Try Now</Text>
-                <Ionicons name="arrow-forward" size={15} color="#ffffff" />
+                <View style={styles.homeTryOnStudioButtonIcon}>
+                  <Ionicons name="arrow-forward" size={16} color="#050505" />
+                </View>
               </TouchableOpacity>
             </View>
           </View>
@@ -3528,9 +3590,9 @@ function ShopScreen({ initial = {}, tryOnMode, user, setUser, token, onNavigate,
     discounted: initial.discounted || '',
     sale: initial.sale || ''
   });
-  const preferredCategorySection = defaultCategorySectionForUser(user);
   const explicitCategorySection = initial.section || initial.categoryGroup || '';
-  const [selectedCategory, setSelectedCategory] = useState(explicitCategorySection || preferredCategorySection);
+  const initialCategorySection = categoryPageContent[explicitCategorySection] ? explicitCategorySection : 'popular';
+  const [selectedCategory, setSelectedCategory] = useState(initialCategorySection);
   const [tryOnLoading, setTryOnLoading] = useState({});
   const [tryOnVideoLoading, setTryOnVideoLoading] = useState({});
   const [tryOnErrors, setTryOnErrors] = useState({});
@@ -3568,9 +3630,13 @@ function ShopScreen({ initial = {}, tryOnMode, user, setUser, token, onNavigate,
   }, [JSON.stringify(initial || {}), tryOnMode]);
 
   useEffect(() => {
-    if (initial.section || initial.categoryGroup || initial.q || initial.category || initial.gender || initial.brand || initial.newArrival || initial.maxPrice || initial.discounted || initial.sale) return;
-    setSelectedCategory(preferredCategorySection);
-  }, [JSON.stringify(initial || {}), preferredCategorySection]);
+    if (explicitCategorySection) {
+      setSelectedCategory(categoryPageContent[explicitCategorySection] ? explicitCategorySection : 'popular');
+      return;
+    }
+    if (initial.q || initial.category || initial.gender || initial.brand || initial.newArrival || initial.maxPrice || initial.discounted || initial.sale) return;
+    setSelectedCategory('popular');
+  }, [JSON.stringify(initial || {}), explicitCategorySection]);
 
   useEffect(() => {
     setVisibleProductCount(shopProductInitialVisibleCount);
@@ -6344,24 +6410,30 @@ function CustomTryOnScreen({ user, setUser, setToken, token, onNavigate, onBack,
 
 function StyleBotScreen({
   user,
-  setUser,
-  setToken,
+  setUser = () => {},
+  setToken = () => {},
   token,
   onNavigate,
   onBack,
   registerTourTarget,
   tourFocusRequest,
-  aiStudioConversationId,
-  setAiStudioConversationId,
-  aiStudioMessages,
-  setAiStudioMessages,
-  aiStudioTryOns,
-  setAiStudioTryOns,
-  aiStudioTryOnErrors,
-  setAiStudioTryOnErrors
+  aiStudioConversationId = '',
+  setAiStudioConversationId = () => {},
+  aiStudioMessages = [],
+  setAiStudioMessages = () => {},
+  aiStudioActiveChatId = '',
+  setAiStudioActiveChatId = () => {},
+  aiStudioChatHistory = [],
+  setAiStudioChatHistory = () => {},
+  aiStudioTryOns = {},
+  setAiStudioTryOns = () => {},
+  aiStudioTryOnErrors = {},
+  setAiStudioTryOnErrors = () => {}
 }) {
+  const { width } = useWindowDimensions();
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [chatTryOnLoading, setChatTryOnLoading] = useState({});
   const [lightbox, setLightbox] = useState(null);
   const scrollRef = useRef(null);
@@ -6382,10 +6454,64 @@ function StyleBotScreen({
   }), [onBack, onNavigate]);
   const messages = aiStudioMessages?.length ? aiStudioMessages : initialAiStudioMessages(user);
   const setMessages = setAiStudioMessages;
+  const hasUserMessages = aiStudioHasUserMessages(messages);
   const chatTryOns = aiStudioTryOns || {};
   const setChatTryOns = setAiStudioTryOns;
   const chatTryOnErrors = aiStudioTryOnErrors || {};
   const setChatTryOnErrors = setAiStudioTryOnErrors;
+  const drawerWidth = Math.min(Math.max(width * 0.82, 286), 340);
+  const currentChatId = aiStudioActiveChatId || aiStudioConversationId || '';
+  const currentDrawerChat = hasUserMessages
+    ? {
+      id: currentChatId || 'current-chat',
+      title: aiStudioChatTitle(messages),
+      current: true
+    }
+    : null;
+  const drawerChats = [
+    ...(currentDrawerChat ? [currentDrawerChat] : []),
+    ...(aiStudioChatHistory || []).filter((chat) => chat.id !== currentDrawerChat?.id)
+  ];
+
+  const archiveCurrentChat = useCallback(() => {
+    const record = createAiStudioChatRecord({
+      id: aiStudioActiveChatId || aiStudioConversationId,
+      conversationId: aiStudioConversationId,
+      messages,
+      tryOns: chatTryOns,
+      tryOnErrors: chatTryOnErrors
+    });
+    if (!record) return null;
+    setAiStudioChatHistory((current) => mergeAiStudioChatHistory(current, record));
+    return record;
+  }, [aiStudioActiveChatId, aiStudioConversationId, chatTryOnErrors, chatTryOns, messages, setAiStudioChatHistory]);
+
+  const startNewChat = useCallback(() => {
+    archiveCurrentChat();
+    setAiStudioActiveChatId(`chat-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    setAiStudioConversationId('');
+    setMessages(initialAiStudioMessages(user));
+    setChatTryOns({});
+    setChatTryOnErrors({});
+    setQuery('');
+    setHistoryOpen(false);
+  }, [archiveCurrentChat, setAiStudioActiveChatId, setAiStudioConversationId, setChatTryOnErrors, setChatTryOns, setMessages, user]);
+
+  const openHistoryChat = useCallback((chat) => {
+    if (!chat?.id) return;
+    if (chat.current || chat.id === currentChatId) {
+      setHistoryOpen(false);
+      return;
+    }
+    archiveCurrentChat();
+    setAiStudioActiveChatId(chat.id);
+    setAiStudioConversationId(chat.conversationId || '');
+    setMessages(Array.isArray(chat.messages) && chat.messages.length ? chat.messages : initialAiStudioMessages(user));
+    setChatTryOns(chat.tryOns || {});
+    setChatTryOnErrors(chat.tryOnErrors || {});
+    setQuery('');
+    setHistoryOpen(false);
+  }, [archiveCurrentChat, currentChatId, setAiStudioActiveChatId, setAiStudioConversationId, setChatTryOnErrors, setChatTryOns, setMessages, user]);
 
   useEffect(() => {
     const baseBottom = Platform.OS === 'ios' ? 10 : 14;
@@ -6416,6 +6542,9 @@ function StyleBotScreen({
   const submit = async (preset) => {
     const prompt = String(preset || query || '').trim();
     if (!prompt || busy) return;
+    if (!aiStudioActiveChatId) {
+      setAiStudioActiveChatId(`chat-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    }
     const userMessage = { id: `user-${Date.now()}`, role: 'user', text: prompt };
     const assistantId = `assistant-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const loadingMessage = { id: assistantId, role: 'assistant', text: 'AI Studio is searching fashion...', loading: true };
@@ -6510,11 +6639,45 @@ function StyleBotScreen({
 
   if (!user) return <AuthScreen mode="signup" setUser={setUser} setToken={setToken} onNavigate={onNavigate} />;
 
-  const hasUserMessages = messages.some((message) => message.role === 'user');
-
   return (
     <View style={styles.aiStudioScreen} {...swipeBackResponder.panHandlers}>
       <ProductTopBar onNavigate={onNavigate} user={user} onBack={onBack} />
+      <View style={styles.aiStudioMenuRow}>
+        <TouchableOpacity style={styles.aiStudioMenuButton} activeOpacity={0.84} accessibilityLabel="Open chat history" onPress={() => setHistoryOpen(true)}>
+          <Ionicons name="menu-outline" size={22} color="#252221" />
+        </TouchableOpacity>
+      </View>
+      <Modal visible={historyOpen} transparent animationType="fade" onRequestClose={() => setHistoryOpen(false)}>
+        <View style={styles.aiHistoryModal}>
+          <Pressable style={styles.aiHistoryBackdrop} onPress={() => setHistoryOpen(false)} />
+          <View style={[styles.aiHistoryDrawer, { width: drawerWidth }]}>
+            <View style={styles.aiHistoryHeader}>
+              <Text style={styles.aiHistoryTitle}>Chats</Text>
+              <TouchableOpacity style={styles.aiHistoryCloseButton} activeOpacity={0.82} onPress={() => setHistoryOpen(false)}>
+                <Ionicons name="close" size={19} color="#625b57" />
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity style={styles.aiHistoryNewButton} activeOpacity={0.86} onPress={startNewChat}>
+              <Ionicons name="create-outline" size={17} color="#ffffff" />
+              <Text style={styles.aiHistoryNewText}>New chat</Text>
+            </TouchableOpacity>
+            <Text style={styles.aiHistorySectionLabel}>Chat history</Text>
+            <ScrollView style={styles.aiHistoryList} contentContainerStyle={styles.aiHistoryListContent} showsVerticalScrollIndicator>
+              {drawerChats.length ? drawerChats.map((chat) => {
+                const active = chat.current || chat.id === currentChatId;
+                return (
+                  <TouchableOpacity key={chat.id} style={[styles.aiHistoryItem, active && styles.aiHistoryItemActive]} activeOpacity={0.84} onPress={() => openHistoryChat(chat)}>
+                    <Ionicons name={active ? 'chatbubble' : 'chatbubble-outline'} size={15} color={active ? '#9b5658' : '#8a7e78'} />
+                    <Text style={[styles.aiHistoryItemText, active && styles.aiHistoryItemTextActive]} numberOfLines={2}>{chat.title}</Text>
+                  </TouchableOpacity>
+                );
+              }) : (
+                <Text style={styles.aiHistoryEmpty}>No previous chats yet.</Text>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
       <ScrollView ref={scrollRef} contentContainerStyle={styles.aiStudioContent} {...screenScrollProps}>
         {!hasUserMessages ? (
           <View style={styles.aiStudioHero}>
@@ -9520,6 +9683,9 @@ export default function App() {
   const [aiStudioOwnerKey, setAiStudioOwnerKey] = useState('');
   const [aiStudioConversationId, setAiStudioConversationId] = useState('');
   const [aiStudioMessages, setAiStudioMessages] = useState([]);
+  const [aiStudioActiveChatId, setAiStudioActiveChatId] = useState('');
+  const [aiStudioChatHistory, setAiStudioChatHistory] = useState([]);
+  const [aiStudioHistoryReady, setAiStudioHistoryReady] = useState(false);
   const [aiStudioTryOns, setAiStudioTryOns] = useState({});
   const [aiStudioTryOnErrors, setAiStudioTryOnErrors] = useState({});
   const scrollPositionsRef = useRef({});
@@ -9785,6 +9951,9 @@ export default function App() {
       if (aiStudioOwnerKey) setAiStudioOwnerKey('');
       if (aiStudioConversationId) setAiStudioConversationId('');
       if (aiStudioMessages.length) setAiStudioMessages([]);
+      if (aiStudioActiveChatId) setAiStudioActiveChatId('');
+      if (aiStudioChatHistory.length) setAiStudioChatHistory([]);
+      if (aiStudioHistoryReady) setAiStudioHistoryReady(false);
       if (Object.keys(aiStudioTryOns).length) setAiStudioTryOns({});
       if (Object.keys(aiStudioTryOnErrors).length) setAiStudioTryOnErrors({});
       return;
@@ -9792,10 +9961,40 @@ export default function App() {
     if (nextOwnerKey === aiStudioOwnerKey) return;
     setAiStudioOwnerKey(nextOwnerKey);
     setAiStudioConversationId('');
+    setAiStudioActiveChatId(`chat-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     setAiStudioMessages(initialAiStudioMessages(user));
+    setAiStudioChatHistory([]);
+    setAiStudioHistoryReady(false);
     setAiStudioTryOns({});
     setAiStudioTryOnErrors({});
-  }, [aiStudioConversationId, aiStudioMessages.length, aiStudioOwnerKey, aiStudioTryOnErrors, aiStudioTryOns, user?.id, user?._id, user?.phone, user?.username]);
+  }, [aiStudioActiveChatId, aiStudioChatHistory.length, aiStudioConversationId, aiStudioHistoryReady, aiStudioMessages.length, aiStudioOwnerKey, aiStudioTryOnErrors, aiStudioTryOns, user?.id, user?._id, user?.phone, user?.username]);
+
+  useEffect(() => {
+    if (!user || !aiStudioOwnerKey) return undefined;
+    let alive = true;
+    AsyncStorage.getItem(aiStudioHistoryStorageKey(user))
+      .then((raw) => {
+        if (!alive) return;
+        const parsed = raw ? JSON.parse(raw) : [];
+        const nextHistory = (Array.isArray(parsed) ? parsed : [])
+          .map(normalizeAiStudioChatRecord)
+          .filter(Boolean)
+          .slice(0, aiStudioHistoryLimit);
+        setAiStudioChatHistory(nextHistory);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (alive) setAiStudioHistoryReady(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [aiStudioOwnerKey, user?.id, user?._id, user?.phone, user?.username]);
+
+  useEffect(() => {
+    if (!user || !aiStudioHistoryReady) return;
+    AsyncStorage.setItem(aiStudioHistoryStorageKey(user), JSON.stringify(aiStudioChatHistory.slice(0, aiStudioHistoryLimit))).catch(() => {});
+  }, [aiStudioChatHistory, aiStudioHistoryReady, user, user?.id, user?._id, user?.phone, user?.username]);
 
   useEffect(() => {
     if (!ready || !user) return undefined;
@@ -9891,7 +10090,7 @@ export default function App() {
       case 'custom':
         return <CustomTryOnScreen user={user} setUser={setUser} setToken={setToken} token={token} onNavigate={guardedNavigate} onBack={routeStack.length > 1 ? goBack : null} refreshUser={refreshUser} />;
       case 'stylebot':
-        return <StyleBotScreen user={user} setUser={setUser} setToken={setToken} token={token} onNavigate={guardedNavigate} onBack={routeStack.length > 1 ? goBack : null} registerTourTarget={registerTourTarget} tourFocusRequest={tourFocusRequest} aiStudioConversationId={aiStudioConversationId} setAiStudioConversationId={setAiStudioConversationId} aiStudioMessages={aiStudioMessages} setAiStudioMessages={setAiStudioMessages} aiStudioTryOns={aiStudioTryOns} setAiStudioTryOns={setAiStudioTryOns} aiStudioTryOnErrors={aiStudioTryOnErrors} setAiStudioTryOnErrors={setAiStudioTryOnErrors} />;
+        return <StyleBotScreen user={user} setUser={setUser} setToken={setToken} token={token} onNavigate={guardedNavigate} onBack={routeStack.length > 1 ? goBack : null} registerTourTarget={registerTourTarget} tourFocusRequest={tourFocusRequest} aiStudioConversationId={aiStudioConversationId} setAiStudioConversationId={setAiStudioConversationId} aiStudioMessages={aiStudioMessages} setAiStudioMessages={setAiStudioMessages} aiStudioActiveChatId={aiStudioActiveChatId} setAiStudioActiveChatId={setAiStudioActiveChatId} aiStudioChatHistory={aiStudioChatHistory} setAiStudioChatHistory={setAiStudioChatHistory} aiStudioTryOns={aiStudioTryOns} setAiStudioTryOns={setAiStudioTryOns} aiStudioTryOnErrors={aiStudioTryOnErrors} setAiStudioTryOnErrors={setAiStudioTryOnErrors} />;
       case 'tokens':
         return <TokensScreen user={user} setUser={setUser} onNavigate={guardedNavigate} onBack={routeStack.length > 1 ? goBack : null} onRequireAuth={requestAuth} />;
       case 'profile':
@@ -9917,7 +10116,7 @@ export default function App() {
       default:
         return <InfoScreen page="missing" user={user} onNavigate={navigate} />;
     }
-  }, [currentRoute.name, routeParamsKey, currentRouteKey, user, token, navigate, guardedNavigate, requestAuth, requireFreshLogin, addToWishlist, createCollection, collections, wishlistIds, wishlistProducts, registerTourTarget, tourFocusRequest, aiStudioConversationId, aiStudioMessages, aiStudioTryOns, aiStudioTryOnErrors, refreshUser, routeStack.length, goBack, rememberCurrentScrollY]);
+  }, [currentRoute.name, routeParamsKey, currentRouteKey, user, token, navigate, guardedNavigate, requestAuth, requireFreshLogin, addToWishlist, createCollection, collections, wishlistIds, wishlistProducts, registerTourTarget, tourFocusRequest, aiStudioConversationId, aiStudioMessages, aiStudioActiveChatId, aiStudioChatHistory, aiStudioTryOns, aiStudioTryOnErrors, refreshUser, routeStack.length, goBack, rememberCurrentScrollY]);
 
   if (!ready || (!fontsLoaded && !fontLoadError)) {
     return (
@@ -11015,7 +11214,7 @@ const styles = StyleSheet.create({
     elevation: 2
   },
   homeTryOnStudioCopy: {
-    width: 112,
+    width: 124,
     minHeight: 140,
     justifyContent: 'center',
     alignItems: 'center',
@@ -11155,29 +11354,37 @@ const styles = StyleSheet.create({
     fontWeight: '700'
   },
   homeTryOnStudioButton: {
-    alignSelf: 'flex-start',
-    minWidth: 98,
-    minHeight: 42,
-    borderRadius: 10,
+    alignSelf: 'center',
+    minWidth: 116,
+    minHeight: 48,
+    borderRadius: 14,
     backgroundColor: '#050505',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-    paddingHorizontal: 9,
+    gap: 8,
+    paddingHorizontal: 12,
     shadowColor: '#000000',
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.22,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 7 },
     elevation: 4
   },
   homeTryOnStudioButtonText: {
-    fontFamily: fontFamilies.logo,
+    fontFamily: fontFamilies.bodyBold,
     color: '#ffffff',
-    fontSize: 13,
-    lineHeight: 16,
-    fontWeight: '400',
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '700',
     letterSpacing: 0
+  },
+  homeTryOnStudioButtonIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   homeSectionBlock: {
     marginTop: 26,
@@ -11991,7 +12198,7 @@ const styles = StyleSheet.create({
   },
   categoryRailContent: {
     paddingTop: 4,
-    paddingBottom: screenBottomInset + 88
+    paddingBottom: bottomNavigationHeight
   },
   categoryRailContentTablet: {
     paddingBottom: 28
@@ -12070,7 +12277,7 @@ const styles = StyleSheet.create({
   categoryMainContent: {
     paddingTop: 14,
     paddingHorizontal: 14,
-    paddingBottom: screenBottomInset + 104
+    paddingBottom: bottomNavigationHeight
   },
   categoryMainContentTablet: {
     paddingHorizontal: 24,
@@ -14908,6 +15115,151 @@ const styles = StyleSheet.create({
     paddingBottom: screenBottomInset + 104,
     paddingHorizontal: 16,
     backgroundColor: '#faf5f3'
+  },
+  aiStudioMenuRow: {
+    minHeight: 46,
+    paddingHorizontal: 14,
+    paddingTop: 7,
+    paddingBottom: 5,
+    backgroundColor: '#faf5f3',
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  aiStudioMenuButton: {
+    width: 38,
+    height: 34,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: '#eaded9',
+    backgroundColor: '#fffdfb',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#3d2924',
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2
+  },
+  aiHistoryModal: {
+    flex: 1
+  },
+  aiHistoryBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(31, 24, 22, 0.28)'
+  },
+  aiHistoryDrawer: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: '#fbf7f6',
+    borderRightWidth: 1,
+    borderRightColor: '#eaded9',
+    paddingTop: Platform.OS === 'android' ? (NativeStatusBar.currentHeight || 24) + 14 : 54,
+    paddingHorizontal: 14,
+    paddingBottom: screenBottomInset + 20,
+    shadowColor: '#1f1714',
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    shadowOffset: { width: 8, height: 0 },
+    elevation: 16
+  },
+  aiHistoryHeader: {
+    minHeight: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12
+  },
+  aiHistoryTitle: {
+    ...typography.h4,
+    color: '#211c1a',
+    fontSize: 18,
+    lineHeight: 23,
+    fontWeight: '800'
+  },
+  aiHistoryCloseButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f4ece8'
+  },
+  aiHistoryNewButton: {
+    marginTop: 14,
+    minHeight: 44,
+    borderRadius: 12,
+    backgroundColor: '#252221',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    gap: 10,
+    shadowColor: '#1a1412',
+    shadowOpacity: 0.16,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4
+  },
+  aiHistoryNewText: {
+    ...typography.button,
+    color: '#ffffff',
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '800'
+  },
+  aiHistorySectionLabel: {
+    ...typography.label,
+    marginTop: 22,
+    color: '#9b5658',
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '800',
+    textTransform: 'uppercase'
+  },
+  aiHistoryList: {
+    marginTop: 8,
+    flex: 1
+  },
+  aiHistoryListContent: {
+    paddingBottom: 18,
+    gap: 7
+  },
+  aiHistoryItem: {
+    minHeight: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8
+  },
+  aiHistoryItemActive: {
+    borderColor: '#ead8d1',
+    backgroundColor: '#fffdfb'
+  },
+  aiHistoryItemText: {
+    ...typography.caption,
+    flex: 1,
+    minWidth: 0,
+    color: '#4d4642',
+    fontSize: 13,
+    lineHeight: 17,
+    fontWeight: '700'
+  },
+  aiHistoryItemTextActive: {
+    color: '#211c1a',
+    fontWeight: '800'
+  },
+  aiHistoryEmpty: {
+    ...typography.smallBody,
+    paddingTop: 6,
+    color: '#8d8682',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '600'
   },
   aiStudioHero: {
     minHeight: 76,
