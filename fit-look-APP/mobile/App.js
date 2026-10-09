@@ -16986,7 +16986,7 @@ const styles = StyleSheet.create({
   customTryOnContent: {
     paddingHorizontal: 16,
     paddingTop: 14,
-    paddingBottom: bottomNavigationHeight + screenBottomInset + 18
+    paddingBottom: bottomNavigationHeight + screenBottomInset + 112
   },
   customHeroPanel: {
     padding: 18,
