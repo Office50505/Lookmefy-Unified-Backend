@@ -12975,7 +12975,8 @@ const styles = StyleSheet.create({
     marginBottom: bottomNavigationHeight + 16
   },
   wardrobePreviewStage: {
-    position: 'relative'
+    position: 'relative',
+    marginBottom: 26
   },
   wardrobePreviewCard: {
     width: '100%',
@@ -13006,7 +13007,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: 18,
+    bottom: -22,
     zIndex: 5,
     alignItems: 'center'
   },
