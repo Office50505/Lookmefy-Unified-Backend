@@ -20,9 +20,9 @@ Verify the output pair before upload:
 
 ```sh
 python3 scripts/verify_android_release.py --app lookmefy \
-  --apk ../releases/lookmefy-1.0.2-build25/lookmefy-1.0.2-25.apk \
-  --aab ../releases/lookmefy-1.0.2-build25/lookmefy-1.0.2-25.aab \
-  --version-code 25 --version-name 1.0.2
+  --apk ../releases/lookmefy-1.0.1-build26/lookmefy-1.0.1-26.apk \
+  --aab ../releases/lookmefy-1.0.1-build26/lookmefy-1.0.1-26.aab \
+  --version-code 26 --version-name 1.0.1
 ```
 
 The remote EAS credential currently has a different SHA-1. Android release
