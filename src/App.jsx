@@ -1013,9 +1013,11 @@ function requiresAuthentication(path = normalizePath()) {
   return path === '/profile'
     || path === '/generation-history'
     || path === '/style-bot'
+    || path === '/ai-stylist'
     || path === '/custom-try-on'
     || path === '/try-on'
     || path === '/closet'
+    || path === '/wardrobe'
     || path.startsWith('/closet/');
 }
 
@@ -10677,7 +10679,8 @@ function AuthInputField({ label, className = '', icon = null, type = 'text', ...
           <button
             className="auth-password-toggle"
             type="button"
-            aria-label={showPassword ? 'Hide password' : 'Show password'}
+            aria-label={showPassword ? 'Hide characters' : 'Show characters'}
+            title={showPassword ? 'Hide password' : 'Show password'}
             onClick={() => setShowPassword((visible) => !visible)}
           >
             <EyeIcon crossed={showPassword} />
@@ -12112,7 +12115,7 @@ function App() {
     if (categoryMatch) return <CategoryDepartmentPage category={decodeURIComponent(categoryMatch[1])} user={user} demoEcommerceMode={demoEcommerceMode} />;
     if (path === '/search') return <SearchLandingPage key={routeKey} />;
     if (path === '/try-on') return <CustomTryOnPage user={user} setUser={setUser} />;
-    if (path === '/closet') return <ClosetPage user={user} setUser={setUser} />;
+    if (path === '/closet' || path === '/wardrobe') return <ClosetPage user={user} setUser={setUser} />;
     if (path === '/closet/add') return <ClosetAddPage user={user} setUser={setUser} />;
     if (path === '/closet/combo') return <ClosetComboPage user={user} setUser={setUser} />;
     if (path === '/closet/items') return <ClosetItemsPage user={user} setUser={setUser} />;
@@ -12120,7 +12123,7 @@ function App() {
     if (path === '/cart') return <CartPage user={user} demoEcommerceMode={demoEcommerceMode} />;
     if (path === '/checkout') return <CheckoutPage user={user} demoEcommerceMode={demoEcommerceMode} demoModeLoading={storefrontConfig.loading} />;
     if (path === '/custom-try-on') return <CustomTryOnPage user={user} setUser={setUser} />;
-    if (path === '/style-bot') return <StyleBotPage user={user} setUser={setUser} />;
+    if (path === '/style-bot' || path === '/ai-stylist') return <StyleBotPage user={user} setUser={setUser} />;
     if (path === '/tokens') return <TokenPage user={user} setUser={setUser} mode="overview" />;
     if (path === '/tokens/top-up') return <TokenPage key={routeKey} user={user} setUser={setUser} mode="topup" />;
     if (path === '/profile') return <ProfilePage user={user} setUser={setUser} />;
@@ -12202,14 +12205,14 @@ function App() {
     return () => observer.disconnect();
   }, [routeKey]);
 
-  const authFallbackRoutes = ['/try-on', '/custom-try-on', '/closet', '/closet/add', '/closet/combo', '/closet/items', '/style-bot', '/tokens', '/profile', '/generation-history'];
+  const authFallbackRoutes = ['/try-on', '/custom-try-on', '/closet', '/wardrobe', '/closet/add', '/closet/combo', '/closet/items', '/style-bot', '/ai-stylist', '/tokens', '/profile', '/generation-history'];
   const isStandaloneAuth = ['/login', '/signup', '/forgot-password'].includes(path) && !user;
-  const isConciergePage = path === '/style-bot' && Boolean(user);
+  const isConciergePage = (path === '/style-bot' || path === '/ai-stylist') && Boolean(user);
   const isProductPage = /^\/product\/[^/]+$/.test(path);
   const isReferenceHome = path === '/' || path === '/home';
   const isOpeningPage = false;
   const shouldHideMobileBottomNav = isOpeningPage || isStandaloneAuth || (!user && authFallbackRoutes.includes(path));
-  const isWardrobeWorkspace = path === '/closet' || path === '/closet/add';
+  const isWardrobeWorkspace = path === '/closet' || path === '/wardrobe' || path === '/closet/add';
   const shouldShowOnboarding = Boolean(user && !user.hasCompletedOnboarding && !isStandaloneAuth);
 
   useEffect(() => {
