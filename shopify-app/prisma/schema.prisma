@@ -1,0 +1,84 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
+// enough when changing adapters.
+// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
+datasource db {
+  provider = "sqlite"
+  url      = "file:dev.sqlite"
+}
+
+model Session {
+  id            String    @id
+  shop          String
+  state         String
+  isOnline      Boolean   @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean   @default(false)
+  locale        String?
+  collaborator  Boolean?  @default(false)
+  emailVerified Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+model ShopInstallation {
+  id                  String    @id @default(cuid())
+  shop                String    @unique
+  shopName            String?
+  myshopifyDomain     String?
+  scope               String?
+  installationStatus  String    @default("installed")
+  installedAt         DateTime  @default(now())
+  lastAuthenticatedAt DateTime  @default(now())
+  uninstalledAt       DateTime?
+  redactedAt          DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+}
+
+model MerchantSetting {
+  id        String   @id @default(cuid())
+  shop      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model WebhookDelivery {
+  id          String   @id @default(cuid())
+  webhookId   String
+  topic       String
+  shop        String
+  action      String
+  processedAt DateTime @default(now())
+
+  @@unique([webhookId, topic])
+  @@index([shop, topic])
+}
+
+model ShopifyProductEligibility {
+  id                     String   @id @default(cuid())
+  shop                   String
+  shopifyProductId       String
+  enabled                Boolean  @default(false)
+  preferredImageId       String?
+  preferredImageUrl      String?
+  preferredVariantId     String?
+  preferredVariantTitle  String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@unique([shop, shopifyProductId])
+  @@index([shop, enabled])
+}
