@@ -271,19 +271,40 @@ function aiProvider() {
   return String(process.env.AI_PROVIDER || 'pruna').trim().toLowerCase();
 }
 
+function hasPrunaKey() {
+  return Boolean(String(process.env.PRUNA_API_KEY || '').trim());
+}
+
+function hasFalKey() {
+  return Boolean(String(process.env.FAL_KEY || '').trim());
+}
+
+function hasFitRoomKey() {
+  return Boolean(String(process.env.FITROOM_API_KEY || '').trim());
+}
+
 function usePrunaProvider() {
-  return aiProvider() === 'pruna';
+  return aiProvider() === 'pruna' && hasPrunaKey();
+}
+
+function useFitRoomProvider() {
+  return aiProvider() === 'fitroom' || (!hasPrunaKey() && hasFitRoomKey());
 }
 
 function hasConfiguredImageProviderKey() {
-  return Boolean(process.env.PRUNA_API_KEY || process.env.FAL_KEY || process.env.FITROOM_API_KEY);
+  return Boolean(hasPrunaKey() || hasFalKey() || hasFitRoomKey());
 }
 
 function localMockTryOnEnabled() {
   const value = String(process.env.LOCAL_MOCK_TRYON || '').trim().toLowerCase();
   if (['0', 'false', 'no', 'off'].includes(value)) return false;
   if (['1', 'true', 'yes', 'on'].includes(value)) return true;
-  return !productionRuntime() && !hasConfiguredImageProviderKey();
+  return false;
+}
+
+function ensureRealImageProviderConfigured() {
+  if (hasConfiguredImageProviderKey()) return;
+  throw new Error('Real AI try-on provider is not configured. Set PRUNA_API_KEY, FAL_KEY, or FITROOM_API_KEY on the backend, then restart it.');
 }
 
 function escapeSvgText(value = '') {
@@ -2081,6 +2102,7 @@ async function generateProductTryOnImage({ user, product, tryOnModel, timer }) {
     timer?.mark('local mock try-on selected');
     return createLocalMockTryOn({ user, product, timer });
   }
+  ensureRealImageProviderConfigured();
   const withFallback = async (primary, fallback) => {
     try {
       return await primary();
@@ -2095,42 +2117,45 @@ async function generateProductTryOnImage({ user, product, tryOnModel, timer }) {
       }
     }
   };
+  const fitRoomFallback = () => {
+    const clothType = fitRoomClothTypeForProduct(product);
+    timer?.mark('fitroom cloth type selected', { clothType });
+    return callFitRoomTryOn({ user, product, clothType, timer });
+  };
+  const configuredFallback = (primary) => {
+    if (hasFalKey()) return withFallback(primary, () => callFalImageEdit({ user, product, quality: 'medium', timer }));
+    if (hasFitRoomKey()) return withFallback(primary, fitRoomFallback);
+    return primary();
+  };
   if (productPromptKey === 'saree') {
     timer?.mark('pruna saree try-on selected', { promptKey: productPromptKey });
-    return withFallback(
-      () => callPrunaTryOn({ user, product, promptKey: productPromptKey, fallbackPromptKey: 'full_outfit', timer }),
-      () => callFalImageEdit({ user, product, quality: 'medium', timer })
-    );
+    if (hasPrunaKey()) {
+      return configuredFallback(() => callPrunaTryOn({ user, product, promptKey: productPromptKey, fallbackPromptKey: 'full_outfit', timer }));
+    }
+    if (hasFalKey()) return callFalImageEdit({ user, product, quality: 'medium', timer });
+    return fitRoomFallback();
   }
   const falModel = normalizeTryOnModel(selectedModel);
-  if (selectedModel === prunaTryOnModel() || falModel === 'wan-v2.6-image-to-image') {
+  if ((selectedModel === prunaTryOnModel() || falModel === 'wan-v2.6-image-to-image') && hasPrunaKey()) {
     timer?.mark('pruna sensitive try-on selected', { promptKey: productPromptKey, requestedModel: selectedModel === prunaTryOnModel() ? selectedModel : falModel });
     return callPrunaTryOn({ user, product, promptKey: productPromptKey, fallbackPromptKey: 'full_outfit', timer });
   }
-  if (requiresPreciseTryOnEdit(product, productPromptKey)) {
+  if (requiresPreciseTryOnEdit(product, productPromptKey) && hasFalKey()) {
     timer?.mark('precise garment image edit selected', { promptKey: productPromptKey });
     return callFalImageEdit({ user, product, quality: 'medium', timer });
   }
   if (usePrunaProvider()) {
-    return withFallback(
-      () => callPrunaTryOn({ user, product, timer }),
-      () => callFalImageEdit({ user, product, quality: 'medium', timer })
-    );
+    return configuredFallback(() => callPrunaTryOn({ user, product, timer }));
   }
-  if (selectedModel === 'fitroom/tryon-v2') {
-    const clothType = fitRoomClothTypeForProduct(product);
-    timer?.mark('fitroom cloth type selected', { clothType });
-    return withFallback(
-      () => callFitRoomTryOn({ user, product, clothType, timer }),
-      () => callFalImageEdit({ user, product, quality: 'medium', timer })
-    );
+  if (selectedModel === 'fitroom/tryon-v2' || useFitRoomProvider()) {
+    return hasFalKey()
+      ? withFallback(fitRoomFallback, () => callFalImageEdit({ user, product, quality: 'medium', timer }))
+      : fitRoomFallback();
   }
   if (falModel === 'gpt-image-2') {
     return callFalImageEdit({ user, product, timer });
   }
-  const clothType = fitRoomClothTypeForProduct(product);
-  timer?.mark('fitroom cloth type selected', { clothType });
-  return callFitRoomTryOn({ user, product, clothType, timer });
+  return fitRoomFallback();
 }
 
 async function saveGeneratedTryOn({ user, product, tryOnModel, timer }) {
@@ -2226,28 +2251,34 @@ function externalProductFromBody(value = {}) {
 }
 
 async function generateExternalTryOnImage({ user, product, timer }) {
+  ensureRealImageProviderConfigured();
   const productPromptKey = promptKeyForProduct(product, 'full_outfit');
+  const fitRoomFallback = () => {
+    const clothType = fitRoomClothTypeForProduct(product);
+    timer?.mark('external fitroom cloth type selected', { clothType });
+    return callFitRoomTryOn({ user, product, clothType, timer });
+  };
   if (productPromptKey === 'saree') {
     timer?.mark('external pruna saree try-on selected', { promptKey: productPromptKey });
-    return callPrunaTryOn({ user, product, promptKey: productPromptKey, fallbackPromptKey: 'full_outfit', timer });
+    if (hasPrunaKey()) return callPrunaTryOn({ user, product, promptKey: productPromptKey, fallbackPromptKey: 'full_outfit', timer });
+    if (hasFalKey()) return callFalImageEdit({ user, product, quality: 'medium', timer });
+    return fitRoomFallback();
   }
-  if (requiresPrunaSensitiveTryOn(product)) {
+  if (requiresPrunaSensitiveTryOn(product) && hasPrunaKey()) {
     timer?.mark('external pruna sensitive try-on selected', { promptKey: productPromptKey });
     return callPrunaTryOn({ user, product, promptKey: productPromptKey, fallbackPromptKey: 'full_outfit', timer });
   }
-  if (requiresPreciseTryOnEdit(product)) {
+  if (requiresPreciseTryOnEdit(product) && hasFalKey()) {
     return callFalImageEdit({ user, product, quality: 'medium', timer });
   }
-  if (shouldUseFalImageEditForProduct(product)) {
+  if (shouldUseFalImageEditForProduct(product) && hasFalKey()) {
     timer?.mark('external fal image edit forced for garment', { promptKey: promptKeyForProduct(product, 'full_outfit') });
     return callFalImageEdit({ user, product, timer });
   }
   if (usePrunaProvider()) {
     return callPrunaTryOn({ user, product, timer });
   }
-  const clothType = fitRoomClothTypeForProduct(product);
-  timer?.mark('external fitroom cloth type selected', { clothType });
-  return callFitRoomTryOn({ user, product, clothType, timer });
+  return fitRoomFallback();
 }
 
 async function saveGeneratedExternalTryOn({ user, product, timer }) {
@@ -2351,6 +2382,7 @@ async function saveUploadFile(file, prefix, user) {
 }
 
 async function saveGeneratedCustomTryOn({ user, garmentFile, promptKey, category, timer }) {
+  ensureRealImageProviderConfigured();
   const customProduct = {
     name: garmentFile?.originalname || 'Custom uploaded garment',
     brand: 'Custom',
@@ -2358,7 +2390,7 @@ async function saveGeneratedCustomTryOn({ user, garmentFile, promptKey, category
   };
   let generated;
   const customPromptKey = promptKey || promptKeyForProduct(customProduct, 'full_outfit');
-  if (requiresPreciseTryOnEdit(customProduct, customPromptKey)) {
+  if (requiresPreciseTryOnEdit(customProduct, customPromptKey) && hasFalKey()) {
     generated = await callFalImageEdit({
       user, product: customProduct,
       garmentDataUri: `data:${garmentFile.mimetype};base64,${garmentFile.buffer.toString('base64')}`,
@@ -3104,12 +3136,16 @@ export {
   externalHistoryItem,
   fitRoomClothTypeForProduct,
   fitRoomClothTypeForPromptKey,
+  ensureRealImageProviderConfigured,
+  hasConfiguredImageProviderKey,
   parseVideoByteRange,
   productHistoryItem,
   runProductTryOnJob,
   sareeImageQuality,
   shouldUseFalImageEditForProduct,
   tryOnMediaTokenKind,
+  useFitRoomProvider,
+  usePrunaProvider,
   reserveToken as reserveTryOnToken,
   refundToken as refundTryOnToken
 };

@@ -197,22 +197,6 @@ const missionProductPresets = {
     ]
   }
 };
-const homeMissionTiles = [
-  { label: 'College', mission: 'college', image: 'lookmefy_model_07.png', tileStyle: { backgroundColor: '#ddd4ca' }, imageStyle: { top: -5, height: 142 } },
-  { label: 'Office', mission: 'office', image: 'lookmefy_model_06.png', tileStyle: { backgroundColor: '#d8d2ca' }, imageStyle: { top: -6, height: 145 } },
-  { label: 'Date', mission: 'date', image: 'lookmefy_model_02.png', tileStyle: { backgroundColor: '#d6cfc8' }, imageStyle: { top: -4, height: 142 } },
-  { label: 'Wedding', mission: 'wedding', image: 'lookmefy_model_03.png', tileStyle: { backgroundColor: '#d8cec3' }, imageStyle: { top: -6, height: 146 } },
-  { label: 'Travel', mission: 'travel', image: 'lookmefy_model_01.png', tileStyle: { backgroundColor: '#ded7ce' }, imageStyle: { top: -8, height: 148 } },
-  { label: 'Festive', mission: 'festive', image: 'lookmefy_model_08.png', tileStyle: { backgroundColor: '#d2cbc3' }, imageStyle: { top: -4, height: 142 } }
-];
-const homeMissionCopy = {
-  title: 'Choose your\noutfit mission',
-  subtitle: 'Same you. New looks.\nFor every part of your life.'
-};
-const homeMissionModel = {
-  image: 'lookmefyStaticHeroModel',
-  modelStyle: { right: -30, top: -18, width: 236, height: 278 }
-};
 const fontAssets = {
   BodoniModa_400Regular: require('@expo-google-fonts/bodoni-moda/400Regular/BodoniModa_400Regular.ttf'),
   PlusJakartaSans_600SemiBold: require('@expo-google-fonts/plus-jakarta-sans/600SemiBold/PlusJakartaSans_600SemiBold.ttf'),
@@ -2726,6 +2710,224 @@ function HomeWardrobeTile({ item, onPress }) {
   );
 }
 
+const homeStudioActions = [
+  { key: 'catalog', title: 'Try From\nCatalog', text: 'Explore curated styles', icon: 'shirt-outline', route: 'shop' },
+  { key: 'upload', title: 'Upload\nMy Clothes', text: 'Add your own outfits', icon: 'cloud-upload-outline', route: 'closet', params: { view: 'add' } },
+  { key: 'stylist', title: 'Ask AI Stylist', text: 'Get personalized look ideas', icon: 'sparkles-outline', route: 'stylebot' }
+];
+
+const homeStudioWardrobeDefaults = [
+  { key: 'tops', label: 'Tops', image: 'category-generated/men-shirts.png', fallback: 12, params: { view: 'wardrobe', category: 'tops', type: 'tops' } },
+  { key: 'bottoms', label: 'Bottoms', image: 'category-generated/jeans.png', fallback: 8, params: { view: 'wardrobe', category: 'bottoms', type: 'bottoms' } },
+  { key: 'dresses', label: 'Dresses', image: 'category-generated/dresses.png', fallback: 6, params: { view: 'wardrobe', category: 'dresses' } },
+  { key: 'outerwear', label: 'Outerwear', image: 'category-generated/jackets.png', fallback: 4, params: { view: 'wardrobe', category: 'outerwear', type: 'outerwear' } }
+];
+const homeStudioFallbackLooks = [
+  { id: 'studio-fallback-1', title: 'Casual Day Look', meta: 'Try On', image: 'lookmefy_model_01.png' },
+  { id: 'studio-fallback-2', title: 'Brunch Outfit', meta: 'Try On', image: 'lookmefy_model_02.png' },
+  { id: 'studio-fallback-3', title: 'Evening Look', meta: 'Try On', image: 'lookmefy_model_03.png' }
+];
+
+function HomeStudioSectionHead({ title, subtitle, onPress }) {
+  return (
+    <View style={styles.homeStudioSectionHead}>
+      <View style={styles.homeStudioSectionCopy}>
+        <Text style={styles.homeStudioSectionTitle}>{title}</Text>
+        {subtitle ? <Text style={styles.homeStudioSectionSubtitle}>{subtitle}</Text> : null}
+      </View>
+      {onPress ? (
+        <TouchableOpacity style={styles.homeStudioSeeAll} activeOpacity={0.78} onPress={onPress}>
+          <Text style={styles.homeStudioSeeAllText}>See All</Text>
+          <Ionicons name="chevron-forward" size={16} color="#111111" />
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  );
+}
+
+function HomeStudioHero({ onNavigate }) {
+  return (
+    <View style={styles.homeStudioHero}>
+      <Image source={images.homeSliderNaturalLight} style={styles.homeStudioHeroImage} resizeMode="cover" />
+      <View style={styles.homeStudioHeroWash} />
+      <View style={styles.homeStudioHeroCopy}>
+        <Text style={styles.homeStudioKicker}>AI VIRTUAL TRY-ON</Text>
+        <Text style={styles.homeStudioTitle}>See it. Try it. Love it.</Text>
+        <Text style={styles.homeStudioText}>Preview outfits on yourself before you buy.</Text>
+        <TouchableOpacity style={styles.homeStudioPrimaryButton} activeOpacity={0.88} onPress={() => onNavigate('tryon')}>
+          <Text style={styles.homeStudioPrimaryText}>Create Your Look</Text>
+          <Ionicons name="arrow-forward" size={16} color="#ffffff" />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+function HomeStudioActionTile({ item, onNavigate }) {
+  return (
+    <TouchableOpacity
+      style={styles.homeStudioActionTile}
+      activeOpacity={0.84}
+      onPress={() => onNavigate(item.route, item.params || {})}
+    >
+      <View style={styles.homeStudioActionIcon}>
+        <Ionicons name={item.icon} size={26} color="#171412" />
+      </View>
+      <Text style={styles.homeStudioActionTitle}>{item.title}</Text>
+      <Text style={styles.homeStudioActionText}>{item.text}</Text>
+    </TouchableOpacity>
+  );
+}
+
+function HomeStudioLookCard({ product, title, meta, imageSource, onPress, compact = false, onAddToWishlist, isWishlisted }) {
+  return (
+    <TouchableOpacity style={[styles.homeStudioLookCard, compact && styles.homeStudioLookCardCompact]} activeOpacity={0.86} onPress={onPress}>
+      <View style={styles.homeStudioLookImageWrap}>
+        {product?.imageUrl || product?.imageUrls?.length ? (
+          <ProductImage product={product} style={styles.homeStudioLookImage} resizeMode="cover" alt={product?.title || product?.name || title} />
+        ) : (
+          <Image source={imageSource || images['lookmefy_model_01.png']} style={styles.homeStudioLookImage} resizeMode="cover" />
+        )}
+        {onAddToWishlist && product?.id ? <WishlistDoneButton saved={isWishlisted} compact onPress={() => onAddToWishlist(product)} /> : null}
+      </View>
+      <Text style={styles.homeStudioLookTitle} numberOfLines={1}>{title}</Text>
+      <Text style={styles.homeStudioLookMeta} numberOfLines={1}>{meta}</Text>
+    </TouchableOpacity>
+  );
+}
+
+function HomeStudioWardrobeStrip({ closetItems = [], onNavigate }) {
+  const counts = closetItems.reduce((acc, item = {}) => {
+    const category = String(item.category || '').toLowerCase();
+    if (/bottom|pant|jean|trouser|short|skirt/.test(category)) acc.bottoms += 1;
+    else if (/dress|gown|saree|kurti|ethnic/.test(category)) acc.dresses += 1;
+    else if (/outer|jacket|blazer|coat|hoodie|sweater/.test(category)) acc.outerwear += 1;
+    else acc.tops += 1;
+    return acc;
+  }, { tops: 0, bottoms: 0, dresses: 0, outerwear: 0 });
+
+  return (
+    <View style={styles.homeStudioWardrobeGrid}>
+      {homeStudioWardrobeDefaults.map((item) => {
+        const count = counts[item.key] || item.fallback;
+        return (
+          <TouchableOpacity
+            key={item.key}
+            style={styles.homeStudioWardrobeTile}
+            activeOpacity={0.84}
+            onPress={() => onNavigate('closet', item.params)}
+          >
+            <Image source={images[item.image]} style={styles.homeStudioWardrobeImage} resizeMode="contain" />
+            <Text style={styles.homeStudioWardrobeLabel} numberOfLines={1}>{item.label}</Text>
+            <Text style={styles.homeStudioWardrobeCount}>{count} items</Text>
+          </TouchableOpacity>
+        );
+      })}
+      <TouchableOpacity style={styles.homeStudioWardrobeAdd} activeOpacity={0.84} onPress={() => onNavigate('closet', { view: 'add' })}>
+        <View style={styles.homeStudioWardrobeAddCircle}>
+          <Ionicons name="add" size={28} color="#111111" />
+        </View>
+        <Text style={styles.homeStudioWardrobeLabel}>Add Items</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function NewUserHomeStudio({ products = [], onNavigate, onAddToWishlist, wishlistIds }) {
+  const visibleProducts = uniqueProductsWithImages(products).slice(0, 3);
+  const cards = visibleProducts.length ? visibleProducts : homeStudioFallbackLooks;
+  return (
+    <>
+      <HomeStudioHero onNavigate={onNavigate} />
+      <View style={styles.homeStudioPanel}>
+        <HomeStudioSectionHead title="Start Your Style Studio" subtitle="Three simple ways to begin." />
+        <View style={styles.homeStudioActionGrid}>
+          {homeStudioActions.map((item) => <HomeStudioActionTile key={item.key} item={item} onNavigate={onNavigate} />)}
+        </View>
+      </View>
+      <TouchableOpacity style={styles.homeStudioWardrobeBanner} activeOpacity={0.88} onPress={() => onNavigate('closet', { view: 'add' })}>
+        <View style={styles.homeStudioWardrobeBannerCopy}>
+          <Text style={styles.homeStudioBannerTitle}>Build Your Digital Wardrobe</Text>
+          <Text style={styles.homeStudioBannerText}>Save your clothes to get personalized outfit ideas, try them on virtually, and see what really works for you.</Text>
+          <View style={styles.homeStudioBannerButton}>
+            <Text style={styles.homeStudioBannerButtonText}>Add First Item</Text>
+            <Ionicons name="arrow-forward" size={15} color="#ffffff" />
+          </View>
+        </View>
+        <Image source={images.homeStarterWardrobe} style={styles.homeStudioBannerImage} resizeMode="contain" />
+      </TouchableOpacity>
+      <View style={styles.homeStudioPanel}>
+        <HomeStudioSectionHead title="Looks Picked For You" onPress={() => onNavigate('shop')} />
+        <View style={styles.homeStudioLookRow}>
+          {cards.map((product, index) => (
+            <HomeStudioLookCard
+              key={`new-home-${product.id}`}
+              product={product}
+              title={Number.isFinite(Number(product.price)) ? formatMoney(product.price, product.currency) : product.title || product.displayLabel || 'Try On'}
+              meta={product.meta || 'Try On'}
+              imageSource={product.image ? images[product.image] : null}
+              onPress={() => product.image ? onNavigate('shop') : onNavigate('product', { id: product.id })}
+              onAddToWishlist={onAddToWishlist}
+              isWishlisted={wishlistIds?.has(product.id)}
+            />
+          ))}
+        </View>
+      </View>
+    </>
+  );
+}
+
+function ReturningUserHomeStudio({ products = [], closetItems = [], onNavigate, onAddToWishlist, wishlistIds }) {
+  const allProducts = uniqueProductsWithImages(products);
+  const looks = allProducts.slice(0, 3).length ? allProducts.slice(0, 3) : homeStudioFallbackLooks;
+  const tryWithWardrobe = allProducts.slice(3, 6).length ? allProducts.slice(3, 6) : homeStudioFallbackLooks;
+  const lookNames = ['Casual Day Look', 'Brunch Outfit', 'Evening Look'];
+  const lookTimes = ['2 hours ago', '1 day ago', '3 days ago'];
+  const wardrobeCopy = ['Works with your white top', 'Elevates your denim', 'Perfect for your evening looks'];
+  return (
+    <>
+      <HomeStudioHero onNavigate={onNavigate} />
+      <View style={styles.homeStudioPanel}>
+        <HomeStudioSectionHead title="Continue Your Looks" onPress={() => onNavigate('profile', { section: 'tryons' })} />
+        <View style={styles.homeStudioLookRow}>
+          {looks.map((product, index) => (
+            <HomeStudioLookCard
+              key={`return-home-${product.id}`}
+              product={product}
+              title={lookNames[index] || product.displayLabel || 'Saved Look'}
+              meta={lookTimes[index] || 'Recently'}
+              imageSource={product.image ? images[product.image] : null}
+              compact
+              onPress={() => product.image ? onNavigate('shop') : onNavigate('product', { id: product.id })}
+            />
+          ))}
+        </View>
+      </View>
+      <View style={styles.homeStudioPanel}>
+        <HomeStudioSectionHead title="My Wardrobe" onPress={() => onNavigate('closet', { view: 'wardrobe' })} />
+        <HomeStudioWardrobeStrip closetItems={closetItems} onNavigate={onNavigate} />
+      </View>
+      <View style={styles.homeStudioPanel}>
+        <HomeStudioSectionHead title="Try These With Your Wardrobe" subtitle="Styled by AI, based on your clothes." onPress={() => onNavigate('shop')} />
+        <View style={styles.homeStudioLookRow}>
+          {tryWithWardrobe.map((product, index) => (
+            <HomeStudioLookCard
+              key={`wardrobe-home-${product.id}`}
+              product={product}
+              title={wardrobeCopy[index] || product.displayLabel || 'Wardrobe match'}
+              meta={Number.isFinite(Number(product.price)) ? formatMoney(product.price, product.currency) : 'Try On'}
+              imageSource={product.image ? images[product.image] : null}
+              onPress={() => product.image ? onNavigate('shop') : onNavigate('product', { id: product.id })}
+              onAddToWishlist={onAddToWishlist}
+              isWishlisted={wishlistIds?.has(product.id)}
+            />
+          ))}
+        </View>
+      </View>
+    </>
+  );
+}
+
 function HomeHeroShowcase() {
   const progress = useRef(new Animated.Value(0)).current;
   const slideCount = homeHeroShowcaseSlides.length;
@@ -2781,20 +2983,6 @@ function HomeHeroShowcase() {
           </Animated.View>
         );
       })}
-    </View>
-  );
-}
-
-function HomeMissionStoryShowcase() {
-  return (
-    <View style={styles.homeMissionStoryFrame}>
-      <View style={styles.homeMissionModelLayer}>
-        <Image source={images[homeMissionModel.image]} style={[styles.homeMissionModel, homeMissionModel.modelStyle]} resizeMode="contain" />
-      </View>
-      <View style={styles.homeMissionCopy}>
-        <Text style={styles.homeMissionTitle}>{homeMissionCopy.title}</Text>
-        <Text style={styles.homeMissionSubtitle}>{homeMissionCopy.subtitle}</Text>
-      </View>
     </View>
   );
 }
@@ -3030,6 +3218,9 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
   const recommended = useRecommendedProducts(user, token, 16, homeRefreshKey);
   const shopLookQuery = { sort: 'newest', limit: 48 };
   const shopLooks = useProducts({ ...shopLookQuery, refreshKey: homeRefreshKey }, token);
+  const closet = useApiState('/closet', token, Boolean(user), { items: [], outfits: [], suggestions: [], stats: {} });
+  const closetData = closet.data || {};
+  const closetItems = Array.isArray(closetData.items) ? closetData.items : [];
   const catalogProducts = useMemo(() => uniqueProductsWithImages(curated.products), [curated.products]);
   const arrivalProducts = useMemo(() => {
     const newArrivalProducts = catalogProducts.filter((product) => product.isNew);
@@ -3129,6 +3320,8 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
     : preferredGender === 'women'
       ? 'Real dress picks from the live catalog, selected for quick outfit discovery.'
       : 'Live catalog picks selected for quick outfit discovery.';
+  const isReturningHomeUser = Boolean(user && (closetItems.length || (Array.isArray(closetData.outfits) && closetData.outfits.length) || (Array.isArray(closetData.suggestions) && closetData.suggestions.length)));
+  const studioProducts = uniqueProductsWithImages([...recommendedProducts, ...arrivalProducts, ...tryOnPickProducts, ...catalogProducts]);
   const catalogTourTarget = useTourTarget('home-catalog', registerTourTarget, { request: tourFocusRequest, scrollRef: homeScrollRef, scrollOffset: 92 });
   const handleHomeRefresh = useCallback(() => {
     const nextSeed = Date.now();
@@ -3181,80 +3374,22 @@ function HomeScreen({ onNavigate, user, token, onAddToWishlist, wishlistIds, reg
         onScroll={(event) => onScrollPositionChange?.(event.nativeEvent.contentOffset.y)}
         {...screenScrollProps}
       >
-        <View style={styles.homeTryOnHero}>
-          <View style={styles.homeMissionIntro}>
-            <HomeMissionStoryShowcase />
-          </View>
-          <View style={styles.homeMissionGrid}>
-            {homeMissionTiles.map((item) => (
-              <TouchableOpacity
-                key={item.label}
-                accessibilityRole="button"
-                accessibilityLabel={`Show ${item.label} products`}
-                activeOpacity={0.86}
-                style={[styles.homeMissionTile, item.tileStyle]}
-                onPress={() => onNavigate('shop', { ...missionProductPresets[item.mission].params, mission: item.mission })}
-              >
-                <Image source={images[item.image]} style={[styles.homeMissionTileImage, item.imageStyle]} resizeMode="contain" />
-                <View pointerEvents="none" style={styles.homeMissionTileScrim} />
-                <Text style={styles.homeMissionTileLabel}>{item.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <TouchableOpacity style={styles.homeMissionGenerateButton} activeOpacity={0.88} onPress={() => onNavigate('stylebot')}>
-            <Text style={styles.homeMissionGenerateText}>Generate My Looks</Text>
-            <Ionicons name="arrow-forward" size={20} color="#ffffff" />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.homeAiRecommendationsHead}>
-          <Text style={styles.homeCommerceTitle}>AI Recommendations</Text>
-          <TouchableOpacity style={styles.homeAiGenerateLink} activeOpacity={0.82} onPress={refreshHomeAiRecommendations}>
-            <Ionicons name="refresh-outline" size={19} color="#9b5658" />
-            <Text style={styles.homeAiGenerateText}>{curated.loading || recommended.loading ? 'Refreshing' : 'Generate Look'}</Text>
-          </TouchableOpacity>
-        </View>
-        <ScrollView {...horizontalScrollProps} contentContainerStyle={styles.homeAiRecommendationTrack}>
-          {homeAiRecommendationCards.map((card) => (
-            <TouchableOpacity key={card.id} style={styles.homeAiRecommendationCard} activeOpacity={0.88} onPress={() => onNavigate('shop')}>
-              <View style={styles.homeAiRecommendationImages}>
-                {card.products.map((product) => (
-                  <ResilientImage
-                    key={`${card.id}-${product.id}`}
-                    source={product.imageUrl ? { uri: imageUrl(product.imageUrl) } : null}
-                    fallbackSource={images['category-generated/dresses.png']}
-                    style={styles.homeAiRecommendationImage}
-                    resizeMode="cover"
-                    fallbackIcon="shirt-outline"
-                    alt={product.title || product.name}
-                  />
-                ))}
-              </View>
-              <View style={styles.homeAiRecommendationFooter}>
-                <Text style={styles.homeAiRecommendationTitle} numberOfLines={1}>{card.title}</Text>
-                <Ionicons name="chevron-forward" size={27} color="#111111" />
-              </View>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        <View style={styles.homeTryOnStudioHead}>
-          <Text style={styles.homeCommerceTitle}>Try-On Studio</Text>
-          <Text style={styles.homeCommerceSubtitle}>See how it looks on you before you wear it.</Text>
-        </View>
-        <View style={styles.homeTryOnStudioCard}>
-          <View style={styles.homeTryOnStudioBody}>
-            <HomeBeforeAfterSlider />
-            <View style={styles.homeTryOnStudioCopy}>
-              <TouchableOpacity style={styles.homeTryOnStudioButton} activeOpacity={0.88} onPress={() => onNavigate('tryon')}>
-                <Text style={styles.homeTryOnStudioButtonText}>Try Now</Text>
-                <View style={styles.homeTryOnStudioButtonIcon}>
-                  <Ionicons name="arrow-forward" size={16} color="#050505" />
-                </View>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
+        {isReturningHomeUser ? (
+          <ReturningUserHomeStudio
+            products={studioProducts}
+            closetItems={closetItems}
+            onNavigate={onNavigate}
+            onAddToWishlist={onAddToWishlist}
+            wishlistIds={wishlistIds}
+          />
+        ) : (
+          <NewUserHomeStudio
+            products={studioProducts}
+            onNavigate={onNavigate}
+            onAddToWishlist={onAddToWishlist}
+            wishlistIds={wishlistIds}
+          />
+        )}
 
         <View ref={catalogTourTarget.ref} onLayout={catalogTourTarget.onLayout} />
 
@@ -5848,16 +5983,17 @@ function ClosetScreen({ user, setUser, setToken, token, onNavigate, onBack, init
     return (
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.addStudioScreen}>
         <ScrollView ref={addStudioScrollRef} contentContainerStyle={styles.addStudioContent} {...screenScrollProps}>
-          <View style={styles.addStudioTopBar}>
-            <BrandLogo compact style={styles.addStudioBrandLogo} />
-            <TouchableOpacity style={styles.addStudioTopButton} onPress={() => onNavigate('closet')}>
-              <Ionicons name="cube-outline" size={22} color="#171412" />
-            </TouchableOpacity>
-          </View>
+          <WardrobeTopBar user={user} onNavigate={onNavigate} />
 
-          <View style={styles.addStudioIntro}>
-            <Text style={styles.addStudioTitle}>Curate Your Studio</Text>
-            <Text style={styles.addStudioSubtitle}>Build your Atelier Digital. High-fidelity archives enable precise AI styling and virtual try-on sessions.</Text>
+          <View style={styles.wardrobeHeroHead}>
+            <View>
+              <Text style={styles.wardrobeTitle}>My Wardrobe</Text>
+              <Text style={styles.wardrobeSubtitle}>Curated Collection</Text>
+            </View>
+            <TouchableOpacity style={styles.wardrobeAddButton} activeOpacity={0.85} onPress={pickClosetItemPhoto}>
+              <Ionicons name="add" size={22} color="#ffffff" />
+              <Text style={styles.wardrobeAddText}>Add Item</Text>
+            </TouchableOpacity>
           </View>
 
           <TouchableOpacity ref={wardrobeUploadTourTarget.ref} onLayout={wardrobeUploadTourTarget.onLayout} style={styles.addStudioUploadBox} activeOpacity={0.84} onPress={pickClosetItemPhoto}>
@@ -10771,6 +10907,320 @@ const styles = StyleSheet.create({
   homeContentTablet: {
     paddingBottom: screenBottomInset + 12
   },
+  homeStudioHero: {
+    marginHorizontal: 14,
+    marginTop: 8,
+    height: 208,
+    borderRadius: 9,
+    overflow: 'hidden',
+    backgroundColor: '#efe8e1',
+    borderWidth: 1,
+    borderColor: '#efe8e4',
+    position: 'relative'
+  },
+  homeStudioHeroImage: {
+    position: 'absolute',
+    right: -24,
+    top: 0,
+    width: '72%',
+    height: '100%'
+  },
+  homeStudioHeroWash: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 250, 244, 0.28)'
+  },
+  homeStudioHeroCopy: {
+    width: '62%',
+    paddingLeft: 14,
+    paddingTop: 20,
+    paddingBottom: 14
+  },
+  homeStudioKicker: {
+    ...typography.label,
+    color: '#4a4744',
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: '500',
+    letterSpacing: 4
+  },
+  homeStudioTitle: {
+    fontFamily: fontFamilies.logo,
+    marginTop: 10,
+    color: '#050505',
+    fontSize: 28,
+    lineHeight: 32,
+    fontWeight: '400',
+    letterSpacing: 0
+  },
+  homeStudioText: {
+    ...typography.body,
+    marginTop: 5,
+    maxWidth: 204,
+    color: '#24211f',
+    fontSize: 13,
+    lineHeight: 17,
+    fontWeight: '500'
+  },
+  homeStudioPrimaryButton: {
+    marginTop: 14,
+    width: 160,
+    minHeight: 42,
+    borderRadius: 9,
+    backgroundColor: '#050505',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 14
+  },
+  homeStudioPrimaryText: {
+    fontFamily: fontFamilies.bodyBold,
+    color: '#ffffff',
+    fontSize: 13,
+    lineHeight: 17,
+    fontWeight: '800',
+    letterSpacing: 0
+  },
+  homeStudioPanel: {
+    marginTop: 18,
+    paddingHorizontal: 14
+  },
+  homeStudioSectionHead: {
+    minHeight: 36,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12
+  },
+  homeStudioSectionCopy: {
+    flex: 1,
+    minWidth: 0
+  },
+  homeStudioSectionTitle: {
+    fontFamily: fontFamilies.bodyBold,
+    color: '#050505',
+    fontSize: 17,
+    lineHeight: 21,
+    fontWeight: '800',
+    letterSpacing: 0
+  },
+  homeStudioSectionSubtitle: {
+    ...typography.caption,
+    marginTop: 2,
+    color: '#69635f',
+    fontSize: 12,
+    lineHeight: 15,
+    fontWeight: '500',
+    letterSpacing: 0
+  },
+  homeStudioSeeAll: {
+    minHeight: 30,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3
+  },
+  homeStudioSeeAllText: {
+    ...typography.caption,
+    color: '#111111',
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '600',
+    letterSpacing: 0
+  },
+  homeStudioActionGrid: {
+    marginTop: 8,
+    flexDirection: 'row',
+    gap: 9
+  },
+  homeStudioActionTile: {
+    flex: 1,
+    minHeight: 132,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ebe4df',
+    backgroundColor: '#fffdfb',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingTop: 12,
+    paddingBottom: 10
+  },
+  homeStudioActionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f0e7e0',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  homeStudioActionTitle: {
+    fontFamily: fontFamilies.bodyBold,
+    marginTop: 9,
+    minHeight: 34,
+    color: '#080808',
+    fontSize: 13,
+    lineHeight: 16,
+    fontWeight: '800',
+    textAlign: 'center',
+    letterSpacing: 0
+  },
+  homeStudioActionText: {
+    ...typography.caption,
+    marginTop: 4,
+    color: '#77716d',
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '500',
+    textAlign: 'center',
+    letterSpacing: 0
+  },
+  homeStudioWardrobeBanner: {
+    marginTop: 12,
+    marginHorizontal: 14,
+    minHeight: 132,
+    borderRadius: 9,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#ece4de',
+    backgroundColor: '#f8f0e8',
+    flexDirection: 'row'
+  },
+  homeStudioWardrobeBannerCopy: {
+    flex: 1,
+    minWidth: 0,
+    paddingLeft: 14,
+    paddingRight: 8,
+    paddingVertical: 13
+  },
+  homeStudioBannerTitle: {
+    fontFamily: fontFamilies.bodyBold,
+    color: '#080808',
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: '800',
+    letterSpacing: 0
+  },
+  homeStudioBannerText: {
+    ...typography.caption,
+    marginTop: 5,
+    color: '#655f5b',
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '500',
+    letterSpacing: 0
+  },
+  homeStudioBannerButton: {
+    alignSelf: 'flex-start',
+    marginTop: 10,
+    minHeight: 33,
+    borderRadius: 9,
+    backgroundColor: '#050505',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingHorizontal: 15
+  },
+  homeStudioBannerButtonText: {
+    fontFamily: fontFamilies.bodyBold,
+    color: '#ffffff',
+    fontSize: 12,
+    lineHeight: 15,
+    fontWeight: '800',
+    letterSpacing: 0
+  },
+  homeStudioBannerImage: {
+    width: 128,
+    height: 132,
+    alignSelf: 'flex-end'
+  },
+  homeStudioLookRow: {
+    marginTop: 8,
+    flexDirection: 'row',
+    gap: 10
+  },
+  homeStudioLookCard: {
+    flex: 1,
+    minWidth: 0
+  },
+  homeStudioLookCardCompact: {
+    minHeight: 134
+  },
+  homeStudioLookImageWrap: {
+    height: 108,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#eee7e2',
+    position: 'relative'
+  },
+  homeStudioLookImage: {
+    width: '100%',
+    height: '100%'
+  },
+  homeStudioLookTitle: {
+    fontFamily: fontFamilies.bodySemiBold,
+    marginTop: 7,
+    color: '#171412',
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '700',
+    letterSpacing: 0
+  },
+  homeStudioLookMeta: {
+    ...typography.caption,
+    marginTop: 2,
+    color: '#665f5a',
+    fontSize: 10,
+    lineHeight: 12,
+    fontWeight: '500',
+    letterSpacing: 0
+  },
+  homeStudioWardrobeGrid: {
+    marginTop: 8,
+    flexDirection: 'row',
+    gap: 9
+  },
+  homeStudioWardrobeTile: {
+    flex: 1,
+    minWidth: 0
+  },
+  homeStudioWardrobeImage: {
+    width: '100%',
+    height: 78,
+    borderRadius: 8,
+    backgroundColor: '#eee7e2'
+  },
+  homeStudioWardrobeLabel: {
+    fontFamily: fontFamilies.bodySemiBold,
+    marginTop: 6,
+    color: '#171412',
+    fontSize: 10,
+    lineHeight: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+    letterSpacing: 0
+  },
+  homeStudioWardrobeCount: {
+    ...typography.caption,
+    marginTop: 2,
+    color: '#6c6662',
+    fontSize: 9,
+    lineHeight: 11,
+    fontWeight: '500',
+    textAlign: 'center',
+    letterSpacing: 0
+  },
+  homeStudioWardrobeAdd: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center'
+  },
+  homeStudioWardrobeAddCircle: {
+    width: '100%',
+    height: 78,
+    borderRadius: 8,
+    backgroundColor: '#f0e7e0',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
   homeEditorialHeader: {
     paddingHorizontal: 24,
     paddingTop: 4,
@@ -13258,12 +13708,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#fbf7f6'
   },
   addStudioContent: {
-    paddingBottom: 132,
+    paddingBottom: bottomNavigationHeight + screenBottomInset + 118,
     backgroundColor: '#fbf7f6'
   },
   addStudioTopBar: {
-    height: 62,
+    height: Platform.OS === 'android' ? 74 : 66,
     paddingHorizontal: 14,
+    paddingTop: Platform.OS === 'android' ? 12 : 4,
     borderBottomWidth: 1,
     borderBottomColor: '#e7dfdb',
     backgroundColor: '#fbf7f6',
@@ -13282,7 +13733,7 @@ const styles = StyleSheet.create({
   },
   addStudioIntro: {
     paddingHorizontal: 20,
-    paddingTop: 35
+    paddingTop: 24
   },
   addStudioTitle: {
     ...typography.h1,
@@ -13300,9 +13751,9 @@ const styles = StyleSheet.create({
     fontWeight: '500'
   },
   addStudioUploadBox: {
-    marginTop: 44,
+    marginTop: 26,
     marginHorizontal: 20,
-    height: 424,
+    height: 318,
     borderRadius: 12,
     borderWidth: 1.5,
     borderStyle: 'dashed',
@@ -13349,13 +13800,13 @@ const styles = StyleSheet.create({
   },
   addStudioThumbRow: {
     paddingHorizontal: 20,
-    paddingTop: 16,
+    paddingTop: 12,
     flexDirection: 'row',
     gap: 12
   },
   addStudioAddThumb: {
-    width: 80,
-    height: 96,
+    width: 70,
+    height: 82,
     borderRadius: 6,
     borderWidth: 1,
     borderColor: '#d0d0d0',
@@ -13364,8 +13815,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center'
   },
   addStudioThumbWrap: {
-    width: 80,
-    height: 96,
+    width: 70,
+    height: 82,
     borderRadius: 6,
     borderWidth: 1,
     borderColor: '#d0d0d0',
@@ -13549,7 +14000,7 @@ const styles = StyleSheet.create({
   },
   addStudioArchiveHead: {
     paddingHorizontal: 20,
-    paddingTop: 52
+    paddingTop: 26
   },
   addStudioArchiveTitle: {
     ...typography.h2,
@@ -13566,7 +14017,7 @@ const styles = StyleSheet.create({
   },
   addStudioSectionLabel: {
     ...typography.label,
-    marginTop: 38,
+    marginTop: 28,
     paddingHorizontal: 20,
     color: '#4f4a48',
     fontSize: 14,
@@ -13723,19 +14174,19 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    minHeight: 96,
+    minHeight: 84,
     borderTopWidth: 1,
     borderTopColor: '#e1dad7',
     backgroundColor: '#fbf7f6',
     paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 14,
+    paddingTop: 14,
+    paddingBottom: Platform.OS === 'ios' ? 18 : 12,
     flexDirection: 'row',
     gap: 16
   },
   addStudioDiscardButton: {
     flex: 1,
-    minHeight: 56,
+    minHeight: 48,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#9b5658',
@@ -13751,7 +14202,7 @@ const styles = StyleSheet.create({
   },
   addStudioSaveButton: {
     flex: 1,
-    minHeight: 56,
+    minHeight: 48,
     borderRadius: 10,
     backgroundColor: '#050505',
     alignItems: 'center',
