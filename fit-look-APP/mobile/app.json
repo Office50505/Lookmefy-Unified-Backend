@@ -4,7 +4,7 @@
     "slug": "lookmefy",
     "icon": "./assets/icon-ios.png",
     "scheme": "lookmefy",
-    "version": "1.0.1",
+    "version": "1.0.3",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "assetBundlePatterns": [
@@ -23,7 +23,7 @@
     },
     "android": {
       "package": "com.lookmefy.app",
-      "versionCode": 26,
+      "versionCode": 27,
       "icon": "./assets/icon-android.png",
       "blockedPermissions": [
         "android.permission.RECORD_AUDIO",

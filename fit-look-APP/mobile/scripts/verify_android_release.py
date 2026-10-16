@@ -14,7 +14,7 @@ import zipfile
 
 APPS = {
     "skillomate": ("com.skillomate.app", "56992ecb073a283c9d34128eeec4bda5c16fe45c"),
-    "lookmefy": ("com.lookmefy.app", "4c279ba50b3a851182f5da1b8cbbb7146056cb75"),
+    "lookmefy": ("com.lookmefy.app", "e047a98f96b23a0fd32232759759603d5105b0eb"),
 }
 
 

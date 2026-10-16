@@ -3,7 +3,7 @@ apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
-def lookmefyUploadCertSha1 = "4C:27:9B:A5:0B:3A:85:11:82:F5:DA:1B:8C:BB:B7:14:60:56:CB:75"
+def lookmefyUploadCertSha1 = "E0:47:A9:8F:96:B2:3A:0F:D3:22:32:75:97:59:60:3D:51:05:B0:EB"
 def requestedTasks = gradle.startParameter.taskNames.collect { it.toLowerCase(Locale.ROOT) }
 def isReleaseBuildRequested = requestedTasks.any { it.contains("release") }
 def lookmefyKeystoreProperties = new Properties()
@@ -144,8 +144,8 @@ android {
         applicationId 'com.lookmefy.app'
         minSdk = rootProject.ext.minSdkVersion
         targetSdk = rootProject.ext.targetSdkVersion
-        versionCode 26
-        versionName "1.0.1"
+        versionCode 27
+        versionName "1.0.3"
     }
     signingConfigs {
         debug {

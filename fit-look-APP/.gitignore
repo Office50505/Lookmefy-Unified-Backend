@@ -74,3 +74,8 @@ mobile/dist-*/
 .vercel/
 .netlify/
 *.env
+
+# Private Android signing backup
+mobile/credentials/
+mobile/credentials.json
+*.jks

@@ -1,6 +1,6 @@
 {
   "name": "lookmefy-mobile",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "private": true,
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {

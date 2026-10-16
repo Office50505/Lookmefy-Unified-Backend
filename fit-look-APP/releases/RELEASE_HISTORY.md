@@ -3,6 +3,47 @@
 This file is the durable release baseline used for future APK/AAB builds and
 comparison reports.
 
+## 1.0.3 (Android versionCode 27; local signed, not uploaded)
+
+- Built and verified: 2026-10-15 IST. VersionCode 27 explicitly requested;
+  preceding recorded baseline is version 1.0.2 / code 25. No code-26 release
+  is recorded. VersionName 1.0.3 follows the patch increment from that baseline.
+- Artifacts: `lookmefy-1.0.3-build27/lookmefy-1.0.3-27.aab` and
+  `lookmefy-1.0.3-build27/lookmefy-1.0.3-27.apk`.
+- Convenience copies: `../mobile/release/lookmefy-v1.0.3-vc27.aab` and
+  `../mobile/release/lookmefy-v1.0.3-vc27.apk`.
+- AAB size: 67,374,260 bytes; SHA-256:
+  `8280a828669c09c4b4c4212e7e82ca5ef6d9428a3d5ee2cf826464e9c0c3d813`
+- APK size: 85,605,671 bytes; SHA-256:
+  `e1fb588d770cb1e527a11febaf08f344dd1f09c70494559c3901d468e0055a15`
+- Binary-verified package `com.lookmefy.app`, versionName `1.0.3`, code `27`;
+  minimum SDK 24, target/compile SDK 36; ABIs arm64-v8a, armeabi-v7a, x86, x86_64.
+- Signed using the replacement EAS upload key, SHA-1
+  `E0:47:A9:8F:96:B2:3A:0F:D3:22:32:75:97:59:60:3D:51:05:B0:EB`.
+  The user-supplied Play confirmation schedules activation for 2026-10-17
+  07:17 UTC / 12:47 IST. No Play upload or publication was performed.
+- Private EAS keystore, credentials JSON and Gradle signing properties were
+  downloaded/saved locally with private permissions and are excluded from Git.
+- Gradle 8.13 assembleRelease and bundleRelease passed. APK signature,
+  AAB JAR signature, expected certificate, binary identity, ZIP CRC checks,
+  bundletool validation and APK 16 KB zipalign verification passed.
+- Binary permission comparison: no additions; FOREGROUND_SERVICE and
+  FOREGROUND_SERVICE_MEDIA_PLAYBACK removed compared with code 25. Microphone
+  and external-storage permissions remain present in the native binary.
+- Compared with code 25: semantic version/code increase, target/compile SDK
+  35 to 36, replacement signing certificate, same ABI set, and changed sizes.
+  No feature changes were intentionally made in this task; existing source
+  commits indicate try-on/home/navigation/style-rail updates, an inference
+  rather than binary-verified behavior. No device smoke test was performed.
+- Dirty root and nested working trees existed before this task, including
+  version/signing and iOS changes. Native Android files are ignored in the
+  nested repository, limiting exact source comparison. Both baseline artifacts
+  were available and binary-inspected.
+- Evidence: `lookmefy-1.0.3-build27/verification-facts.json`, `VERIFICATION.txt`,
+  and decoded `AndroidManifest.xml` in the same release directory.
+- PDF report: `../../output/pdf/lookmefy-android-1.0.3-vc27-local-signed-2026-10-15.pdf`
+  (SHA-256 `c8580f93c3c73f188e7018b027b40f9d3b56a0a339740c9dcac77b5398e7fd07`)
+
 ## 1.0.2 (Android versionCode 25)
 
 - Release artifacts: `lookmefy-1.0.2-build25/lookmefy-1.0.2-25.apk` and
